@@ -521,6 +521,10 @@
               <div class="module-box">
                 <div class="module-head"><span>Dynamics & Tone EQ</span></div>
                 <div class="knob-row">
+                  <div class="knob-lbl"><span>Background Noise Gate (Fan / Hiss Cut)</span><span class="mono" id="gateValText">55%</span></div>
+                  <input type="range" id="gateSlider" min="0" max="95" value="55" onchange="App.onNoiseGateChange(this.value)" oninput="document.getElementById('gateValText').innerText=this.value+'%';" />
+                </div>
+                <div class="knob-row">
                   <div class="knob-lbl"><span>Studio Compressor</span><span class="mono" id="compValText">-24 dB (3.8:1)</span></div>
                   <input type="range" id="compSlider" min="10" max="36" value="24" oninput="App.onCompChange(this.value)" />
                 </div>

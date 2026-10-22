@@ -683,8 +683,8 @@ window.App = (() => {
       if (key === 'warmthDb' && liveNodes.warmth) liveNodes.warmth.gain.value = val;
       if (key === 'presenceDb' && liveNodes.presence) liveNodes.presence.gain.value = val;
       if (key === 'airDb' && liveNodes.air) liveNodes.air.gain.value = val;
-      if (key === 'reverbMix' && liveNodes.rWet) liveNodes.rWet.gain.value = val;
-      if (key === 'delayMix' && liveNodes.dWet) liveNodes.dWet.gain.value = val;
+      if (key === 'reverbMix' && liveNodes.rWet) liveNodes.rWet.gain.value = val * 1.35;
+      if (key === 'delayMix' && liveNodes.dWet) liveNodes.dWet.gain.value = val * 1.25;
       if (key === 'delayTimeSec' && liveNodes.delay) liveNodes.delay.delayTime.value = val;
       if (key === 'vocalPocket' && liveNodes.pocketEq) liveNodes.pocketEq.gain.value = val ? -2.4 : 0;
     }
@@ -696,6 +696,12 @@ window.App = (() => {
       document.getElementById('mp-' + k).classList.toggle('active', k === profileKey);
     });
     if (isPlaying) startPlayback(getCurrentPlayheadSec());
+  }
+
+  function onNoiseGateChange(val) {
+    params.noiseGate = Number(val) / 100;
+    document.getElementById('gateValText').innerText = Math.round(Number(val)) + '%';
+    if (buffers.rawVocal) reprocessAutoTune();
   }
 
   function onCompChange(sliderVal) {
@@ -737,7 +743,9 @@ window.App = (() => {
     params.autotuneAmount = strength;
     params.retuneSpeed = retuneSpeed;
 
-    const result = KaroDSP.pitchCorrectBuffer(ctx, buffers.rawVocal, { keyRoot, scaleName, strength, retuneSpeed });
+    const result = KaroDSP.pitchCorrectBuffer(ctx, buffers.rawVocal, {
+      keyRoot, scaleName, strength, retuneSpeed, noiseGate: params.noiseGate ?? 0.55,
+    });
     buffers.tunedVocal = result.buffer;
     pitchCurveData = result.pitchCurve;
     drawPitchGraph();
@@ -793,6 +801,11 @@ window.App = (() => {
     document.getElementById('atSpeed').value = spd;
     document.getElementById('atSpeedText').innerText = spd + '%';
 
+    const gatePct = Math.round((params.noiseGate ?? 0.55) * 100);
+    if (document.getElementById('gateSlider')) {
+      document.getElementById('gateSlider').value = gatePct;
+      document.getElementById('gateValText').innerText = gatePct + '%';
+    }
     document.getElementById('compSlider').value = Math.abs(params.compThreshold ?? -24);
     document.getElementById('compValText').innerText = `${params.compThreshold} dB (${params.compRatio}:1)`;
 
@@ -1227,7 +1240,7 @@ window.App = (() => {
     loadYouTubeLink, handleBackingUpload, handleVocalUpload, applyKaraokeVocalCut,
     loadFullDemo, launchInstantShowcase,
     toggleMicMonitor, toggleMicRecording, startTabPlusMicRecord,
-    togglePlayback, stopAndRewind, updateParam, setMasterProfile, onCompChange,
+    togglePlayback, stopAndRewind, updateParam, setMasterProfile, onNoiseGateChange, onCompChange,
     toggleBypassFx, toggleSoloVocal, reprocessAutoTune, runSmartVoiceMatch,
     applyPreset, applyCustomD1Preset, setVocalOffset, nudgeOffset, autoAlignTracks,
     shiftBackingKey, saveCustomPresetToD1, saveProjectToD1, deleteProject,
