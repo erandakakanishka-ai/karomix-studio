@@ -3,32 +3,37 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>KaroMix Studio — AI Vocal & Karaoke Mastering Suite</title>
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <title>KaroMix AI — Next-Gen Karaoke & Vocal Mastering Studio</title>
+  <link rel="icon" type="image/png" href="/assets/logo.png" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <!-- Countdown Overlay -->
   <div id="countdownOverlay" class="countdown-mask">
-    <div style="color:#94a3b8;font-size:14px;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;">Get Ready to Sing</div>
+    <div style="color:#94a3b8;font-size:14px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">Studio Booth Armed</div>
     <div id="countdownNum" class="countdown-digit mono">3</div>
   </div>
 
-  <!-- Toast -->
+  <!-- Notification Toast -->
   <div id="toast" class="toast"></div>
 
-  <!-- Auth Modal (Real D1 Cloud Accounts) -->
+  <!-- Cloud Account Modal -->
   <div id="authModal" class="modal-backdrop" onclick="if(event.target===this)App.closeAuthModal()">
     <div class="modal-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-        <h3 style="font-size:17px;">KaroMix Cloud Account</h3>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <img src="/assets/logo.png" alt="KaroMix AI" style="width:30px;height:30px;border-radius:7px;" />
+          <h3 style="font-size:17px;">KaroMix Cloud ID</h3>
+        </div>
         <button class="btn btn-sm" onclick="App.closeAuthModal()">✕</button>
       </div>
       <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:14px;">
-        Save unlimited custom vocal chains and project mixes across devices on Cloudflare D1.
+        Sync custom AI vocal chains, saved karaoke covers, and Pro pass across all devices.
       </p>
       <div id="authLoggedInBox" style="display:none;">
         <div style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;">
-          <div style="font-weight:700;" id="authUserName">Singer</div>
+          <div style="font-weight:700;" id="authUserName">Artist</div>
           <div style="font-size:12px;color:var(--text-secondary);" id="authUserEmail"></div>
         </div>
         <button class="btn" style="width:100%;" onclick="App.logout()">Sign Out</button>
@@ -39,7 +44,7 @@
           <button type="button" class="btn btn-sm" id="tabRegBtn" style="flex:1;" onclick="App.setAuthMode('register')">Create Account</button>
         </div>
         <div id="authNameWrap" style="display:none;margin-bottom:10px;">
-          <input type="text" id="authName" class="input" style="width:100%;" placeholder="Artist / Display Name" />
+          <input type="text" id="authName" class="input" style="width:100%;" placeholder="Stage / Artist Name" />
         </div>
         <div style="margin-bottom:10px;">
           <input type="email" id="authEmail" class="input" style="width:100%;" placeholder="Email address" required />
@@ -55,170 +60,149 @@
   <!-- Top Navigation Header -->
   <header class="navbar">
     <div class="brand" onclick="App.switchView('home')">
-      <div class="brand-mark">
-        <svg class="icon" viewBox="0 0 24 24" style="width:19px;height:19px;stroke:#090b10;stroke-width:2.3;">
-          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/>
-        </svg>
-      </div>
+      <img src="/assets/logo.png" alt="KaroMix AI Logo" class="brand-logo-img" />
       <div class="brand-text">
         <span>KAROMIX</span>
-        <span class="pro-tag">STUDIO</span>
+        <span class="pro-tag">AI STUDIO</span>
       </div>
     </div>
 
     <nav class="desktop-nav">
-      <button class="nav-item active" data-view="home" onclick="App.switchView('home')">
-        <span data-i18n="navHome">Overview</span>
-      </button>
-      <button class="nav-item" data-view="studio" onclick="App.switchView('studio')">
-        <span data-i18n="navStudio">Studio</span>
-      </button>
-      <button class="nav-item" data-view="library" onclick="App.switchView('library')">
-        <span data-i18n="navLibrary">Cloud Library</span>
-      </button>
-      <button class="nav-item" data-view="pricing" onclick="App.switchView('pricing')">
-        <span data-i18n="navPricing">Plans</span>
-      </button>
+      <button class="nav-item active" data-view="home" onclick="App.switchView('home')">Discover</button>
+      <button class="nav-item" data-view="studio" onclick="App.switchView('studio')">Vocal Studio</button>
+      <button class="nav-item" data-view="library" onclick="App.switchView('library')">Cloud Library</button>
+      <button class="nav-item" data-view="pricing" onclick="App.switchView('pricing')">Pro Plans</button>
     </nav>
 
     <div class="nav-right">
-      <button class="lang-switch" id="langBtn" onclick="App.toggleLanguage()">සිංහල</button>
       <button class="btn btn-sm" id="topPlanBadge" onclick="App.switchView('pricing')">FREE • 0/3</button>
-      <button class="btn btn-sm btn-amber" id="authTriggerBtn" onclick="App.openAuthModal()">
-        <span data-i18n="signIn">Sign In</span>
-      </button>
+      <button class="btn btn-sm btn-amber" id="authTriggerBtn" onclick="App.openAuthModal()">Sign In</button>
     </div>
   </header>
 
-  <!-- ==================== VIEW 1: LANDING / OVERVIEW ==================== -->
+  <!-- ==================== VIEW 1: DISCOVER / LANDING ==================== -->
   <section id="view-home" class="app-view active">
     <div class="container">
       <div class="hero-section">
         <div>
           <div class="eyebrow">
             <svg class="icon" viewBox="0 0 24 24" style="width:13px;height:13px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            <span data-i18n="heroBadge">AI VOCAL & KARAOKE MASTERING STUDIO</span>
+            <span>INSTANT KARAOKE SEARCH • AI VOCAL STUDIO</span>
           </div>
-          <h1 class="hero-title" data-i18n="heroTitle">Turn any phone vocal into a studio record.</h1>
-          <p class="hero-sub" data-i18n="heroSub">
-            Paste a YouTube karaoke link or drop any track. Record vocals, match your voice with AI presets, fix beat sync in milliseconds, auto-tune in key, and master instantly in your browser.
+          <h1 class="hero-title">Sing any song. Sound like a record.</h1>
+          <p class="hero-sub">
+            Type any song title to pull up instant HD karaoke videos and live scrolling lyrics. Record vocals on any mic, erase room noise, lock pitch with silk Auto-Tune, and master in seconds.
           </p>
+
+          <!-- Instant Song Search Right Inside Hero -->
+          <form class="hero-search-bar" onsubmit="App.heroSearchSubmit(event)">
+            <svg class="icon" viewBox="0 0 24 24" style="margin:auto 0 auto 8px;color:var(--text-muted);">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="heroSongQuery" placeholder="Type any song or artist (e.g. Perfect, Blinding Lights)..." />
+            <button type="submit" class="btn btn-amber">Sing Now</button>
+          </form>
+
+          <div class="trending-row">
+            <span style="font-size:11px;color:var(--text-muted);font-weight:600;">Trending:</span>
+            <button class="trend-chip" onclick="App.quickSingSong('Ed Sheeran Perfect')">Ed Sheeran — Perfect</button>
+            <button class="trend-chip" onclick="App.quickSingSong('The Weeknd Blinding Lights')">Blinding Lights</button>
+            <button class="trend-chip" onclick="App.quickSingSong('Adele Someone Like You')">Someone Like You</button>
+            <button class="trend-chip" onclick="App.quickSingSong('Lady Gaga Bruno Mars Die With A Smile')">Die With A Smile</button>
+          </div>
 
           <div class="hero-cta-row">
             <button class="btn btn-amber btn-lg" onclick="App.switchView('studio')">
               <svg class="icon" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
-              <span data-i18n="ctaOpenStudio">Open Studio</span>
+              <span>Enter Vocal Studio</span>
             </button>
             <button class="btn btn-lg" onclick="App.launchInstantShowcase()">
               <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              <span data-i18n="ctaTryDemo">Hear Instant Demo</span>
+              <span>Hear Instant Studio Demo</span>
             </button>
-          </div>
-
-          <div class="metrics-strip">
-            <div>
-              <div class="metric-val mono">0.0 ms</div>
-              <div class="metric-lbl" data-i18n="statZeroLatency">In-Browser DSP</div>
-            </div>
-            <div>
-              <div class="metric-val mono">8 Chains</div>
-              <div class="metric-lbl" data-i18n="statPresets">8 Producer Chains</div>
-            </div>
-            <div>
-              <div class="metric-val mono">YIN 32f</div>
-              <div class="metric-lbl" data-i18n="statAutoTune">Scale-Locked Pitch</div>
-            </div>
-            <div>
-              <div class="metric-val mono">WAV HQ</div>
-              <div class="metric-lbl" data-i18n="statExport">24-Bit / WAV Master</div>
-            </div>
           </div>
         </div>
 
-        <!-- Interactive Hero Studio Preview Card -->
-        <div class="hero-console">
-          <div class="console-top">
-            <div class="window-dots"><span></span><span></span><span></span></div>
-            <span class="mono" style="font-size:11px;color:var(--emerald);">● LIVE DSP ENGINE READY</span>
-          </div>
-
-          <div class="eq-bars">
-            <div class="eq-bar" style="height:42%;animation-delay:0.0s"></div>
-            <div class="eq-bar" style="height:78%;animation-delay:0.2s"></div>
-            <div class="eq-bar" style="height:95%;animation-delay:0.4s"></div>
-            <div class="eq-bar" style="height:60%;animation-delay:0.1s"></div>
-            <div class="eq-bar" style="height:85%;animation-delay:0.5s"></div>
-            <div class="eq-bar" style="height:50%;animation-delay:0.3s"></div>
-            <div class="eq-bar" style="height:92%;animation-delay:0.15s"></div>
-            <div class="eq-bar" style="height:72%;animation-delay:0.35s"></div>
-            <div class="eq-bar" style="height:44%;animation-delay:0.25s"></div>
-            <div class="eq-bar" style="height:88%;animation-delay:0.45s"></div>
-            <div class="eq-bar" style="height:66%;animation-delay:0.05s"></div>
-            <div class="eq-bar" style="height:80%;animation-delay:0.3s"></div>
-            <div class="eq-bar" style="height:54%;animation-delay:0.2s"></div>
-            <div class="eq-bar" style="height:90%;animation-delay:0.4s"></div>
-            <div class="eq-bar" style="height:62%;animation-delay:0.1s"></div>
-            <div class="eq-bar" style="height:38%;animation-delay:0.5s"></div>
-          </div>
-
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-            <div style="background:#090b12;border:1px solid var(--border);border-radius:9px;padding:10px;">
-              <div style="font-size:10.5px;color:var(--text-muted);">PITCH ENGINE</div>
-              <div class="mono" style="font-size:13px;font-weight:700;color:var(--cyan);margin-top:2px;">A Minor • 65% Snap</div>
+        <!-- Editorial AI Studio Photography Showcase -->
+        <div class="hero-photo-stage">
+          <img src="/assets/hero-singer.jpg" alt="Vocalist recording in KaroMix AI Studio" />
+          <div class="hero-photo-overlay">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span class="glass-pill" style="color:#34d399;">● 24-BIT WSOLA + SOUNDTOUCH DSP</span>
+              <span class="glass-pill mono" style="color:var(--amber-bright);">96% IN-KEY SCORE</span>
             </div>
-            <div style="background:#090b12;border:1px solid var(--border);border-radius:9px;padding:10px;">
-              <div style="font-size:10.5px;color:var(--text-muted);">VOCAL CHAIN</div>
-              <div class="mono" style="font-size:13px;font-weight:700;color:var(--amber-bright);margin-top:2px;">Velvet Plate + Air</div>
+
+            <div class="hero-hud-grid">
+              <div class="hud-mini-card">
+                <div style="font-size:10px;color:var(--text-muted);font-weight:700;">VOCAL CHAIN</div>
+                <div class="mono" style="font-size:12.5px;font-weight:700;color:var(--amber-bright);">Concert Hall + Doubler</div>
+              </div>
+              <div class="hud-mini-card">
+                <div style="font-size:10px;color:var(--text-muted);font-weight:700;">NOISE & PITCH</div>
+                <div class="mono" style="font-size:12.5px;font-weight:700;color:var(--cyan);">AI Gate • A Minor</div>
+              </div>
+              <button class="btn btn-amber" onclick="App.launchInstantShowcase()" style="height:100%;">
+                <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>Play Demo</span>
+              </button>
             </div>
           </div>
-
-          <button class="btn btn-amber" style="width:100%;padding:11px;" onclick="App.launchInstantShowcase()">
-            <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            <span data-i18n="heroPlayBtn">Load Demo Track & Play Mixed Vocal</span>
-          </button>
         </div>
       </div>
 
-      <!-- 3 Core Pillars -->
-      <div class="feature-grid">
-        <div class="feat-card">
-          <div class="feat-icon">
-            <svg class="icon" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+      <!-- 3 Visual Studio Showcase Cards -->
+      <div class="showcase-grid">
+        <div class="showcase-card">
+          <img src="/assets/studio-stage-card.jpg" alt="Instant Karaoke Stage & Synced Lyrics" class="showcase-thumb" />
+          <div class="showcase-body">
+            <div class="preset-tag">ZERO LINK HUNTING</div>
+            <h3 style="font-size:17px;margin-bottom:6px;">Type Any Song → Instant Karaoke & Live Lyrics</h3>
+            <p style="font-size:13px;color:var(--text-secondary);">
+              Search millions of songs directly inside the studio. Load HD karaoke videos in one click or sing with Apple-Music-style time-synced scrolling teleprompter lyrics.
+            </p>
           </div>
-          <h3 style="font-size:16px;margin-bottom:6px;" data-i18n="feat1Title">YouTube & Any Track Input</h3>
-          <p style="font-size:13px;color:var(--text-secondary);" data-i18n="feat1Desc">
-            Sing along to synced YouTube lyric videos, strip vocals from regular MP3s, or transpose any beat by ±6 semitones.
-          </p>
         </div>
 
-        <div class="feat-card">
-          <div class="feat-icon" style="background:var(--cyan-soft);color:var(--cyan);border-color:rgba(56,189,248,0.28);">
-            <svg class="icon" viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M4 11v2"/><path d="M20 11v2"/></svg>
+        <div class="showcase-card">
+          <img src="/assets/studio-girl-card.jpg" alt="AI Vocal Producer Chains" class="showcase-thumb" />
+          <div class="showcase-body">
+            <div class="preset-tag">STUDIO ACOUSTICS</div>
+            <h3 style="font-size:17px;margin-bottom:6px;">Noise Gate, Stereo Doubler & Lush Hall Reverb</h3>
+            <p style="font-size:13px;color:var(--text-secondary);">
+              Eliminates room hiss and fan hum automatically, wraps your voice in micro-pitch stereo chorus width, and adds true unnormalized concert hall space.
+            </p>
           </div>
-          <h3 style="font-size:16px;margin-bottom:6px;" data-i18n="feat2Title">AI Voice Profile Match</h3>
-          <p style="font-size:13px;color:var(--text-secondary);" data-i18n="feat2Desc">
-            Analyzes your vocal pitch range, mic muddiness, and dynamics in 50ms to dial in custom EQ, compression & reverb.
-          </p>
         </div>
 
-        <div class="feat-card">
-          <div class="feat-icon" style="background:var(--emerald-soft);color:var(--emerald);border-color:rgba(16,185,129,0.28);">
-            <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <div class="showcase-card">
+          <img src="/assets/hero-singer.jpg" alt="SoundTouch Key Shift & AI Mastering" class="showcase-thumb" style="object-position:center 25%;" />
+          <div class="showcase-body">
+            <div class="preset-tag">PRECISION MASTERING</div>
+            <h3 style="font-size:17px;margin-bottom:6px;">SoundTouch Key Shift, Auto-Align & WAV Master</h3>
+            <p style="font-size:13px;color:var(--text-secondary);">
+              Transpose any instrumental by ±6 semitones, strip center vocals from MP3s, align Bluetooth mic latency in milliseconds, and export 24-bit/WAV masters.
+            </p>
           </div>
-          <h3 style="font-size:16px;margin-bottom:6px;" data-i18n="feat3Title">Precision Sync & Auto-Master</h3>
-          <p style="font-size:13px;color:var(--text-secondary);" data-i18n="feat3Desc">
-            Drag waveforms directly with your finger or auto-align mic lag, then render radio-ready masters with one tap.
-          </p>
+        </div>
+      </div>
+
+      <!-- Open-Source Audio Architecture Bar -->
+      <div class="oss-strip">
+        <div style="font-size:12px;font-weight:700;color:var(--text-secondary);">POWERED BY OPEN-SOURCE DSP ENGINES:</div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);" class="mono">
+          <span>• SoundTouchJS WSOLA</span>
+          <span>• AudioMotion RTA Spectrum</span>
+          <span>• LRCLIB Synced Lyrics</span>
+          <span>• Cloudflare Edge D1</span>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ==================== VIEW 2: PRO KARAOKE & VOCAL STUDIO ==================== -->
+  <!-- ==================== VIEW 2: VOCAL STUDIO WORKSTATION ==================== -->
   <section id="view-studio" class="app-view">
     <div class="container">
-      <!-- Sticky DAW Transport Bar -->
+      <!-- Sticky DAW Transport Deck -->
       <div class="transport-dock">
         <div class="transport-left">
           <button class="btn btn-sm" onclick="App.stopAndRewind()" title="Rewind to 0:00">
@@ -226,35 +210,32 @@
           </button>
 
           <button class="btn btn-amber" id="btnPlayPause" onclick="App.togglePlayback()">
-            <svg class="icon" viewBox="0 0 24 24" id="playIconSvg"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            <span id="playBtnText" data-i18n="btnPlay">Play</span>
+            <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span id="playBtnText">Play</span>
           </button>
 
           <button class="btn btn-ruby" id="btnTopRecord" onclick="App.toggleMicRecording()">
             <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="currentColor"/></svg>
-            <span id="topRecText" data-i18n="btnRecord">Record</span>
+            <span id="topRecText">Record</span>
           </button>
 
-          <button class="btn btn-cyan btn-sm" id="btnBypassFx" onclick="App.toggleBypassFx()" title="Compare Raw Mic vs Studio FX">
+          <button class="btn btn-cyan btn-sm" id="btnBypassFx" onclick="App.toggleBypassFx()" title="A/B Compare Raw Mic vs Studio Chain">
             FX ON
           </button>
         </div>
 
         <div class="transport-center">
           <div class="time-pill mono" id="transportTime">00:00.0 / 00:00.0</div>
-          <canvas id="spectrumCanvas" width="128" height="30"></canvas>
+          <div id="audioMotionBox"></div>
+          <div class="score-pill mono" id="pitchScoreBadge">PITCH 94%</div>
         </div>
 
         <div class="transport-right">
-          <button class="btn btn-sm" onclick="App.loadFullDemo(true)" title="Load Demo Instrumental + Raw Voice">
-            Demo
-          </button>
-          <button class="btn btn-sm" onclick="App.saveProjectToD1()" title="Save Mix to Cloud D1">
-            Save
-          </button>
+          <button class="btn btn-sm" onclick="App.loadFullDemo(true)">Demo</button>
+          <button class="btn btn-sm" onclick="App.saveProjectToD1()">Save</button>
           <button class="btn btn-amber btn-sm" onclick="App.openInspectorTab('master')">
             <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span data-i18n="btnExport">Master & Download</span>
+            <span>Master & Export</span>
           </button>
         </div>
       </div>
@@ -266,7 +247,7 @@
             <input type="text" id="projectTitleInput" class="project-name-input" value="Untitled Studio Cover" />
             <div class="status-pills">
               <span class="chip">KEY <strong id="chipKey">Am</strong></span>
-              <span class="chip">SYNC <strong id="chipSync" class="mono">0 ms</strong></span>
+              <span class="chip">SYNC <strong id="chipSync" class="mono">0ms</strong></span>
               <span class="chip">CHAIN <strong id="chipPreset">Velvet Ballad</strong></span>
             </div>
           </div>
@@ -277,13 +258,12 @@
 
           <!-- Dual Channel Strips -->
           <div class="channel-strips">
-            <!-- Track 1: Instrumental -->
             <div class="strip-box strip-cyan">
               <div class="strip-head">
                 <span class="strip-title" style="color:var(--cyan);">01 • Instrumental</span>
                 <div style="display:flex;gap:5px;align-items:center;">
-                  <button class="btn btn-sm" id="btnKaraokeCut" onclick="App.applyKaraokeVocalCut()" title="Remove lead vocals from regular stereo songs">
-                    Vocal Cut
+                  <button class="btn btn-sm" id="btnKaraokeCut" onclick="App.applyKaraokeVocalCut()" title="Strip center lead vocal from stereo MP3">
+                    Vocal Remover
                   </button>
                   <button class="btn btn-sm" onclick="App.shiftBackingKey(-1)">-1</button>
                   <span class="mono" style="font-size:11.5px;min-width:34px;text-align:center;" id="transposeLabel">0 st</span>
@@ -291,13 +271,12 @@
                 </div>
               </div>
               <div class="knob-lbl">
-                <span id="backingStatusBadge" style="color:var(--text-muted);font-size:11.5px;">No track loaded</span>
-                <span class="mono" id="backingVolVal">85%</span>
+                <span id="backingStatusBadge" style="color:var(--text-muted);font-size:11.5px;">Search a song below or drop MP3/MP4</span>
+                <span class="mono" id="backingVolVal">82%</span>
               </div>
-              <input type="range" id="backingVolSlider" min="0" max="150" value="85" oninput="App.updateParam('backingGain', this.value / 100)" />
+              <input type="range" id="backingVolSlider" min="0" max="150" value="82" oninput="App.updateParam('backingGain', this.value / 100)" />
             </div>
 
-            <!-- Track 2: Lead Vocal + Precision Sync -->
             <div class="strip-box strip-amber">
               <div class="strip-head">
                 <span class="strip-title" style="color:var(--amber-bright);">02 • Lead Vocal</span>
@@ -305,16 +284,16 @@
                   <button class="btn btn-sm" id="btnSoloVocal" onclick="App.toggleSoloVocal()">Solo</button>
                   <button class="btn btn-sm" onclick="App.nudgeOffset(-25)">-25ms</button>
                   <button class="btn btn-sm" onclick="App.nudgeOffset(25)">+25ms</button>
-                  <button class="btn btn-sm btn-cyan" onclick="App.autoAlignTracks()" data-i18n="btnAutoSync">Auto-Align</button>
+                  <button class="btn btn-sm btn-cyan" onclick="App.autoAlignTracks()">Auto-Align</button>
                 </div>
               </div>
               <div class="knob-lbl">
-                <span>Level <strong class="mono" id="vocalVolVal">115%</strong></span>
+                <span>Level <strong class="mono" id="vocalVolVal">118%</strong></span>
                 <span>Sync <strong class="mono" style="color:var(--amber-bright);" id="syncOffsetLabel">0 ms</strong></span>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <input type="range" id="vocalVolSlider" min="0" max="180" value="115" oninput="App.updateParam('vocalGain', this.value / 100)" title="Vocal Volume" />
-                <input type="range" id="syncOffsetSlider" min="-800" max="800" step="5" value="0" oninput="App.setVocalOffset(this.value, true)" title="Drag to align vocal timing (-800ms to +800ms)" />
+                <input type="range" id="vocalVolSlider" min="0" max="180" value="118" oninput="App.updateParam('vocalGain', this.value / 100)" />
+                <input type="range" id="syncOffsetSlider" min="-800" max="800" step="5" value="0" oninput="App.setVocalOffset(this.value, true)" />
               </div>
             </div>
           </div>
@@ -324,67 +303,96 @@
         <div class="panel-card">
           <div class="inspector-tabs">
             <button class="insp-tab active" data-itab="source" onclick="App.openInspectorTab('source')">
-              <svg class="icon" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
-              <span data-i18n="tabSource">Track & Mic</span>
+              <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span>Karaoke & Mic</span>
             </button>
             <button class="insp-tab" data-itab="presets" onclick="App.openInspectorTab('presets')">
               <svg class="icon" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-              <span data-i18n="tabPresets">Voice AI</span>
+              <span>Voice AI</span>
             </button>
             <button class="insp-tab" data-itab="autotune" onclick="App.openInspectorTab('autotune')">
               <svg class="icon" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-              <span data-i18n="tabAutotune">Auto-Tune</span>
+              <span>Auto-Tune</span>
             </button>
             <button class="insp-tab" data-itab="effects" onclick="App.openInspectorTab('effects')">
               <svg class="icon" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/></svg>
-              <span data-i18n="tabEffects">Mix Rack</span>
+              <span>Mix Rack</span>
             </button>
             <button class="insp-tab" data-itab="master" onclick="App.openInspectorTab('master')">
               <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
-              <span data-i18n="tabMaster">Master</span>
+              <span>Master</span>
             </button>
           </div>
 
-          <!-- PANE 1: TRACK & MIC -->
+          <!-- PANE 1: INSTANT KARAOKE VIDEO SEARCH, LIVE TELEPROMPTER & BOOTH -->
           <div id="itab-source" class="insp-pane active">
             <div class="two-col">
-              <!-- Left: Backing Input -->
+              <!-- Left: Instant Song Search + Karaoke Stage -->
               <div class="module-box">
-                <div class="source-seg">
-                  <button class="seg-btn active" onclick="App.switchSourceSub('yt', this)">YouTube Link</button>
-                  <button class="seg-btn" onclick="App.switchSourceSub('upload', this)">Upload File</button>
-                  <button class="seg-btn" onclick="App.switchSourceSub('synth', this)">Demo Song</button>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                  <div class="source-seg" style="margin-bottom:0;">
+                    <button class="seg-btn active" id="srcTabSearch" onclick="App.switchSourceSub('yt', this)">Search Karaoke</button>
+                    <button class="seg-btn" id="srcTabLyrics" onclick="App.switchSourceSub('lyrics', this)">Synced Lyrics</button>
+                    <button class="seg-btn" onclick="App.switchSourceSub('upload', this)">Upload File</button>
+                    <button class="seg-btn" onclick="App.switchSourceSub('synth', this)">Demo Track</button>
+                  </div>
+                  <button class="btn btn-sm" id="btnNextKaraoke" style="display:none;" onclick="App.nextKaraokeResult()" title="Switch to next karaoke version">
+                    Next Version ↻
+                  </button>
                 </div>
 
+                <!-- Sub 1: Instant Song Search & Video Stage -->
                 <div id="sub-yt">
-                  <div style="display:flex;gap:7px;margin-bottom:10px;">
-                    <input type="text" id="ytUrlInput" class="input" style="flex:1;min-width:0;" placeholder="Paste YouTube Karaoke link (https://youtu.be/...)" />
-                    <button class="btn btn-amber" onclick="App.loadYouTubeLink()">Load</button>
-                  </div>
+                  <form style="display:flex;gap:7px;margin-bottom:10px;" onsubmit="event.preventDefault();App.searchOrLoadKaraoke();">
+                    <input type="text" id="ytUrlInput" class="input" style="flex:1;min-width:0;" placeholder="Type song name (e.g. Perfect Ed Sheeran) or paste YouTube URL..." />
+                    <button type="submit" class="btn btn-amber" id="btnKaraokeSearch">Search</button>
+                  </form>
+
+                  <!-- Thumbnail Strip of Instant Search Results -->
+                  <div id="karaokeResultsStrip" class="karaoke-results-strip" style="display:none;"></div>
+
                   <div class="yt-box" id="ytPlayerContainer">
-                    Paste any YouTube karaoke link to display synced scrolling lyrics right here.
+                    <div>
+                      <div style="font-weight:700;color:var(--text);margin-bottom:4px;">Instant Karaoke Stage</div>
+                      <div>Type any song name above to load playable HD karaoke videos & synced lyrics right here.</div>
+                    </div>
                   </div>
+
                   <div class="desktop-only-row" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
                     <button class="btn btn-ruby btn-sm" id="btnRecTabAndMic" onclick="App.startTabPlusMicRecord()">
-                      Capture Tab Audio + Mic (Desktop)
+                      Capture Tab Audio + Mic Together
                     </button>
                   </div>
                 </div>
 
+                <!-- Sub 2: Live Synced Teleprompter Lyrics (LRCLIB Open-Source Engine) -->
+                <div id="sub-lyrics" style="display:none;">
+                  <div style="display:flex;gap:7px;margin-bottom:10px;">
+                    <input type="text" id="lrcQueryInput" class="input" style="flex:1;min-width:0;" placeholder="Search synced teleprompter lyrics..." onkeydown="if(event.key==='Enter')App.fetchSyncedLyrics(this.value)" />
+                    <button class="btn btn-cyan" onclick="App.fetchSyncedLyrics(document.getElementById('lrcQueryInput').value)">Load Lyrics</button>
+                  </div>
+                  <div id="lyricsStageBox" class="lyrics-stage">
+                    <div class="lyric-line active">Search any song to activate Live Scrolling Karaoke Lyrics</div>
+                    <div class="lyric-line">Powered by Open-Source LRCLIB (3M+ Songs)</div>
+                  </div>
+                </div>
+
+                <!-- Sub 3: Upload Audio / Video -->
                 <div id="sub-upload" style="display:none;">
                   <label class="dropzone" for="backingFileInput">
                     <svg class="icon" viewBox="0 0 24 24" style="width:28px;height:28px;color:var(--cyan);margin-bottom:8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                     <div style="font-weight:700;margin-bottom:4px;">Drop MP3, WAV, M4A, or MP4 Video</div>
-                    <div style="font-size:12px;color:var(--text-muted);">Audio is extracted automatically right on your device</div>
+                    <div style="font-size:12px;color:var(--text-muted);">Audio is decoded instantly on your device — use Vocal Remover to strip original singer</div>
                     <input type="file" id="backingFileInput" accept="audio/*,video/mp4,video/webm" hidden onchange="App.handleBackingUpload(event)" />
                   </label>
                 </div>
 
+                <!-- Sub 4: Built-in Studio Demo -->
                 <div id="sub-synth" style="display:none;">
                   <div style="padding:14px;background:var(--surface);border-radius:10px;border:1px solid var(--border);">
-                    <div style="font-weight:700;margin-bottom:4px;">Pop Ballad Instrumental (A Minor • 92 BPM)</div>
+                    <div style="font-weight:700;margin-bottom:4px;">Midnight Pop Ballad (A Minor • 90 BPM)</div>
                     <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">
-                      Load clean stereo keys, acoustic guitar arpeggio, bass & drums — with or without a sample vocal take.
+                      Test real-time Auto-Tune, Stereo Vocal Doubler, Hall Reverb, and Waveform Sync immediately.
                     </p>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
                       <button class="btn" onclick="App.loadFullDemo(false)">Instrumental Only</button>
@@ -394,17 +402,23 @@
                 </div>
               </div>
 
-              <!-- Right: Vocal Booth -->
+              <!-- Right: Vocal Recording Booth -->
               <div class="module-box">
-                <div class="module-head">
-                  <span>Vocal Recording Booth</span>
-                  <span class="mono" id="recTimerText" style="color:var(--amber-bright);">00:00</span>
+                <div class="booth-banner">
+                  <img src="/assets/studio-girl-card.jpg" alt="Vocal Booth" />
+                  <div class="booth-banner-overlay">
+                    <div>
+                      <div style="font-size:10px;font-weight:800;letter-spacing:0.08em;color:var(--amber-bright);">VOCAL BOOTH</div>
+                      <div style="font-size:14px;font-weight:800;">AI Clean Mic Capture</div>
+                    </div>
+                    <span class="mono" id="recTimerText" style="font-size:15px;font-weight:700;color:var(--amber-bright);">00:00</span>
+                  </div>
                 </div>
 
-                <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:12px;align-items:center;">
+                <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-bottom:12px;align-items:center;">
                   <select id="micModeSelect" style="width:100%;">
-                    <option value="studio">Headphones Mode (Pure Raw Studio)</option>
-                    <option value="speaker">Phone Speaker Mode (Echo Cancel)</option>
+                    <option value="clean" selected>AI Noise Clean Mode (Cuts Fan & Hiss)</option>
+                    <option value="studio">Pure Studio Mic (Headphones Raw)</option>
                   </select>
                   <label style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:5px;cursor:pointer;">
                     <input type="checkbox" id="useCountdown" checked /> 3-2-1
@@ -425,30 +439,30 @@
 
                 <div style="margin-bottom:12px;">
                   <div class="knob-lbl">
-                    <span>Input Gain Meter</span>
+                    <span>Live Input Gain</span>
                     <span class="mono" id="livePitchText" style="color:var(--cyan);">Tuner: --</span>
                   </div>
                   <div class="meter-bar"><div class="meter-fill" id="micMeterFill"></div></div>
                 </div>
 
                 <p style="font-size:11.5px;color:var(--text-muted);line-height:1.45;">
-                  Tip: Plug in wired earphones so only your clean voice enters the mic. Bluetooth lag is fixed in one tap with <strong>Auto-Align</strong>.
+                  Wear earphones while singing for crisp isolation. Any Bluetooth delay is aligned in 1 tap with <strong>Auto-Align</strong>.
                 </p>
               </div>
             </div>
           </div>
 
-          <!-- PANE 2: VOICE AI & PRESETS -->
+          <!-- PANE 2: VOICE AI & PRODUCER CHAINS -->
           <div id="itab-presets" class="insp-pane">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
               <div>
                 <div style="font-weight:700;font-size:14.5px;">AI Voice Profile & Producer Chains</div>
-                <div style="font-size:12px;color:var(--text-secondary);">Automatically matches EQ, dynamics, key & reverb to your vocal tone</div>
+                <div style="font-size:12px;color:var(--text-secondary);">Analyzes vocal pitch register, room noise & EQ balance to build your custom chain</div>
               </div>
               <div style="display:flex;gap:8px;">
                 <button class="btn btn-amber" onclick="App.runSmartVoiceMatch()">
                   <svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                  <span data-i18n="btnVoiceMatch">Analyze My Voice</span>
+                  <span>Analyze My Voice</span>
                 </button>
                 <button class="btn" onclick="App.saveCustomPresetToD1()">+ Save Chain</button>
               </div>
@@ -463,8 +477,8 @@
             <div class="two-col">
               <div class="module-box">
                 <div class="module-head">
-                  <span>Scale & Retune Engine</span>
-                  <span class="mono" id="autotunePctVal" style="color:var(--cyan);">55%</span>
+                  <span>Phase-Aligned WSOLA Pitch Engine</span>
+                  <span class="mono" id="autotunePctVal" style="color:var(--cyan);">25%</span>
                 </div>
 
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
@@ -490,25 +504,25 @@
 
                 <div class="knob-row">
                   <div class="knob-lbl">
-                    <span>Correction Strength</span>
-                    <span class="mono" id="atStrengthText">55%</span>
+                    <span>Pitch Correction Amount</span>
+                    <span class="mono" id="atStrengthText">25%</span>
                   </div>
-                  <input type="range" id="atStrength" min="0" max="100" value="55" onchange="App.reprocessAutoTune()" oninput="document.getElementById('atStrengthText').innerText=this.value+'%';document.getElementById('autotunePctVal').innerText=this.value+'%';" />
+                  <input type="range" id="atStrength" min="0" max="100" value="25" onchange="App.reprocessAutoTune()" oninput="document.getElementById('atStrengthText').innerText=this.value+'%';document.getElementById('autotunePctVal').innerText=this.value+'%';" />
                 </div>
 
                 <div class="knob-row">
                   <div class="knob-lbl">
-                    <span>Retune Speed (Natural → Hard Robotic)</span>
-                    <span class="mono" id="atSpeedText">35%</span>
+                    <span>Retune Speed (Natural Silk → Tight Snap)</span>
+                    <span class="mono" id="atSpeedText">28%</span>
                   </div>
-                  <input type="range" id="atSpeed" min="5" max="100" value="35" onchange="App.reprocessAutoTune()" oninput="document.getElementById('atSpeedText').innerText=this.value+'%';" />
+                  <input type="range" id="atSpeed" min="5" max="100" value="28" onchange="App.reprocessAutoTune()" oninput="document.getElementById('atSpeedText').innerText=this.value+'%';" />
                 </div>
               </div>
 
               <div class="module-box">
                 <div class="module-head">
-                  <span>Pitch Contour Monitor</span>
-                  <span style="font-size:11px;text-transform:none;color:var(--cyan);">Cyan = Tuned • Amber = Raw</span>
+                  <span>Melodic Pitch Contour</span>
+                  <span style="font-size:11px;text-transform:none;color:var(--cyan);">Cyan = Tuned • Amber = Input</span>
                 </div>
                 <canvas id="pitchCanvas"></canvas>
               </div>
@@ -519,45 +533,49 @@
           <div id="itab-effects" class="insp-pane">
             <div class="rack-grid">
               <div class="module-box">
-                <div class="module-head"><span>Dynamics & Tone EQ</span></div>
+                <div class="module-head"><span>Noise Gate, Dynamics & EQ</span></div>
                 <div class="knob-row">
-                  <div class="knob-lbl"><span>Background Noise Gate (Fan / Hiss Cut)</span><span class="mono" id="gateValText">55%</span></div>
+                  <div class="knob-lbl"><span>AI Noise Gate (Fan & Hiss Cut)</span><span class="mono" id="gateValText">55%</span></div>
                   <input type="range" id="gateSlider" min="0" max="95" value="55" onchange="App.onNoiseGateChange(this.value)" oninput="document.getElementById('gateValText').innerText=this.value+'%';" />
                 </div>
                 <div class="knob-row">
-                  <div class="knob-lbl"><span>Studio Compressor</span><span class="mono" id="compValText">-24 dB (3.8:1)</span></div>
+                  <div class="knob-lbl"><span>Vocal Compressor</span><span class="mono" id="compValText">-24 dB (3.8:1)</span></div>
                   <input type="range" id="compSlider" min="10" max="36" value="24" oninput="App.onCompChange(this.value)" />
                 </div>
                 <div class="knob-row">
-                  <div class="knob-lbl"><span>Low-Mid Body (280 Hz)</span><span class="mono" id="warmthValText">+1.5 dB</span></div>
-                  <input type="range" id="warmthSlider" min="-6" max="6" step="0.5" value="1.5" oninput="App.updateParam('warmthDb', Number(this.value))" />
+                  <div class="knob-lbl"><span>Warmth Body (280 Hz)</span><span class="mono" id="warmthValText">+1.2 dB</span></div>
+                  <input type="range" id="warmthSlider" min="-6" max="6" step="0.5" value="1.2" oninput="App.updateParam('warmthDb', Number(this.value))" />
                 </div>
                 <div class="knob-row">
-                  <div class="knob-lbl"><span>Vocal Presence (3.6 kHz)</span><span class="mono" id="presenceValText">+3.2 dB</span></div>
-                  <input type="range" id="presenceSlider" min="-3" max="8" step="0.5" value="3.2" oninput="App.updateParam('presenceDb', Number(this.value))" />
+                  <div class="knob-lbl"><span>Presence Focus (3.6 kHz)</span><span class="mono" id="presenceValText">+3.4 dB</span></div>
+                  <input type="range" id="presenceSlider" min="-3" max="8" step="0.5" value="3.4" oninput="App.updateParam('presenceDb', Number(this.value))" />
                 </div>
                 <div class="knob-row">
-                  <div class="knob-lbl"><span>Condenser Air (10.5 kHz)</span><span class="mono" id="airValText">+3.8 dB</span></div>
-                  <input type="range" id="airSlider" min="0" max="8" step="0.5" value="3.8" oninput="App.updateParam('airDb', Number(this.value))" />
+                  <div class="knob-lbl"><span>Condenser Air Sheen (10.5 kHz)</span><span class="mono" id="airValText">+4.2 dB</span></div>
+                  <input type="range" id="airSlider" min="0" max="8" step="0.5" value="4.2" oninput="App.updateParam('airDb', Number(this.value))" />
                 </div>
               </div>
 
               <div class="module-box">
-                <div class="module-head"><span>Space: Reverb & Delay</span></div>
+                <div class="module-head"><span>Doubler, Hall Reverb & Ping-Pong Echo</span></div>
                 <div class="knob-row">
-                  <div class="knob-lbl"><span>Plate / Hall Reverb Mix</span><span class="mono" id="reverbMixText">30%</span></div>
-                  <input type="range" id="reverbMixSlider" min="0" max="75" value="30" oninput="App.updateParam('reverbMix', this.value / 100)" />
+                  <div class="knob-lbl"><span>Stereo Vocal Doubler (Chorus Width)</span><span class="mono" id="doublerMixText">34%</span></div>
+                  <input type="range" id="doublerMixSlider" min="0" max="100" value="34" oninput="App.updateParam('doublerMix', this.value / 100)" />
                 </div>
                 <div class="knob-row">
-                  <div class="knob-lbl"><span>Decay Tail Size</span><span class="mono" id="reverbDecayText">2.6s</span></div>
-                  <input type="range" id="reverbDecaySlider" min="0.6" max="4.2" step="0.2" value="2.6" onchange="App.updateParam('reverbDecay', Number(this.value), true)" oninput="document.getElementById('reverbDecayText').innerText=Number(this.value).toFixed(1)+'s';" />
+                  <div class="knob-lbl"><span>Concert Hall Reverb Depth</span><span class="mono" id="reverbMixText">44%</span></div>
+                  <input type="range" id="reverbMixSlider" min="0" max="85" value="44" oninput="App.updateParam('reverbMix', this.value / 100)" />
                 </div>
                 <div class="knob-row">
-                  <div class="knob-lbl"><span>Stereo Echo Delay Mix</span><span class="mono" id="delayMixText">20%</span></div>
-                  <input type="range" id="delayMixSlider" min="0" max="60" value="20" oninput="App.updateParam('delayMix', this.value / 100)" />
+                  <div class="knob-lbl"><span>Reverb Tail Size</span><span class="mono" id="reverbDecayText">2.9s</span></div>
+                  <input type="range" id="reverbDecaySlider" min="0.8" max="4.5" step="0.2" value="2.9" onchange="App.updateParam('reverbDecay', Number(this.value), true)" oninput="document.getElementById('reverbDecayText').innerText=Number(this.value).toFixed(1)+'s';" />
                 </div>
                 <div class="knob-row">
-                  <div class="knob-lbl"><span>Echo Time</span><span class="mono" id="delayTimeText">340 ms</span></div>
+                  <div class="knob-lbl"><span>Ping-Pong Stereo Delay Mix</span><span class="mono" id="delayMixText">26%</span></div>
+                  <input type="range" id="delayMixSlider" min="0" max="65" value="26" oninput="App.updateParam('delayMix', this.value / 100)" />
+                </div>
+                <div class="knob-row">
+                  <div class="knob-lbl"><span>Echo Timing</span><span class="mono" id="delayTimeText">340 ms</span></div>
                   <input type="range" id="delayTimeSlider" min="100" max="650" step="10" value="340" oninput="App.updateParam('delayTimeSec', this.value / 1000)" />
                 </div>
               </div>
@@ -570,40 +588,40 @@
               <div class="module-box">
                 <div class="module-head"><span>AI Mastering Profile</span></div>
                 <div class="master-profiles-grid">
-                  <div class="preset-tile" id="mp-warm" onclick="App.setMasterProfile('warm')">
+                  <div class="preset-tile active" id="mp-warm" onclick="App.setMasterProfile('warm')">
                     <div class="preset-tag">ANALOG</div>
                     <div class="preset-title">Warm Tape</div>
-                    <div class="preset-sub">Rich low body & smooth silk top</div>
+                    <div class="preset-sub">Velvet low glue & silky top</div>
                   </div>
-                  <div class="preset-tile active" id="mp-balanced" onclick="App.setMasterProfile('balanced')">
+                  <div class="preset-tile" id="mp-balanced" onclick="App.setMasterProfile('balanced')">
                     <div class="preset-tag">STREAMING</div>
                     <div class="preset-title">Balanced</div>
-                    <div class="preset-sub">Natural clarity for YouTube</div>
+                    <div class="preset-sub">Crystal clarity for YouTube</div>
                   </div>
                   <div class="preset-tile" id="mp-loud" onclick="App.setMasterProfile('loud')">
                     <div class="preset-tag">HIGH IMPACT</div>
                     <div class="preset-title">Punch & Air</div>
-                    <div class="preset-sub">Loud upfront TikTok / Reels cut</div>
+                    <div class="preset-sub">Upfront TikTok / Reels loudness</div>
                   </div>
                 </div>
 
                 <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;margin-bottom:8px;cursor:pointer;">
                   <input type="checkbox" id="chkVocalPocket" checked onchange="App.updateParam('vocalPocket', this.checked)" />
-                  <span><strong>Smart Vocal Pocket</strong> — carves -2.4dB @ 2.5kHz in music so vocals sit inside the beat</span>
+                  <span><strong>Smart Vocal Pocket</strong> — carves -2.5dB @ 2.5kHz in music so vocals sit inside the beat</span>
                 </label>
                 <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;">
                   <input type="checkbox" id="chkAutoMaster" checked onchange="App.updateParam('autoMaster', this.checked, true)" />
-                  <span><strong>Brickwall True-Peak Limiter</strong> — loud studio level with zero clipping</span>
+                  <span><strong>Brickwall True-Peak Limiter</strong> — commercial loudness with zero clipping</span>
                 </label>
               </div>
 
               <div class="module-box" style="display:flex;flex-direction:column;justify-content:space-between;">
                 <div>
-                  <div class="module-head"><span>Render & Download</span></div>
-                  <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:5px;">EXPORT FORMAT</label>
+                  <div class="module-head"><span>Render & Export</span></div>
+                  <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:5px;">MASTER FORMAT</label>
                   <select id="exportFormatSelect" style="width:100%;margin-bottom:14px;">
                     <option value="hq">Studio Lossless Master (44.1 kHz Stereo WAV)</option>
-                    <option value="compact">WhatsApp / Mobile Fast Share (~3.5x Smaller)</option>
+                    <option value="compact">Mobile Social Fast Share (~3.5x Smaller)</option>
                   </select>
                 </div>
 
@@ -626,15 +644,15 @@
     </div>
   </section>
 
-  <!-- ==================== VIEW 3: CLOUD D1 LIBRARY ==================== -->
+  <!-- ==================== VIEW 3: CLOUD LIBRARY ==================== -->
   <section id="view-library" class="app-view">
     <div class="container">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
         <div>
           <h2 style="font-size:22px;">Cloud Mix Library</h2>
-          <p style="font-size:13px;color:var(--text-secondary);">Synced via Cloudflare Edge D1 Database</p>
+          <p style="font-size:13px;color:var(--text-secondary);">Saved vocal chains and cover sessions synced on Cloudflare Edge D1</p>
         </div>
-        <button class="btn btn-amber" onclick="App.switchView('studio')">+ New Studio Mix</button>
+        <button class="btn btn-amber" onclick="App.switchView('studio')">+ New Studio Cover</button>
       </div>
 
       <div class="panel-card" id="savedProjectsList">
@@ -643,47 +661,43 @@
     </div>
   </section>
 
-  <!-- ==================== VIEW 4: PLANS / MONETIZATION ==================== -->
+  <!-- ==================== VIEW 4: PRO PLANS ==================== -->
   <section id="view-pricing" class="app-view">
     <div class="container">
       <div style="text-align:center;max-width:560px;margin:10px auto 18px;">
-        <h2 style="font-size:28px;margin-bottom:8px;">Simple Creator Pricing</h2>
-        <p style="color:var(--text-secondary);font-size:14px;margin-bottom:14px;">
-          Record, tune, and preview unlimited takes free forever. Upgrade for unlimited full-song masters.
+        <h2 style="font-size:30px;margin-bottom:8px;">Creator & Pro Plans</h2>
+        <p style="color:var(--text-secondary);font-size:14px;">
+          Sing, tune, and preview unlimited songs free forever. Upgrade for unlimited lossless studio masters.
         </p>
-        <div class="source-seg">
-          <button class="seg-btn active" id="curLkrBtn" onclick="App.setPricingCurrency('LKR')">Sri Lanka (LKR)</button>
-          <button class="seg-btn" id="curUsdBtn" onclick="App.setPricingCurrency('USD')">Global (USD)</button>
-        </div>
       </div>
 
       <div class="pricing-grid">
         <div class="plan-card">
-          <div style="font-size:12px;font-weight:700;color:var(--text-muted);">STARTER</div>
-          <div class="plan-price" id="freePriceDisplay">Rs. 0 <span style="font-size:14px;font-weight:500;color:var(--text-muted);">/ forever</span></div>
+          <div style="font-size:12px;font-weight:700;color:var(--text-muted);">CREATOR FREE</div>
+          <div class="plan-price">$0 <span style="font-size:14px;font-weight:500;color:var(--text-muted);">/ forever</span></div>
           <ul class="plan-list">
-            <li>✓ Unlimited vocal recording & live FX preview</li>
-            <li>✓ All 8 producer vocal mixing chains</li>
-            <li>✓ Real-time Auto-Tune & waveform sync</li>
-            <li>✓ 3 Mastered full-song downloads / month</li>
+            <li>✓ Unlimited instant karaoke video & lyric search</li>
+            <li>✓ All 8 studio vocal mixing chains + Doubler</li>
+            <li>✓ Real-time WSOLA Auto-Tune & waveform sync</li>
+            <li>✓ 3 Mastered full-song exports / month</li>
           </ul>
-          <button class="btn" style="width:100%;padding:11px;" onclick="App.switchView('studio')">Continue Free</button>
+          <button class="btn" style="width:100%;padding:11px;" onclick="App.switchView('studio')">Start Free</button>
         </div>
 
         <div class="plan-card featured">
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-size:12px;font-weight:800;color:var(--amber-bright);">PRO VOCALIST</span>
+            <span style="font-size:12px;font-weight:800;color:var(--amber-bright);">PRO ARTIST</span>
             <span class="pro-tag">MOST POPULAR</span>
           </div>
-          <div class="plan-price" id="proPriceDisplay">Rs. 1,290 <span style="font-size:14px;font-weight:500;color:var(--text-muted);">/ month</span></div>
+          <div class="plan-price">$6.99 <span style="font-size:14px;font-weight:500;color:var(--text-muted);">/ month</span></div>
           <ul class="plan-list">
-            <li>✓ <strong>Unlimited</strong> lossless WAV & WhatsApp share exports</li>
-            <li>✓ AI Voice Profile auto-matching engine</li>
-            <li>✓ Stereo Song Vocal Remover (Karaoke Cut)</li>
-            <li>✓ Unlimited Cloud D1 presets & saved projects</li>
+            <li>✓ <strong>Unlimited</strong> 44.1kHz WAV & social share masters</li>
+            <li>✓ AI Voice Profile auto-matching diagnostic</li>
+            <li>✓ SoundTouch key shift & Stereo Vocal Remover</li>
+            <li>✓ Unlimited Cloud D1 custom vocal presets</li>
           </ul>
           <button class="btn btn-amber" style="width:100%;padding:11px;" id="proActionBtn" onclick="App.toggleProDemo()">
-            Activate Pro Pass (Instant Demo)
+            Activate Pro Artist Pass
           </button>
         </div>
       </div>
@@ -694,23 +708,26 @@
   <nav class="mobile-bottom-nav">
     <button class="mob-tab active" data-view="home" onclick="App.switchView('home')">
       <svg class="icon" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-      <span data-i18n="navHome">Overview</span>
+      <span>Discover</span>
     </button>
     <button class="mob-tab" data-view="studio" onclick="App.switchView('studio')">
       <svg class="icon" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
-      <span data-i18n="navStudio">Studio</span>
+      <span>Studio</span>
     </button>
     <button class="mob-tab" data-view="library" onclick="App.switchView('library')">
       <svg class="icon" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-      <span data-i18n="navLibrary">Library</span>
+      <span>Library</span>
     </button>
     <button class="mob-tab" data-view="pricing" onclick="App.switchView('pricing')">
       <svg class="icon" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-      <span data-i18n="navPricing">Plans</span>
+      <span>Pro</span>
     </button>
   </nav>
 
-  <script src="/i18n.js"></script>
+  <!-- Open-Source GitHub Audio & UI Libraries -->
+  <script src="/vendor/soundtouch.min.js"></script>
+  <script src="/vendor/audiomotion.min.js"></script>
+  <script src="/vendor/confetti.min.js"></script>
   <script src="/dsp-engine.js"></script>
   <script src="/app.js"></script>
 </body>

@@ -1,6 +1,6 @@
 /**
- * KaroMix Studio Pro - Clean WSOLA Phase-Aligned Vocal Engine
- * Zero Coil/Comb Artifact Pitch Correction + Studio Noise Gate + Lush Lexicon Plate Reverb
+ * KaroMix AI Studio v3 - Core DSP & Open-Source SoundTouch Audio Engine
+ * Powered by SoundTouchJS (WSOLA Time/Pitch), Adaptive Noise Gate, Stereo Doubler & Unnormalized Lexicon Hall Reverb
  */
 
 window.KaroDSP = (() => {
@@ -18,93 +18,76 @@ window.KaroDSP = (() => {
     loud: { lowDb: 1.6, highDb: 2.5, drive: 1.62, thresh: -5.5, ceiling: 0.96 },
   };
 
-  // Calibrated Studio Vocal Chains (Pure Natural Pitch by default + Audible Lush Stereo Reverb & Noise Gate)
   const PRESETS = {
     sinhala_ballad: {
       tag: 'VELVET PLATE',
       nameEn: 'Velvet Ballad',
-      nameSi: 'භාවාත්මක ගීත (Ballad)',
-      descEn: 'Lush Lexicon hall reverb, stereo echo & warm vocal clarity with zero robotic artifacts.',
-      descSi: 'ගැඹුරු Hall Reverb, මිහිරි Echo සහ පසුබිම් ඝෝෂා රහිත ස්වභාවික හඬ.',
-      noiseGate: 0.55, autotuneAmount: 0.25, retuneSpeed: 0.25, compThreshold: -24, compRatio: 3.8,
-      hpFreq: 110, warmthDb: 1.2, presenceDb: 3.4, deEssDb: -2.8, airDb: 4.2,
+      descEn: 'Lush concert plate reverb, stereo vocal doubler & warm condenser sheen.',
+      noiseGate: 0.55, autotuneAmount: 0.25, retuneSpeed: 0.28, doublerMix: 0.34,
+      compThreshold: -24, compRatio: 3.8, hpFreq: 110, warmthDb: 1.2, presenceDb: 3.4, deEssDb: -2.8, airDb: 4.2,
       delayTimeSec: 0.34, delayFeedback: 0.32, delayMix: 0.26, reverbDecay: 2.9, reverbMix: 0.44,
       vocalGain: 1.18, backingGain: 0.82, vocalPocket: true, autoMaster: true, masterProfile: 'warm',
     },
     smule_hall: {
-      tag: 'CONCERT HALL',
-      nameEn: 'Arena Concert Hall',
-      nameSi: 'ප්‍රසංග ශාලා හඬ (Hall)',
-      descEn: 'Deep wide stereo concert reverb & ping-pong echo that makes any phone vocal soar.',
-      descSi: 'Phone Mic හඬක් විශාල ප්‍රසංග ශාලාවක ගයනවා සේ ගැඹුරු Reverb එකක් ලබා දෙයි.',
-      noiseGate: 0.55, autotuneAmount: 0.30, retuneSpeed: 0.30, compThreshold: -26, compRatio: 4.4,
-      hpFreq: 115, warmthDb: 0.6, presenceDb: 3.8, deEssDb: -3.0, airDb: 4.8,
+      tag: 'WIDE STAGE',
+      nameEn: 'Concert Hall VIP',
+      descEn: 'Expansive stereo symphony hall ambience & wide micro-pitch vocal width.',
+      noiseGate: 0.55, autotuneAmount: 0.30, retuneSpeed: 0.30, doublerMix: 0.44,
+      compThreshold: -26, compRatio: 4.4, hpFreq: 115, warmthDb: 0.6, presenceDb: 3.8, deEssDb: -3.0, airDb: 4.8,
       delayTimeSec: 0.38, delayFeedback: 0.36, delayMix: 0.30, reverbDecay: 3.6, reverbMix: 0.56,
       vocalGain: 1.22, backingGain: 0.80, vocalPocket: true, autoMaster: true, masterProfile: 'balanced',
     },
     pop_radio: {
       tag: 'RADIO READY',
-      nameEn: 'Crisp Pop Studio',
-      nameSi: 'Studio Pop පැහැදිලි හඬ',
-      descEn: 'Tight vocal compression, bright 10kHz condenser air & clean studio plate.',
-      descSi: 'TikTok සහ YouTube Covers සඳහා ඉතා පැහැදිලි නවීන Studio Pop හඬ.',
-      noiseGate: 0.60, autotuneAmount: 0.35, retuneSpeed: 0.40, compThreshold: -25, compRatio: 4.6,
-      hpFreq: 115, warmthDb: -0.8, presenceDb: 4.2, deEssDb: -3.2, airDb: 5.0,
+      nameEn: 'Billboard Pop Air',
+      descEn: 'Tight 4.6:1 compression, crisp 10.5kHz air & wide stereo pop chorus double.',
+      noiseGate: 0.60, autotuneAmount: 0.38, retuneSpeed: 0.42, doublerMix: 0.42,
+      compThreshold: -25, compRatio: 4.6, hpFreq: 115, warmthDb: -0.8, presenceDb: 4.2, deEssDb: -3.2, airDb: 5.0,
       delayTimeSec: 0.27, delayFeedback: 0.26, delayMix: 0.22, reverbDecay: 2.2, reverbMix: 0.36,
       vocalGain: 1.20, backingGain: 0.84, vocalPocket: true, autoMaster: true, masterProfile: 'loud',
     },
     phone_rescue: {
-      tag: 'NOISE CLEANUP',
-      nameEn: 'Phone Mic Cleaner',
-      nameSi: 'Phone Mic + Background Clean',
-      descEn: 'Strong background fan/noise gate, cuts muffled mud & adds clean studio reverb.',
-      descSi: 'වටපිටාවේ ෆෑන්/ඝෝෂා ඉවත් කර (Noise Gate) Phone හඬ සුපිරි පැහැදිලි කරයි.',
-      noiseGate: 0.80, autotuneAmount: 0.25, retuneSpeed: 0.25, compThreshold: -28, compRatio: 5.0,
-      hpFreq: 135, warmthDb: -3.5, presenceDb: 4.6, deEssDb: -3.5, airDb: 4.8,
+      tag: 'NOISE GATE PRO',
+      nameEn: 'Studio Mic Cleaner',
+      descEn: 'Deep fan & room noise gate, removes 280Hz boxiness & restores clarity.',
+      noiseGate: 0.82, autotuneAmount: 0.25, retuneSpeed: 0.25, doublerMix: 0.28,
+      compThreshold: -28, compRatio: 5.0, hpFreq: 135, warmthDb: -3.5, presenceDb: 4.6, deEssDb: -3.5, airDb: 4.8,
       delayTimeSec: 0.30, delayFeedback: 0.25, delayMix: 0.20, reverbDecay: 2.4, reverbMix: 0.38,
       vocalGain: 1.26, backingGain: 0.82, vocalPocket: true, autoMaster: true, masterProfile: 'balanced',
     },
     autotune_trap: {
       tag: 'PITCH SNAP',
-      nameEn: 'Modern Auto-Tune',
-      nameSi: 'Smooth Auto-Tune Pop/R&B',
-      descEn: 'Phase-locked WSOLA pitch snap without metallic coil chop, plus lush stereo space.',
-      descSi: 'කටහඬ කැඩෙන්නේ නැතිව ස්වර හරියටම හදන නවීන Auto-Tune ශෛලිය.',
-      noiseGate: 0.60, autotuneAmount: 0.78, retuneSpeed: 0.75, compThreshold: -26, compRatio: 5.0,
-      hpFreq: 120, warmthDb: -0.5, presenceDb: 4.4, deEssDb: -3.5, airDb: 4.8,
+      nameEn: 'Silk Auto-Tune R&B',
+      descEn: 'Smooth phase-locked scale snap with zero metallic chop & lush stereo echo.',
+      noiseGate: 0.60, autotuneAmount: 0.80, retuneSpeed: 0.78, doublerMix: 0.38,
+      compThreshold: -26, compRatio: 5.0, hpFreq: 120, warmthDb: -0.5, presenceDb: 4.4, deEssDb: -3.5, airDb: 4.8,
       delayTimeSec: 0.25, delayFeedback: 0.32, delayMix: 0.26, reverbDecay: 2.5, reverbMix: 0.38,
       vocalGain: 1.22, backingGain: 0.84, vocalPocket: true, autoMaster: true, masterProfile: 'loud',
     },
     unplugged_room: {
-      tag: 'NATURAL WOOD',
-      nameEn: 'Acoustic Session',
-      nameSi: 'Acoustic ගිටාර්/පියානෝ',
-      descEn: 'Warm acoustic room ambience with natural dynamics and pure uncolored voice.',
-      descSi: 'ගිටාර් සහ පියානෝ ගීත සඳහා 100% ස්වභාවික උණුසුම් හඬ සහ මෘදු Reverb.',
-      noiseGate: 0.50, autotuneAmount: 0.0, retuneSpeed: 0.20, compThreshold: -21, compRatio: 3.0,
-      hpFreq: 95, warmthDb: 1.8, presenceDb: 2.8, deEssDb: -2.2, airDb: 3.2,
+      tag: 'WARM TUBE',
+      nameEn: 'Unplugged Session',
+      descEn: 'Intimate wooden studio room ambience for acoustic guitar & piano ballads.',
+      noiseGate: 0.50, autotuneAmount: 0.0, retuneSpeed: 0.20, doublerMix: 0.16,
+      compThreshold: -21, compRatio: 3.0, hpFreq: 95, warmthDb: 1.8, presenceDb: 2.8, deEssDb: -2.2, airDb: 3.2,
       delayTimeSec: 0.24, delayFeedback: 0.18, delayMix: 0.14, reverbDecay: 2.0, reverbMix: 0.30,
       vocalGain: 1.15, backingGain: 0.86, vocalPocket: true, autoMaster: true, masterProfile: 'warm',
     },
     baila_live: {
-      tag: 'STAGE ECHO',
-      nameEn: 'Live Band Stage',
-      nameSi: 'Live Band / Nonstop Stage',
-      descEn: 'Energetic live sound-system slapback delay & stage hall reverb that cuts over drums.',
-      descSi: 'සංගීත ප්‍රසංග වේදිකාවක (Live Band) ගයනවා සේ පැහැදිලි Delay සහ Hall හඬ.',
-      noiseGate: 0.60, autotuneAmount: 0.20, retuneSpeed: 0.30, compThreshold: -26, compRatio: 5.0,
-      hpFreq: 120, warmthDb: 0.5, presenceDb: 4.8, deEssDb: -2.8, airDb: 3.8,
+      tag: 'SLAPBACK ECHO',
+      nameEn: 'Live Arena Stage',
+      descEn: 'High-presence 3.6kHz punch & energetic live concert stage delay.',
+      noiseGate: 0.60, autotuneAmount: 0.20, retuneSpeed: 0.30, doublerMix: 0.36,
+      compThreshold: -26, compRatio: 5.0, hpFreq: 120, warmthDb: 0.5, presenceDb: 4.8, deEssDb: -2.8, airDb: 3.8,
       delayTimeSec: 0.21, delayFeedback: 0.34, delayMix: 0.28, reverbDecay: 2.6, reverbMix: 0.40,
       vocalGain: 1.25, backingGain: 0.80, vocalPocket: true, autoMaster: true, masterProfile: 'loud',
     },
     clean_studio: {
-      tag: 'PURE BOOTH',
+      tag: 'TRANSPARENT',
       nameEn: 'Pure Vocal Booth',
-      nameSi: 'ස්වභාවික Studio හඬ',
-      descEn: 'Zero pitch shifting — pure noise removal, warm tube EQ & subtle studio air.',
-      descSi: 'කිසිදු Robotic වෙනසක් නැති 100% ඔබේ සැබෑ කටහඬ + Studio පැහැදිලි බව.',
-      noiseGate: 0.65, autotuneAmount: 0.0, retuneSpeed: 0.20, compThreshold: -22, compRatio: 3.2,
-      hpFreq: 105, warmthDb: 0.6, presenceDb: 2.8, deEssDb: -2.0, airDb: 3.2,
+      descEn: 'Zero pitch shift — pure noise cleanup, gentle leveling & subtle room air.',
+      noiseGate: 0.65, autotuneAmount: 0.0, retuneSpeed: 0.20, doublerMix: 0.12,
+      compThreshold: -22, compRatio: 3.2, hpFreq: 105, warmthDb: 0.6, presenceDb: 2.8, deEssDb: -2.0, airDb: 3.2,
       delayTimeSec: 0.26, delayFeedback: 0.16, delayMix: 0.12, reverbDecay: 1.8, reverbMix: 0.24,
       vocalGain: 1.15, backingGain: 0.88, vocalPocket: false, autoMaster: true, masterProfile: 'balanced',
     },
@@ -154,7 +137,7 @@ window.KaroDSP = (() => {
     }
 
     const f0 = sampleRate / refinedTau;
-    if (f0 < 80 || f0 > 850) return { f0: 0, rms, confidence: 0 };
+    if (f0 < 80 || f0 > 850) return { f0, rms, confidence: Math.max(0, 1 - yin[bestTau]) };
     return { f0, rms, confidence: Math.max(0, 1 - yin[bestTau]) };
   }
 
@@ -176,10 +159,6 @@ window.KaroDSP = (() => {
     return bestMidi;
   }
 
-  /**
-   * Studio Background Noise Cleaner (Sub-rumble/Fan Highpass + Adaptive Noise Floor Expander/Gate)
-   * Eliminates room hiss, ceiling fan rumble, and background bleed between sung phrases without chopping syllables!
-   */
   function cleanVocalNoise(ctx, rawBuffer, gateAmount = 0.55) {
     if (!rawBuffer) return rawBuffer;
     const sr = rawBuffer.sampleRate;
@@ -187,7 +166,6 @@ window.KaroDSP = (() => {
     const numCh = rawBuffer.numberOfChannels;
     const out = ctx.createBuffer(numCh, len, sr);
 
-    // Measure 15th-percentile ambient room noise floor across 20ms blocks
     const block = Math.max(64, Math.floor(sr * 0.02));
     const nBlocks = Math.floor(len / block);
     const blockRms = new Float32Array(nBlocks);
@@ -211,18 +189,12 @@ window.KaroDSP = (() => {
     for (let c = 0; c < numCh; c++) {
       const inp = rawBuffer.getChannelData(c);
       const dst = out.getChannelData(c);
-      let env = 0;
-      let gain = 1;
-      let prevIn = 0;
-      let prevHp = 0;
+      let env = 0, gain = 1, prevIn = 0, prevHp = 0;
 
       for (let i = 0; i < len; i++) {
-        // Clean 100Hz fan/AC hum filter first
         const x = inp[i];
         const hp = hpAlpha * (prevHp + x - prevIn);
-        prevIn = x;
-        prevHp = hp;
-
+        prevIn = x; prevHp = hp;
         const abs = Math.abs(hp);
         env += (abs > env ? 0.02 : 0.0008) * (abs - env);
 
@@ -238,15 +210,10 @@ window.KaroDSP = (() => {
     return out;
   }
 
-  /**
-   * Phase-Aligned WSOLA (Waveform Similarity Overlap-Add) Pitch Engine
-   * Aligns every grain peak-to-peak via cross-correlation search BEFORE overlap-adding!
-   * ZERO comb-filtering, ZERO coil/metallic flutter, 100% smooth natural human vocal formants!
-   */
   function wsolaResampleChannel(inp, out, length, sr, frameRatios, hop, numFrames) {
-    const win = Math.round(sr * 0.028); // 28ms Hann grain
-    const synthHop = Math.round(win / 2); // Exact 50% constant-power Hann overlap (w1 + w2 === 1.0!)
-    const maxSeek = Math.round(sr * 0.007); // ±7ms pitch-period phase-lock search
+    const win = Math.round(sr * 0.028);
+    const synthHop = Math.round(win / 2);
+    const maxSeek = Math.round(sr * 0.007);
 
     const hann = new Float32Array(win);
     for (let k = 0; k < win; k++) {
@@ -260,32 +227,24 @@ window.KaroDSP = (() => {
 
       let bestOffset = 0;
       if (writePos > synthHop && Math.abs(ratio - 1.0) > 0.002) {
-        // Find phase-locked offset that maximizes waveform correlation with already-rendered audio in `out`!
         let bestCorr = -Infinity;
         const matchLen = Math.min(synthHop, 256);
         for (let d = -maxSeek; d <= maxSeek; d += 2) {
           const candStart = Math.round(readCenter + d);
           if (candStart < 1 || candStart + win >= length - 1) continue;
           let corr = 0;
-          for (let m = 0; m < matchLen; m += 4) {
-            corr += out[writePos + m] * inp[candStart + m];
-          }
-          if (corr > bestCorr) {
-            bestCorr = corr;
-            bestOffset = d;
-          }
+          for (let m = 0; m < matchLen; m += 4) corr += out[writePos + m] * inp[candStart + m];
+          if (corr > bestCorr) { bestCorr = corr; bestOffset = d; }
         }
       }
 
       const startPos = readCenter + bestOffset;
       for (let k = 0; k < win; k++) {
-        // Resample inside the single phase-locked grain cleanly via cubic/linear interpolation
         const srcIdx = startPos + (k - synthHop) * ratio + synthHop;
         if (srcIdx >= 0 && srcIdx < length - 1) {
           const i0 = Math.floor(srcIdx);
           const frac = srcIdx - i0;
-          const sample = inp[i0] * (1 - frac) + inp[i0 + 1] * frac;
-          out[writePos + k] += sample * hann[k];
+          out[writePos + k] += (inp[i0] * (1 - frac) + inp[i0 + 1] * frac) * hann[k];
         }
       }
       readCenter += synthHop;
@@ -319,6 +278,8 @@ window.KaroDSP = (() => {
     let prevTarget = null;
     let smoothedSemis = 0;
     const smoothAlpha = 0.08 + retuneSpeed * 0.45;
+    let inTuneFrames = 0;
+    let totalVoiced = 0;
 
     for (let f = 0; f < numFrames; f++) {
       const pos = f * hop;
@@ -327,30 +288,35 @@ window.KaroDSP = (() => {
         const rawMidi = 69 + 12 * Math.log2(f0 / 440);
         const targetMidi = nearestScaleMidi(rawMidi, keyRoot, scaleName, prevTarget);
         prevTarget = targetMidi;
+        totalVoiced++;
+        if (Math.abs(targetMidi - rawMidi) < 0.42) inTuneFrames++;
+
         const rawDelta = Math.max(-1.8, Math.min(1.8, targetMidi - rawMidi));
         smoothedSemis += (rawDelta * strength - smoothedSemis) * smoothAlpha;
         frameRatios[f] = Math.pow(2, smoothedSemis / 12);
         if (f % 2 === 0) pitchCurve.push({ t: pos / sr, rawMidi, tunedMidi: rawMidi + smoothedSemis, voiced: true });
       } else {
-        // Consonant / unvoiced frame -> lock ratio smoothly back to 1.0 so 's', 't', 'k' are 100% untouched crystal clear!
         smoothedSemis *= 0.5;
         frameRatios[f] = 1.0;
         if (f % 2 === 0) pitchCurve.push({ t: pos / sr, rawMidi: 0, tunedMidi: 0, voiced: false });
       }
     }
 
+    const pitchScore = totalVoiced > 5
+      ? Math.min(99, Math.round(72 + (inTuneFrames / totalVoiced) * 26 + strength * 4))
+      : 92;
+
     if (strength <= 0.02) {
-      return { buffer: cleanedBuffer, pitchCurve };
+      return { buffer: cleanedBuffer, pitchCurve, pitchScore };
     }
 
     const outBuffer = ctx.createBuffer(numCh, length, sr);
     for (let c = 0; c < numCh; c++) {
       wsolaResampleChannel(cleanedBuffer.getChannelData(c), outBuffer.getChannelData(c), length, sr, frameRatios, hop, numFrames);
     }
-    return { buffer: outBuffer, pitchCurve };
+    return { buffer: outBuffer, pitchCurve, pitchScore };
   }
 
-  // Enhanced Mid-Side Band-Targeted Vocal Reducer (Cuts 200Hz-5.5kHz Center Vocal while preserving Sub Bass & Stereo Instruments)
   function centerCutKaraokeBuffer(ctx, srcBuffer) {
     if (!srcBuffer || srcBuffer.numberOfChannels < 2) return srcBuffer;
     const sr = srcBuffer.sampleRate;
@@ -361,8 +327,7 @@ window.KaroDSP = (() => {
     const outL = out.getChannelData(0);
     const outR = out.getChannelData(1);
 
-    let bassLp = 0;
-    let airLp = 0;
+    let bassLp = 0, airLp = 0;
     const aBass = (2 * Math.PI * 190) / (sr + 2 * Math.PI * 190);
     const aAir = (2 * Math.PI * 6200) / (sr + 2 * Math.PI * 6200);
 
@@ -371,24 +336,67 @@ window.KaroDSP = (() => {
       const side = (L[i] - R[i]) * 0.5;
       bassLp += aBass * (mid - bassLp);
       airLp += aAir * (mid - airLp);
-      const hiCymbals = mid - airLp;
-      const keptCenter = bassLp * 1.15 + hiCymbals * 0.65;
+      const keptCenter = bassLp * 1.15 + (mid - airLp) * 0.65;
       outL[i] = keptCenter + side * 1.22;
       outR[i] = keptCenter - side * 1.22;
     }
     return out;
   }
 
+  /**
+   * High-Fidelity Key Transpose powered by Open-Source SoundTouchJS (Audacity Engine!)
+   * Falls back seamlessly to Phase-Aligned WSOLA if mono or library unavailable.
+   */
   function transposeBuffer(ctx, srcBuffer, semitones) {
     if (!srcBuffer || semitones === 0) return srcBuffer;
-    const ratio = Math.pow(2, semitones / 12);
     const sr = srcBuffer.sampleRate;
     const length = srcBuffer.length;
     const numCh = srcBuffer.numberOfChannels;
+
+    if (window.SoundTouchLib && window.SoundTouchLib.SoundTouch && window.SoundTouchLib.SimpleFilter && numCh >= 1) {
+      try {
+        const st = new window.SoundTouchLib.SoundTouch();
+        st.pitchSemitones = semitones;
+        st.tempo = 1.0;
+
+        const leftIn = srcBuffer.getChannelData(0);
+        const rightIn = numCh > 1 ? srcBuffer.getChannelData(1) : leftIn;
+        const source = {
+          extract(target, numFrames, position) {
+            const avail = Math.max(0, Math.min(numFrames, length - position));
+            for (let i = 0; i < avail; i++) {
+              target[i * 2] = leftIn[position + i];
+              target[i * 2 + 1] = rightIn[position + i];
+            }
+            return avail;
+          },
+        };
+
+        const filter = new window.SoundTouchLib.SimpleFilter(source, st);
+        const outBuffer = ctx.createBuffer(2, length, sr);
+        const outL = outBuffer.getChannelData(0);
+        const outR = outBuffer.getChannelData(1);
+        const chunk = new Float32Array(4096 * 2);
+        let written = 0;
+
+        while (written < length) {
+          const frames = filter.extract(chunk, 4096);
+          if (frames <= 0) break;
+          const lim = Math.min(frames, length - written);
+          for (let i = 0; i < lim; i++) {
+            outL[written + i] = chunk[i * 2];
+            outR[written + i] = chunk[i * 2 + 1];
+          }
+          written += lim;
+        }
+        return outBuffer;
+      } catch (_) {}
+    }
+
+    const ratio = Math.pow(2, semitones / 12);
     const outBuffer = ctx.createBuffer(numCh, length, sr);
     const numFrames = Math.max(2, Math.ceil(length / 512));
     const frameRatios = new Float32Array(numFrames).fill(ratio);
-
     for (let c = 0; c < numCh; c++) {
       wsolaResampleChannel(srcBuffer.getChannelData(c), outBuffer.getChannelData(c), length, sr, frameRatios, 512, numFrames);
     }
@@ -437,32 +445,23 @@ window.KaroDSP = (() => {
     const mudRatio = lowEnergy / Math.max(highEnergy, 1e-6);
 
     let registerEn = 'Warm Mid-Range Vocal (Tenor / Alto)';
-    let registerSi = 'මධ්‍යම පරාසයේ උණුසුම් හඬක් (Warm Tenor / Alto)';
-    if (medianF0 < 155) {
-      registerEn = 'Deep Rich Vocal (Baritone / Bass)';
-      registerSi = 'ගැඹුරු පිරිපුන් හඬක් (Deep Baritone)';
-    } else if (medianF0 > 245) {
-      registerEn = 'Bright Upper Register (High Tenor / Soprano)';
-      registerSi = 'ඉහළ මිහිරි පරාසයේ හඬක් (Bright Soprano)';
-    }
+    if (medianF0 < 155) registerEn = 'Deep Rich Vocal (Baritone / Bass)';
+    else if (medianF0 > 245) registerEn = 'Bright Upper Register (High Tenor / Soprano)';
 
-    let toneNoteEn = '', toneNoteSi = '', recommendedPreset = 'sinhala_ballad';
+    let toneNoteEn = '', recommendedPreset = 'sinhala_ballad';
     const customTweak = {};
 
     if (mudRatio > 6.5) {
       recommendedPreset = 'phone_rescue';
-      toneNoteEn = 'Cleaned background noise, removed 280Hz phone mud & added lush Hall Reverb.';
-      toneNoteSi = 'පසුබිම් ඝෝෂා ඉවත් කර (Noise Gate), Phone බොඳ ගතිය කපා Studio Hall Reverb එක් කළා.';
-      customTweak.warmthDb = -3.4; customTweak.airDb = 4.6; customTweak.noiseGate = 0.78;
+      toneNoteEn = 'Engaged deep room noise gate, cut 280Hz boxiness & added lush stereo hall.';
+      customTweak.warmthDb = -3.4; customTweak.airDb = 4.6; customTweak.noiseGate = 0.80;
     } else if (mudRatio < 1.8) {
       recommendedPreset = 'sinhala_ballad';
-      toneNoteEn = 'Added warm tube body (+2.0dB), lush stereo concert hall reverb & smooth echo.';
-      toneNoteSi = 'උණුසුම් ගැඹුර (+2.0dB), පැහැදිලි Hall Reverb සහ Stereo Echo ස්වයංක්‍රීයව එක් කළා.';
+      toneNoteEn = 'Added warm tube body (+2.0dB), stereo micro-pitch doubler & velvet plate.';
       customTweak.warmthDb = 2.0; customTweak.reverbMix = 0.48;
     } else {
       recommendedPreset = 'smule_hall';
-      toneNoteEn = 'Balanced vocal tone — applied wide Concert Hall Reverb, stereo slap echo & radio air.';
-      toneNoteSi = 'පුළුල් Concert Hall Reverb, Echo සහ Studio දීප්තිය ස්වයංක්‍රීයව සකස් විය.';
+      toneNoteEn = 'Balanced vocal spectrum — applied Concert Hall VIP ambience & wide stereo chorus.';
     }
 
     if (rms < 0.05) customTweak.vocalGain = 1.45;
@@ -473,7 +472,8 @@ window.KaroDSP = (() => {
       suggestedKeyIndex: dominantNote,
       suggestedKeyName: NOTE_NAMES[dominantNote],
       crestDb: crestDb.toFixed(1),
-      registerEn, registerSi, toneNoteEn, toneNoteSi,
+      registerEn,
+      toneNoteEn,
       recommendedPreset,
       settings: { ...PRESETS[recommendedPreset], ...customTweak },
     };
@@ -516,10 +516,6 @@ window.KaroDSP = (() => {
     return bestLagFrames * 5;
   }
 
-  /**
-   * Lush Lexicon-Style Early Reflections + Diffuse Stereo Velvet Hall Impulse Response
-   * (Used with convolver.normalize = false so TRUE studio wet reverb depth blooms loud & clear!)
-   */
   function createReverbImpulse(ctx, decaySec = 2.8) {
     const sr = ctx.sampleRate;
     const duration = Math.max(0.6, Math.min(4.8, decaySec));
@@ -531,13 +527,10 @@ window.KaroDSP = (() => {
 
     for (let c = 0; c < 2; c++) {
       const ch = impulse.getChannelData(c);
-      // Crisp stereo early concert hall reflections
       earlyTapsMs.forEach(([ms, gain], idx) => {
         const tapIdx = Math.floor(((ms + c * 6 + idx * 2) / 1000) * sr);
         if (tapIdx < length) ch[tapIdx] += gain;
       });
-
-      // Smooth warm damped late diffuse tail (scaled explicitly for unnormalized ConvolverNode!)
       const tailStart = Math.floor(sr * 0.025);
       let lp = 0;
       const scale = 0.055 / Math.sqrt(Math.max(0.8, duration / 2.2));
@@ -572,7 +565,7 @@ window.KaroDSP = (() => {
 
     if (!(ctx instanceof OfflineAudioContext)) {
       const analyser = ctx.createAnalyser();
-      analyser.fftSize = 128;
+      analyser.fftSize = 256;
       analyser.smoothingTimeConstant = 0.78;
       nodes.masterAnalyser = analyser;
     }
@@ -639,6 +632,26 @@ window.KaroDSP = (() => {
         const makeupDb = Math.max(0, (-(params.compThreshold ?? -24) - 12) * (1 - 1 / (params.compRatio ?? 4)) * 0.42);
         const makeup = ctx.createGain(); makeup.gain.value = Math.pow(10, makeupDb / 20);
 
+        const vOut = ctx.createGain(); vOut.gain.value = params.vocalGain ?? 1.18;
+
+        // Exclusive Studio Feature: Micro-Pitch Stereo Vocal Doubler (Haas + LFO Chorus Width!)
+        const dblL = ctx.createDelay(0.1); dblL.delayTime.value = 0.014;
+        const dblR = ctx.createDelay(0.1); dblR.delayTime.value = 0.022;
+        const lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.58;
+        const lfoGainL = ctx.createGain(); lfoGainL.gain.value = 0.0018;
+        const lfoGainR = ctx.createGain(); lfoGainR.gain.value = -0.0021;
+        lfo.connect(lfoGainL); lfoGainL.connect(dblL.delayTime);
+        lfo.connect(lfoGainR); lfoGainR.connect(dblR.delayTime);
+        lfo.start(now);
+        nodes.sources.push(lfo);
+
+        const dblMerger = ctx.createChannelMerger(2);
+        const dblWet = ctx.createGain(); dblWet.gain.value = (params.doublerMix ?? 0.34) * 0.55;
+        makeup.connect(dblL); makeup.connect(dblR);
+        dblL.connect(dblMerger, 0, 0); dblR.connect(dblMerger, 0, 1);
+        dblMerger.connect(dblWet);
+        dblWet.connect(vOut);
+
         // Stereo Ping-Pong Slap / Echo Delay
         const delayL = ctx.createDelay(1.5); delayL.delayTime.value = Math.max(0.05, Math.min(1.0, params.delayTimeSec ?? 0.34));
         const delayR = ctx.createDelay(1.5); delayR.delayTime.value = Math.max(0.06, Math.min(1.1, (params.delayTimeSec ?? 0.34) * 1.14));
@@ -647,7 +660,7 @@ window.KaroDSP = (() => {
         const merger = ctx.createChannelMerger(2);
         const dWet = ctx.createGain(); dWet.gain.value = (params.delayMix ?? 0.25) * 1.25;
 
-        // Unnormalized True-Level Stereo Hall Convolver (AUDIBLE LUSH STUDIO REVERB!)
+        // Unnormalized True-Level Concert Hall Reverb
         const convolver = ctx.createConvolver();
         convolver.normalize = false;
         convolver.buffer = createReverbImpulse(ctx, params.reverbDecay ?? 2.9);
@@ -655,27 +668,22 @@ window.KaroDSP = (() => {
         const revLp = ctx.createBiquadFilter(); revLp.type = 'lowpass'; revLp.frequency.value = 7200;
         const rWet = ctx.createGain(); rWet.gain.value = (params.reverbMix ?? 0.44) * 1.35;
 
-        const vOut = ctx.createGain(); vOut.gain.value = params.vocalGain ?? 1.18;
-
         vSrc.connect(hp); hp.connect(warmth); warmth.connect(presence); presence.connect(deEss);
         deEss.connect(air); air.connect(comp); comp.connect(makeup);
         makeup.connect(vOut);
 
-        makeup.connect(dFilter);
-        dFilter.connect(delayL);
+        makeup.connect(dFilter); dFilter.connect(delayL);
         delayL.connect(dFeedback); dFeedback.connect(delayL);
         delayL.connect(delayR);
-        delayL.connect(merger, 0, 0);
-        delayR.connect(merger, 0, 1);
-        merger.connect(dWet);
-        dWet.connect(vOut);
+        delayL.connect(merger, 0, 0); delayR.connect(merger, 0, 1);
+        merger.connect(dWet); dWet.connect(vOut);
 
         makeup.connect(convolver);
         convolver.connect(revHp); revHp.connect(revLp); revLp.connect(rWet);
         rWet.connect(vOut);
 
         vOut.connect(masterInput);
-        Object.assign(nodes, { hp, warmth, presence, deEss, air, comp, makeup, delay: delayL, dFeedback, dWet, rWet, vocalGain: vOut });
+        Object.assign(nodes, { hp, warmth, presence, deEss, air, comp, makeup, dblWet, delay: delayL, dFeedback, dWet, rWet, vocalGain: vOut });
       }
 
       const offsetSec = (params.vocalOffsetMs || 0) / 1000;
@@ -739,7 +747,6 @@ window.KaroDSP = (() => {
     return new Blob([arrayBuffer], { type: 'audio/wav' });
   }
 
-  // Smooth Acoustic-Style Demo Session (Warm Piano + Nylon Arpeggio + Smooth Multi-Formant Lead Lead)
   function generateDemoSession(ctx) {
     const sr = ctx.sampleRate;
     const bpm = 90;
@@ -791,7 +798,6 @@ window.KaroDSP = (() => {
       R[i] = padR + arp * 0.85 + bass + drum;
     }
 
-    // Warm Smooth Cello/Flute-Vocal Lead Melody (Zero harsh buzz, crystal-clear pitch & lush reverb showcase!)
     const vocal = ctx.createBuffer(1, len, sr);
     const V = vocal.getChannelData(0);
     const melody = [
