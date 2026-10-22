@@ -1,4 +1,4 @@
--- KaroMix AI Studio - Cloudflare D1 Database Schema
+-- KaroMix AI Studio v4 - Cloudflare D1 Database Schema
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT UNIQUE,
@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS sessions (
   token TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
+  expires_at INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -21,7 +22,7 @@ CREATE TABLE IF NOT EXISTS projects (
   user_id TEXT NOT NULL,
   title TEXT NOT NULL,
   youtube_url TEXT DEFAULT '',
-  preset_key TEXT DEFAULT 'sinhala_ballad',
+  preset_key TEXT DEFAULT 'smule_hall',
   musical_key TEXT DEFAULT 'A',
   musical_scale TEXT DEFAULT 'minor',
   vocal_offset_ms INTEGER DEFAULT 0,

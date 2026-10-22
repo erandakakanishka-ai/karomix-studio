@@ -27,6 +27,11 @@ const App = (() => {
     pitchFrames: [],
     pitchScore: 95,
     isDemoSession: false,
+    userLoadedBacking: false,
+    lastMasterBlob: null,
+    lastMasterFilename: 'karomix-master.wav',
+    ytPlayer: null,
+    ytSyncInterval: null,
 
     isPlaying: false,
     playStartCtxTime: 0,
@@ -134,7 +139,8 @@ const App = (() => {
     state.stageMode = mode;
     document.getElementById('btnStageVideo').className = mode === 'video' ? 'btn btn-sm btn-cyan' : 'btn btn-sm';
     document.getElementById('btnStageLyrics').className = mode === 'lyrics' ? 'btn btn-sm btn-cyan' : 'btn btn-sm';
-    document.getElementById('stageVideoWrap').style.display = mode === 'video' ? 'flex' : 'none';
+    // Keep iframe mounted so mobile browsers never pause YouTube audio when reading lyrics!
+    document.getElementById('stageVideoWrap').style.display = 'flex';
     document.getElementById('stageLyricsWrap').style.display = mode === 'lyrics' ? 'block' : 'none';
   }
 
@@ -228,6 +234,7 @@ const App = (() => {
     stopPlaybackInternal();
     state.backingBuffer = null;
     state.rawVocalBuffer = null;
+    state.userLoadedBacking = false;
     demoLoadPromise = null;
     await preloadRealDemoAssets();
     document.getElementById('projectTitleInput').value = 'Slow Motion Dream — Studio Mix';
@@ -241,7 +248,8 @@ const App = (() => {
   async function loadInstrumentalDemoForSing() {
     unlockMobileAudioSync();
     await preloadRealDemoAssets();
-    showToast('Studio backing band loaded — tap Start Recording to sing over it!');
+    state.userLoadedBacking = true;
+    showToast('Studio backing band armed — tap Start Recording to sing over it!');
   }
 
   // ==================== INSTANT LIVE PLAYBACK & RETINA SPECTRUM ====================
@@ -605,17 +613,86 @@ const App = (() => {
     searchOrLoadKaraoke(songName);
   }
 
+  function ensureYtApi() {
+    if (window.YT || document.getElementById('yt-iframe-api')) return;
+    const tag = document.createElement('script');
+    tag.id = 'yt-iframe-api';
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+  }
+
   function renderYoutubeEmbed(videoId, title = '') {
+    ensureYtApi();
     const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
     const originParam = isIp ? '' : `&origin=${encodeURIComponent(window.location.origin)}`;
     setStageMode('video');
     document.getElementById('stageVideoWrap').innerHTML = `
-      <iframe
-        src="https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1&rel=0&modestbranding=1${originParam}"
+      <iframe id="ytKaraokeIframe"
+        src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&autoplay=1&playsinline=1&rel=0&modestbranding=1${originParam}"
         title="${title.replace(/"/g, '')}"
         referrerpolicy="strict-origin-when-cross-origin"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowfullscreen></iframe>`;
+
+    // Bind lightweight YT.Player polling for live synced lyrics & tap-to-jump chorus seek!
+    clearInterval(state.ytSyncInterval);
+    const tryAttachPlayer = (attempt = 0) => {
+      if (window.YT && window.YT.Player) {
+        try {
+          state.ytPlayer = new window.YT.Player('ytKaraokeIframe', {});
+        } catch (_) {}
+      } else if (attempt < 12) {
+        setTimeout(() => tryAttachPlayer(attempt + 1), 350);
+      }
+    };
+    setTimeout(() => tryAttachPlayer(0), 250);
+
+    state.ytSyncInterval = setInterval(() => {
+      if (!state.lrcLines.length) return;
+      let curSec = -1;
+      if (state.ytPlayer && typeof state.ytPlayer.getCurrentTime === 'function') {
+        try { curSec = state.ytPlayer.getCurrentTime(); } catch (_) {}
+      } else if (state.isRecording) {
+        curSec = (Date.now() - state.recStartMs) / 1000;
+      }
+      if (curSec >= 0) updateActiveLyricAtTime(curSec);
+    }, 250);
+  }
+
+  function updateActiveLyricAtTime(sec) {
+    let idx = 0;
+    for (let i = 0; i < state.lrcLines.length; i++) {
+      if (sec >= state.lrcLines[i].sec) idx = i;
+      else break;
+    }
+    const cur = state.lrcLines[idx];
+    const nxt = state.lrcLines[idx + 1];
+    const bar = document.getElementById('liveTeleprompterBar');
+    if (bar && cur) {
+      bar.style.display = 'block';
+      document.getElementById('teleLineCurrent').textContent = `♪ ${cur.text}`;
+      document.getElementById('teleLineNext').textContent = nxt ? nxt.text : '';
+    }
+    const row = document.getElementById(`lr-${idx}`);
+    if (row && !row.classList.contains('active')) {
+      document.querySelectorAll('.lyric-row.active').forEach((r) => r.classList.remove('active'));
+      row.classList.add('active');
+      if (state.stageMode === 'lyrics') row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }
+
+  function seekToLyric(sec) {
+    const target = Math.max(0, Number(sec) || 0);
+    if (state.ytPlayer && typeof state.ytPlayer.seekTo === 'function') {
+      try {
+        state.ytPlayer.seekTo(target, true);
+        state.ytPlayer.playVideo();
+        updateActiveLyricAtTime(target);
+        showToast(`Jumped to ${fmtTime(target)}`);
+        return;
+      } catch (_) {}
+    }
+    updateActiveLyricAtTime(target);
   }
 
   async function searchOrLoadKaraoke(overrideInput) {
@@ -703,7 +780,10 @@ const App = (() => {
       state.lrcLines = lines;
       const box = document.getElementById('lyricsStageBox');
       if (lines.length) {
-        box.innerHTML = lines.map((l, i) => `<div class="lyric-row ${i === 0 ? 'active' : ''}" id="lr-${i}">${l.text}</div>`).join('');
+        box.innerHTML = lines.map((l, i) =>
+          `<div class="lyric-row ${i === 0 ? 'active' : ''}" id="lr-${i}" onclick="App.seekToLyric(${l.sec})">${l.text}</div>`
+        ).join('');
+        updateActiveLyricAtTime(0);
       }
     } catch (_) {}
   }
@@ -720,8 +800,13 @@ const App = (() => {
     state.backingBuffer = buf;
     state.backingPeaks = KaroDSP.computeWaveformPeaks(buf, 220);
     state.isDemoSession = false;
+    state.userLoadedBacking = true;
     state.transposeSemitones = 0;
     document.getElementById('projectTitleInput').value = file.name.replace(/\.[^.]+$/, '') + ' — Vocal Cover';
+    if (state.view === 'mix') {
+      drawTimeline();
+      if (state.isPlaying) startPlayback(0);
+    }
     showToast(`Loaded music: ${file.name}`);
   }
 
@@ -732,12 +817,18 @@ const App = (() => {
     showToast('Loading your vocal recording...');
     const ctx = ensureAudioCtx();
     const buf = await ctx.decodeAudioData(await file.arrayBuffer());
+    if (!state.userLoadedBacking) {
+      state.backingBuffer = null;
+      state.originalBackingBuffer = null;
+      state.backingPeaks = null;
+    }
     state.rawVocalBuffer = buf;
     state.tunedVocalBuffer = buf;
     state.vocalPeaks = KaroDSP.computeWaveformPeaks(buf, 220);
     state.isDemoSession = false;
     switchView('mix');
     runSmartVoiceMatch();
+    applyWorkerAutoTune();
     startPlayback(0);
   }
 
@@ -863,14 +954,23 @@ const App = (() => {
       await runCountdown();
 
       state.recChunks = [];
-      const rec = new MediaRecorder(stream);
+      const bestMime = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm']
+        .find((m) => window.MediaRecorder?.isTypeSupported?.(m)) || '';
+      const recOpts = bestMime ? { mimeType: bestMime, audioBitsPerSecond: 128000 } : { audioBitsPerSecond: 128000 };
+      const rec = new MediaRecorder(stream, recOpts);
       state.mediaRecorder = rec;
       rec.ondataavailable = (ev) => { if (ev.data.size > 0) state.recChunks.push(ev.data); };
       rec.onstop = async () => {
         releaseMic();
-        const blob = new Blob(state.recChunks, { type: rec.mimeType || 'audio/webm' });
+        const blob = new Blob(state.recChunks, { type: rec.mimeType || bestMime || 'audio/webm' });
         const ctx = ensureAudioCtx();
         const vocalBuf = await ctx.decodeAudioData(await blob.arrayBuffer());
+        // Never leave demo guitar/drums underneath a real user vocal recording unless explicitly requested!
+        if (!state.userLoadedBacking) {
+          state.backingBuffer = null;
+          state.originalBackingBuffer = null;
+          state.backingPeaks = null;
+        }
         state.rawVocalBuffer = vocalBuf;
         state.tunedVocalBuffer = vocalBuf;
         state.vocalPeaks = KaroDSP.computeWaveformPeaks(vocalBuf, 220);
@@ -878,10 +978,11 @@ const App = (() => {
 
         switchView('mix');
         runSmartVoiceMatch();
+        applyWorkerAutoTune();
         startPlayback(0);
       };
 
-      if (state.backingBuffer && !state.isDemoSession) {
+      if (state.backingBuffer && state.userLoadedBacking) {
         const ctx = ensureAudioCtx();
         const bSrc = ctx.createBufferSource();
         bSrc.buffer = state.backingBuffer;
@@ -1192,13 +1293,17 @@ const App = (() => {
       updateAccountUI();
       apiFetch('/api/track-export', { method: 'POST' }).catch(() => {});
 
+      const fname = `${(document.getElementById('projectTitleInput').value || 'karomix').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.wav`;
+      state.lastMasterBlob = wavBlob;
+      state.lastMasterFilename = fname;
+
       const url = URL.createObjectURL(wavBlob);
       document.getElementById('masterOutputArea').style.display = 'block';
       document.getElementById('renderedAudioPlayer').src = url;
 
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${(document.getElementById('projectTitleInput').value || 'karomix').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.wav`;
+      a.download = fname;
       a.click();
 
       if (window.confetti) window.confetti({ particleCount: 70, spread: 65, origin: { y: 0.7 } });
@@ -1209,6 +1314,30 @@ const App = (() => {
       btn.disabled = false;
       btn.textContent = 'Download Master';
     }
+  }
+
+  async function shareMasterFile() {
+    if (!state.lastMasterBlob) {
+      showToast('Render your song first');
+      return;
+    }
+    try {
+      const file = new File([state.lastMasterBlob], state.lastMasterFilename, { type: 'audio/wav' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: document.getElementById('projectTitleInput').value || 'My KaroMix Studio Cover',
+          text: 'Recorded & mastered on KaroMix AI Studio',
+          files: [file],
+        });
+        return;
+      }
+    } catch (_) {}
+    const url = URL.createObjectURL(state.lastMasterBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = state.lastMasterFilename;
+    a.click();
+    showToast('Saved master WAV to device!');
   }
 
   // ==================== BOOT ====================
@@ -1234,9 +1363,9 @@ const App = (() => {
     togglePlayback, stopAndRewind, toggleBypassFx, toggleSoloVocal,
     applyPreset, updateParam, setMasterProfile, setVocalOffset, autoAlignTracks, runSmartVoiceMatch,
     applyWorkerAutoTune, shiftBackingKey, applyKaraokeVocalCut,
-    heroSearchSubmit, quickSingSong, searchOrLoadKaraoke, selectKaraokeVideo, nextKaraokeResult,
+    heroSearchSubmit, quickSingSong, searchOrLoadKaraoke, selectKaraokeVideo, nextKaraokeResult, seekToLyric,
     handleBackingUpload, handleVocalUpload, toggleMicMonitor, toggleMicRecording,
     openAuthModal, closeAuthModal, setAuthMode, submitAuth, logout, toggleProDemo,
-    saveProjectToD1, restoreProject, exportMasteredWav,
+    saveProjectToD1, restoreProject, exportMasteredWav, shareMasterFile,
   };
 })();
