@@ -56,9 +56,9 @@ const App = (() => {
     recStartMs: 0,
     recMeterRaf: null,
 
-    activePreset: 'smule_hall',
+    activePreset: 'crystal_hd',
     params: {
-      ...KaroDSP.PRESETS.smule_hall,
+      ...KaroDSP.PRESETS.crystal_hd,
       vocalOffsetMs: 0,
       scaleKey: 9,
       bypassFx: false,
@@ -239,7 +239,7 @@ const App = (() => {
     demoLoadPromise = null;
     await preloadRealDemoAssets();
     document.getElementById('projectTitleInput').value = 'Slow Motion Dream — Studio Mix';
-    applyPreset('smule_hall', false);
+    applyPreset('crystal_hd', false);
     state.pausePositionSec = 0;
     drawTimeline();
     if (autoPlay) startPlayback(0);
@@ -478,11 +478,27 @@ const App = (() => {
     txt('delayMixText', `${Math.round(p.delayMix * 100)}%`);
     set('airSlider', p.airDb);
     txt('airValText', `+${Number(p.airDb).toFixed(1)} dB`);
+    const clarityPct = Math.min(100, Math.max(0, Math.round(((p.airDb ?? 5.0) / 6.5) * 100)));
+    set('claritySlider', clarityPct);
+    txt('clarityValText', `${clarityPct}%`);
     set('atStrength', Math.round((p.autotuneAmount || 0) * 100));
     txt('atStrengthText', `${Math.round((p.autotuneAmount || 0) * 100)}%`);
     set('gateSlider', Math.round((p.noiseGate || 0.55) * 100));
     txt('gateValText', `${Math.round((p.noiseGate || 0.55) * 100)}%`);
     setMasterProfile(p.masterProfile || 'warm', false);
+  }
+
+  function setClarityMacro(pct) {
+    const n = Number(pct) || 0;
+    const ratio = n / 100;
+    state.params.mudCutDb = -(1.2 + ratio * 3.4);      // -1.2dB .. -4.6dB surgical 310Hz mud cut
+    state.params.presenceDb = 1.6 + ratio * 3.0;       // +1.6dB .. +4.6dB 3.8kHz lyric articulation
+    state.params.airDb = 1.5 + ratio * 5.0;            // +1.5dB .. +6.5dB 11kHz condenser air
+    state.params.exciterMix = 0.08 + ratio * 0.36;     // subtle Sony C-800G tube harmonic shimmer
+    document.getElementById('clarityValText').textContent = `${Math.round(n)}%`;
+    document.getElementById('airSlider').value = state.params.airDb.toFixed(1);
+    document.getElementById('airValText').textContent = `+${state.params.airDb.toFixed(1)} dB`;
+    if (state.liveNodes) KaroDSP.applyLiveParamsToGraph(state.liveNodes, state.params);
   }
 
   function updateParam(name, val) {
@@ -1526,7 +1542,7 @@ const App = (() => {
     }),
     toggleHeroDemo, openMixWithRealDemo, loadRealSingerDemo, loadInstrumentalDemoForSing,
     togglePlayback, stopAndRewind, toggleBypassFx, toggleSoloVocal,
-    applyPreset, updateParam, setMasterProfile, setVocalOffset, autoAlignTracks, runSmartVoiceMatch,
+    applyPreset, setClarityMacro, updateParam, setMasterProfile, setVocalOffset, autoAlignTracks, runSmartVoiceMatch,
     applyWorkerAutoTune, shiftBackingKey, applyKaraokeVocalCut,
     heroSearchSubmit, quickSingSong, searchOrLoadKaraoke, selectKaraokeVideo, nextKaraokeResult, seekToLyric,
     onMicModeChange, handleBackingUpload, handleVocalUpload, toggleMicMonitor, toggleMicRecording, receiveNativeDualTracks,

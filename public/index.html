@@ -342,8 +342,13 @@
           </div>
 
           <div class="fader-item">
-            <label><span>Concert Hall Reverb</span><span class="mono" id="reverbMixText">58%</span></label>
-            <input type="range" id="reverbMixSlider" min="0" max="100" value="58" oninput="App.updateParam('reverbMix', this.value / 100)" />
+            <label><span>HD Vocal Clarity</span><span class="mono" style="color:var(--cyan);" id="clarityValText">78%</span></label>
+            <input type="range" id="claritySlider" min="0" max="100" value="78" oninput="App.setClarityMacro(this.value)" />
+          </div>
+
+          <div class="fader-item">
+            <label><span>Concert Hall Space</span><span class="mono" id="reverbMixText">38%</span></label>
+            <input type="range" id="reverbMixSlider" min="0" max="100" value="38" oninput="App.updateParam('reverbMix', this.value / 100)" />
           </div>
 
           <div class="fader-item">
@@ -420,8 +425,8 @@
         </div>
 
         <select id="exportFormatSelect" style="width:100%;margin-bottom:10px;">
-          <option value="compact">Fast Mobile Share WAV (~3x Smaller — Best for Phone)</option>
-          <option value="hq">Full Lossless Studio Master (44.1 kHz Stereo WAV)</option>
+          <option value="hq" selected>Studio HD Stereo Master (44.1 kHz True Stereo WAV — Recommended)</option>
+          <option value="compact">Compact Stereo Share WAV (32 kHz Stereo — Faster WhatsApp Upload)</option>
         </select>
         <div style="display:grid;grid-template-columns:1fr 1.35fr;gap:8px;">
           <button class="btn" onclick="App.saveProjectToD1()">Save Cloud</button>
