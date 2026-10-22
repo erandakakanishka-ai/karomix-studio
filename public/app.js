@@ -762,9 +762,26 @@ const App = (() => {
 
   async function fetchLyrics(query) {
     try {
-      const res = await fetch(`/api/lyrics?q=${encodeURIComponent(query)}`);
-      const data = await res.json();
-      const hit = data.track || (data.results || [])[0];
+      const cleanQ = String(query || '').replace(/\b(karaoke|instrumental|lyrics|version|official|acoustic)\b/gi, '').trim() || query;
+      let hit = null;
+
+      // Primary: Direct browser CORS query to LRCLIB (bypasses Cloudflare Worker-to-Worker Bot Fight blocks!)
+      try {
+        const directRes = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(cleanQ)}`);
+        if (directRes.ok) {
+          const list = await directRes.json();
+          if (Array.isArray(list) && list.length) {
+            hit = list.find((item) => item.syncedLyrics) || list.find((item) => item.plainLyrics) || null;
+          }
+        }
+      } catch (_) {}
+
+      // Fallback: Edge API endpoint
+      if (!hit) {
+        const res = await fetch(`/api/lyrics?q=${encodeURIComponent(cleanQ)}`);
+        const data = await res.json();
+        hit = data.track || (data.results || [])[0];
+      }
       if (!hit) return;
 
       const lines = [];
