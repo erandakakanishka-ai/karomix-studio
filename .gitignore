@@ -3,3 +3,4 @@ node_modules/
 .dev.vars
 *.sqlite
 *.sqlite-journal
+.local_studio.db*

@@ -33,7 +33,7 @@ def search_karaoke_videos(raw_q: str):
     clean = raw_q.strip()
     if not clean:
         return []
-    full_q = clean if ("karaoke" in clean.lower() or "instrumental" in clean.lower()) else f"{clean} karaoke lyrics"
+    full_q = clean if ("karaoke" in clean.lower() or "instrumental" in clean.lower()) else f"{clean} karaoke version"
     try:
         req = urllib.request.Request(
             "https://www.youtube.com/results?search_query=" + urllib.parse.quote(full_q) + "&hl=en",
@@ -88,6 +88,7 @@ def search_karaoke_videos(raw_q: str):
 
                 with ThreadPoolExecutor(max_workers=8) as ex:
                     playable = [x for x in ex.map(is_embeddable, out) if x]
+                playable.sort(key=lambda x: 0 if re.search(r"karaoke|instrumental|backing", x["title"], re.I) else 1)
                 return (playable or out)[:8]
     except Exception:
         pass

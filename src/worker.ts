@@ -62,7 +62,7 @@ async function searchKaraokeVideos(rawQuery: string) {
   const lower = clean.toLowerCase();
   const fullQuery = lower.includes('karaoke') || lower.includes('instrumental')
     ? clean
-    : `${clean} karaoke lyrics`;
+    : `${clean} karaoke version`;
 
   // Primary: Direct YouTube Search Results JSON Extraction
   try {
@@ -117,6 +117,11 @@ async function searchKaraokeVideos(rawQuery: string) {
             })
           );
           const playable = verified.filter(Boolean) as Array<Record<string, string>>;
+          playable.sort((a, b) => {
+            const ak = /karaoke|instrumental|backing/i.test(a.title) ? 0 : 1;
+            const bk = /karaoke|instrumental|backing/i.test(b.title) ? 0 : 1;
+            return ak - bk;
+          });
           if (playable.length > 0) return playable.slice(0, 8);
           return candidates.slice(0, 6);
         }
