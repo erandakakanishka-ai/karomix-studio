@@ -1,4 +1,4 @@
--- KaroMix AI Studio v9.0 - Cloudflare D1 Database Schema (Global Timezone Quota + 30-Day Free Pro Pass + Google Auth + Contact)
+-- KaroMix Studio v10.0 - Cloudflare D1 Database Schema (Global Timezone Quota + 30-Day Free Pro Pass + Google Auth + Contact)
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT UNIQUE,

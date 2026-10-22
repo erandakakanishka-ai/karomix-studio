@@ -122,7 +122,7 @@ async function resolveUser(request: Request, env: Env) {
   if (env.DB) {
     await env.DB.prepare(
       `INSERT OR IGNORE INTO users (id, email, password_hash, display_name, plan, currency, exports_this_month)
-       VALUES (?, 'artist@karomix.ai', '', 'Guest Artist', 'free', 'USD', 0)`
+       VALUES (?, 'guest@karomixstudio.com', '', 'Guest Artist', 'free', 'USD', 0)`
     ).bind(fallbackId).run();
     const u = await env.DB.prepare(
       'SELECT id, email, display_name, plan, currency, exports_this_month, pro_until, daily_date, daily_exports FROM users WHERE id = ?'
@@ -131,7 +131,7 @@ async function resolveUser(request: Request, env: Env) {
   }
 
   return {
-    user: { id: fallbackId, email: 'artist@karomix.ai', display_name: 'Guest Artist', plan: 'free', currency: 'USD', exports_this_month: 0, pro_until: 0, daily_date: '', daily_exports: 0 },
+    user: { id: fallbackId, email: 'guest@karomixstudio.com', display_name: 'Guest Artist', plan: 'free', currency: 'USD', exports_this_month: 0, pro_until: 0, daily_date: '', daily_exports: 0 },
     authenticated: false,
   };
 }
@@ -299,7 +299,7 @@ export default {
           try {
             const lrcRes = await fetch(
               `https://lrclib.net/api/search?q=${encodeURIComponent(cand)}`,
-              { headers: { 'User-Agent': 'KaroMixAIStudio/9.0 (https://karomix-studio.pages.dev)' } }
+              { headers: { 'User-Agent': 'KaroMixStudio/10.0 (https://karomix-studio.pages.dev)' } }
             );
             if (lrcRes.ok) {
               const list = (await lrcRes.json()) as any[];

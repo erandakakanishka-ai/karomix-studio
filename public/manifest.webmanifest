@@ -1,7 +1,7 @@
 {
-  "name": "KaroMix AI — Vocal Studio & Mastering",
-  "short_name": "KaroMix AI",
-  "description": "Sing karaoke with instant lyrics and master your voice with studio Concert Hall Reverb, Auto-Tune & 24-bit WAV export.",
+  "name": "KaroMix Studio — Vocal Recording & Audio Mastering",
+  "short_name": "KaroMix Studio",
+  "description": "Sing karaoke with full lyrics, record vocals cleanly, and master compact stereo MP3 tracks in your browser.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#07090f",
@@ -10,7 +10,7 @@
   "icons": [
     {
       "src": "/assets/logo.png",
-      "sizes": "512x512",
+      "sizes": "192x192 512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }

@@ -4,36 +4,36 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
-  <title>KaroMix AI — Free Online Karaoke Vocal Studio, Auto-Tune & AI Mastering</title>
-  <meta name="description" content="KaroMix AI Studio transforms phone recordings into crystal-clear studio songs with Concert Hall Reverb, Stereo Doubler, Auto-Tune pitch correction, synced karaoke lyrics, and 24-bit WAV mastering directly in your browser." />
+  <title>KaroMix Studio — Free Online Karaoke Vocal Recorder, Pitch Correction & Audio Mastering</title>
+  <meta name="description" content="KaroMix Studio transforms raw smartphone vocals into studio-grade songs with Concert Hall Reverb, Stereo Doubler, Pitch Correction, karaoke lyrics, and compact MP3 mastering directly in your browser." />
   <meta name="robots" content="index, follow, max-image-preview:large" />
   <link rel="canonical" href="https://karomix-studio.pages.dev/" />
 
   <!-- Open Graph / WhatsApp / Facebook / Social Share Preview -->
   <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="KaroMix AI" />
-  <meta property="og:title" content="KaroMix AI — Sing & Master Studio" />
-  <meta property="og:description" content="Sing any karaoke song and master your voice instantly with studio Concert Hall Reverb, Auto-Tune & AI Voice Match." />
+  <meta property="og:site_name" content="KaroMix Studio" />
+  <meta property="og:title" content="KaroMix Studio — Sing, Mix & Master Online" />
+  <meta property="og:description" content="Sing any karaoke song and master your voice directly in your browser with Concert Hall Reverb, EQ, Pitch Correction & Compact MP3 export." />
   <meta property="og:url" content="https://karomix-studio.pages.dev/" />
   <meta property="og:image" content="https://karomix-studio.pages.dev/assets/hero-singer.jpg" />
 
   <!-- Twitter / X Large Summary Card -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="KaroMix AI — Sing & Master Studio" />
-  <meta name="twitter:description" content="Turn raw phone vocals into radio-ready tracks in seconds with KaroMix AI." />
+  <meta name="twitter:title" content="KaroMix Studio — Sing, Mix & Master Online" />
+  <meta name="twitter:description" content="Record clean vocals, fix timing lag, apply Concert Hall Reverb, and export compact stereo MP3 files right in your browser." />
   <meta name="twitter:image" content="https://karomix-studio.pages.dev/assets/hero-singer.jpg" />
 
-  <!-- Google Rich Result Schema (SoftwareApplication) -->
+  <!-- Google Rich Result Schema (WebApplication) -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "WebApplication",
-    "name": "KaroMix AI",
-    "alternateName": "KaroMix AI Studio",
+    "name": "KaroMix Studio",
+    "alternateName": "KaroMix Vocal Studio",
     "url": "https://karomix-studio.pages.dev/",
     "applicationCategory": "MultimediaApplication",
     "operatingSystem": "Android, iOS, Windows, macOS, Web",
-    "description": "Online AI vocal recording, karaoke teleprompter, pitch correction, concert hall reverb, and instant stereo WAV mastering studio.",
+    "description": "Online vocal recording, karaoke lyrics display, pitch correction, concert hall reverb, audio crop, and stereo MP3 mastering studio.",
     "offers": {
       "@type": "Offer",
       "price": "0",
@@ -167,6 +167,94 @@ svg.icon {
   color: var(--text);
 }
 
+.menu-icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.menu-icon-btn:hover { background: var(--surface-2); border-color: var(--amber); }
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 6, 12, 0.78);
+  z-index: 95;
+  display: none;
+}
+.drawer-backdrop.open { display: block; }
+
+.side-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 286px;
+  max-width: 84vw;
+  background: #0b0f1b;
+  border-right: 1px solid var(--border-strong);
+  z-index: 96;
+  padding: 18px 14px 28px;
+  overflow-y: auto;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+}
+.side-drawer.open { display: flex; }
+
+.drawer-section-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding: 10px 10px 4px;
+}
+
+.drawer-link {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-decoration: none;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 11px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  text-align: left;
+}
+.drawer-link:hover { background: var(--surface-2); color: var(--amber-bright); }
+
+.blog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(275px, 1fr));
+  gap: 16px;
+}
+.blog-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+.blog-card:hover { border-color: var(--border-strong); }
+.blog-card img { width: 100%; height: 152px; object-fit: cover; display: block; }
+.blog-card-body { padding: 16px; display: flex; flex-direction: column; flex: 1; }
+
 /* Native Mobile Bottom Tab Bar */
 .mobile-bottom-nav {
   position: fixed;
@@ -177,7 +265,7 @@ svg.icon {
   background: #0a0d17;
   border-top: 1px solid var(--border-strong);
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   z-index: 65;
   padding-bottom: env(safe-area-inset-bottom);
 }
@@ -192,7 +280,7 @@ svg.icon {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -743,11 +831,93 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     </div>
   </div>
 
+  <!-- Top-Left Slide-Out Navigation, Privacy & Legal Drawer -->
+  <div id="sideDrawerBackdrop" class="drawer-backdrop" onclick="App.toggleDrawer(false)"></div>
+  <aside id="sideDrawer" class="side-drawer" aria-label="Main Menu">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 6px 12px;border-bottom:1px solid var(--border);margin-bottom:4px;">
+      <div style="display:flex;align-items:center;gap:9px;">
+        <img src="/assets/logo.png" alt="KaroMix Studio" style="width:28px;height:28px;border-radius:7px;" />
+        <span style="font-weight:800;font-size:15px;">KAROMIX <span style="color:var(--amber-bright);">STUDIO</span></span>
+      </div>
+      <button class="btn btn-sm" onclick="App.toggleDrawer(false)" aria-label="Close menu">✕</button>
+    </div>
+
+    <div class="drawer-section-label">Studio & Blog</div>
+    <button class="drawer-link" onclick="App.drawerGo('home')">
+      <svg class="icon" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="drawer-link" onclick="App.drawerGo('sing')">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+      <span>Sing Karaoke</span>
+    </button>
+    <button class="drawer-link" onclick="App.drawerGo('mix')">
+      <svg class="icon" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/></svg>
+      <span>Mix Studio</span>
+    </button>
+    <button class="drawer-link" onclick="App.drawerGo('library')">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      <span>My Saved Library</span>
+    </button>
+    <button class="drawer-link" onclick="App.drawerGo('blog')">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      <span>Vocal Blog & Guides</span>
+    </button>
+
+    <div class="drawer-section-label">Privacy & Account</div>
+    <button class="drawer-link" onclick="App.openPrivacySettings()">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <span>Privacy & Cookie Settings</span>
+    </button>
+    <button class="drawer-link" onclick="App.toggleDrawer(false);App.openAuthModal();">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span>Account • 30 Days Free Pro</span>
+    </button>
+
+    <div class="drawer-section-label">Legal & Support</div>
+    <a class="drawer-link" href="/about"><span>About KaroMix Studio</span></a>
+    <a class="drawer-link" href="/contact"><span>Contact Support</span></a>
+    <a class="drawer-link" href="/privacy"><span>Privacy Policy</span></a>
+    <a class="drawer-link" href="/terms"><span>Terms of Service</span></a>
+    <a class="drawer-link" href="/refunds"><span>Trial & Access Policy</span></a>
+  </aside>
+
+  <!-- Privacy & Cookie Preferences Modal -->
+  <div id="privacyModal" class="modal-backdrop" onclick="if(event.target===this)App.closePrivacySettings()">
+    <div class="modal-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 style="font-size:17px;">Privacy & Cookie Settings</h3>
+        <button class="btn btn-sm" onclick="App.closePrivacySettings()">✕</button>
+      </div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;font-size:12.5px;color:var(--text-secondary);line-height:1.6;">
+        <strong style="color:var(--emerald);">✓ Microphone Audio Privacy:</strong><br />
+        100% local browser processing. Your voice recordings are never uploaded to KaroMix servers.
+      </div>
+      <label for="adConsentSelect" style="display:block;font-size:12.5px;font-weight:700;margin-bottom:6px;">Advertising & Cookie Preference</label>
+      <select id="adConsentSelect" style="width:100%;margin-bottom:12px;">
+        <option value="personalized">Standard Personalized Ads & Essential Cookies</option>
+        <option value="basic">Limited Non-Personalized Ads & Essential Cookies Only</option>
+      </select>
+      <div style="font-size:12px;color:var(--text-muted);line-height:1.5;margin-bottom:14px;">
+        Read our full <a href="/privacy" style="color:var(--cyan);">Privacy Policy</a> or manage Google ad preferences at <a href="https://adssettings.google.com" target="_blank" rel="noopener" style="color:var(--cyan);">adssettings.google.com</a>.
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button type="button" class="btn btn-sm" onclick="App.clearLocalStudioData()">Reset Local Cache</button>
+        <button type="button" class="btn btn-amber" style="flex:1;" onclick="App.savePrivacySettings()">Save Preferences</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Top Header -->
   <header class="navbar">
-    <div class="brand" onclick="App.switchView('home')">
-      <img src="/assets/logo.png" alt="KaroMix" class="brand-logo-img" />
-      <span class="brand-name">KAROMIX <span style="color:var(--amber-bright);">AI</span></span>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button class="menu-icon-btn" id="btnMenuDrawer" onclick="App.toggleDrawer()" title="Menu & Privacy Settings" aria-label="Open menu and privacy settings">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="brand" onclick="App.switchView('home')">
+        <img src="/assets/logo.png" alt="KaroMix Studio" class="brand-logo-img" />
+        <span class="brand-name">KAROMIX <span style="color:var(--amber-bright);">STUDIO</span></span>
+      </div>
     </div>
 
     <nav class="desktop-nav">
@@ -755,7 +925,7 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
       <button class="nav-item" data-view="sing" onclick="App.switchView('sing')">1. Sing Karaoke</button>
       <button class="nav-item" data-view="mix" onclick="App.switchView('mix')">2. Mix Studio</button>
       <button class="nav-item" data-view="library" onclick="App.switchView('library')">My Library</button>
-      <a href="/guides" class="nav-item" style="text-decoration:none;display:inline-flex;align-items:center;">Vocal Guides</a>
+      <button class="nav-item" data-view="blog" onclick="App.switchView('blog')">Blog</button>
     </nav>
 
     <div style="display:flex;align-items:center;gap:8px;">
@@ -769,7 +939,7 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     <div class="container">
       <div class="hero-grid">
         <div>
-          <span class="step-badge">AI KARAOKE & VOCAL MASTERING</span>
+          <span class="step-badge">KARAOKE & VOCAL MASTERING</span>
           <h1 class="hero-title">Sing any song. Sound like a record.</h1>
           <p class="hero-sub">
             Search any song for instant HD karaoke lyrics video, sing into your phone mic, and transform your raw voice with lush studio hall reverb, sync & mastering.
@@ -804,7 +974,7 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
               <div>
                 <div style="font-weight:800;font-size:15px;">Slow Motion Dream — Studio Take</div>
-                <div style="font-size:12px;color:var(--text-secondary);" id="heroDemoSub">Real female vocal + band • Tap Play to test live AI FX</div>
+                <div style="font-size:12px;color:var(--text-secondary);" id="heroDemoSub">Real female vocal + band • Tap Play to test live Studio FX</div>
               </div>
               <span class="mono" style="font-size:12px;color:var(--cyan);" id="heroDemoTime">00:00</span>
             </div>
@@ -838,7 +1008,7 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
           <div class="step-card-body">
             <div class="step-badge">STEP 02</div>
             <h3 style="font-size:16.5px;margin-bottom:5px;">Sing Into Your Phone</h3>
-            <p style="font-size:13px;color:var(--text-secondary);">AI mic cleanup removes room hiss and fan hum automatically while you sing along to the lyrics.</p>
+            <p style="font-size:13px;color:var(--text-secondary);">Studio noise gate removes room hiss and fan hum automatically while you sing along to the lyrics.</p>
           </div>
         </div>
 
@@ -852,19 +1022,19 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
         </div>
       </div>
 
-      <!-- Original Vocal Engineering & Home Recording Reference (Rich Publisher Guide Section) -->
+      <!-- Original Vocal Engineering & Home Recording Reference -->
       <div class="card" style="margin-top:26px;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
           <div>
             <span class="step-badge">VOCAL RECORDING & MASTERING GUIDE</span>
             <h2 style="font-size:19px;">How Studio Vocal Mastering Works in Your Browser</h2>
           </div>
-          <a href="/guides" class="btn btn-sm" style="text-decoration:none;">Read All 6 Vocal Guides →</a>
+          <button class="btn btn-sm" onclick="App.drawerGo('blog')">Read Vocal Blog →</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;font-size:13.5px;color:var(--text-secondary);line-height:1.68;">
           <div>
-            <h3 style="font-size:15px;color:var(--text);margin-bottom:6px;">1. Private Local DSP Signal Chain</h3>
-            <p>Raw smartphone microphones pick up boxy low-mid room reflections between 220 Hz and 320 Hz alongside background fan hum. KaroMix AI processes audio locally inside your browser using a multi-stage vocal chain: an adaptive noise gate, subtractive mud-cut EQ, dual-stage optical compression, de-essing, true-stereo concert hall pre-delay reverb, and peak limiting.</p>
+            <h3 style="font-size:15px;color:var(--text);margin-bottom:6px;">1. Private Local Signal Chain</h3>
+            <p>Raw smartphone microphones pick up boxy low-mid room reflections between 220 Hz and 320 Hz alongside background fan hum. KaroMix Studio processes audio locally inside your browser using a multi-stage vocal chain: an adaptive noise gate, subtractive mud-cut EQ, dual-stage optical compression, de-essing, true-stereo concert hall pre-delay reverb, and peak limiting.</p>
           </div>
           <div>
             <h3 style="font-size:15px;color:var(--text);margin-bottom:6px;">2. Phone Placement & Sync Alignment</h3>
@@ -872,7 +1042,7 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
           </div>
           <div>
             <h3 style="font-size:15px;color:var(--text);margin-bottom:6px;">3. Compact 128 kbps MP3 vs Studio WAV</h3>
-            <p>Uncompressed stereo WAV files consume roughly 10 MB per minute (~35 MB per song). KaroMix AI includes a built-in client-side LAME stereo MP3 encoder that masters clean 128 kbps stereo tracks at ~0.95 MB per minute (~3.2 MB per full song)—ideal for instant WhatsApp sharing and mobile storage without server uploads.</p>
+            <p>Uncompressed stereo WAV files consume roughly 10 MB per minute (~35 MB per song). KaroMix Studio includes a built-in client-side LAME stereo MP3 encoder that masters clean 128 kbps stereo tracks at ~0.95 MB per minute (~3.2 MB per full song)—ideal for instant WhatsApp sharing and mobile storage without server uploads.</p>
           </div>
         </div>
       </div>
@@ -986,7 +1156,7 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     </div>
   </section>
 
-  <!-- ==================== VIEW 3: CLEAN AI MIX STUDIO ==================== -->
+  <!-- ==================== VIEW 3: CLEAN MIX STUDIO ==================== -->
   <section id="view-mix" class="app-view">
     <div class="container" style="max-width:920px;">
       <!-- Card 1: Clean Master Player + Smooth Timeline -->
@@ -1124,7 +1294,7 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
             </div>
 
             <div class="fader-item">
-              <label><span>AI Background Noise Gate</span><span class="mono" id="gateValText">55%</span></label>
+              <label><span>Background Noise Gate</span><span class="mono" id="gateValText">55%</span></label>
               <input type="range" id="gateSlider" min="0" max="95" value="55" onchange="App.applyWorkerAutoTune()" oninput="document.getElementById('gateValText').innerText=this.value+'%';" />
             </div>
 
@@ -1161,7 +1331,7 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
         </div>
       </details>
 
-      <!-- Card 5: AI Master & Download -->
+      <!-- Card 5: Master & Download -->
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
           <div>
@@ -1241,20 +1411,52 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     </div>
   </section>
 
-  <!-- Commercial Trust, Editorial Guides & Compliance Footer -->
+  <!-- ==================== VIEW 5: VOCAL BLOG & STUDIO GUIDES ==================== -->
+  <section id="view-blog" class="app-view">
+    <div class="container" style="max-width:960px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+        <div>
+          <span class="step-badge">VOCAL RECORDING & MIXING BLOG</span>
+          <h2 style="font-size:24px;">Studio Guides & Singing Tips</h2>
+          <p style="font-size:13.5px;color:var(--text-secondary);">Practical tutorials on smartphone mic technique, room acoustics, vocal EQ, latency sync, and clean MP3 mastering.</p>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-sm btn-amber blog-cat-chip" onclick="App.filterBlogCategory('All', this)">All</button>
+          <button class="btn btn-sm blog-cat-chip" onclick="App.filterBlogCategory('Mic Setup', this)">Mic Setup</button>
+          <button class="btn btn-sm blog-cat-chip" onclick="App.filterBlogCategory('Vocal Mixing', this)">Vocal Mixing</button>
+          <button class="btn btn-sm blog-cat-chip" onclick="App.filterBlogCategory('Pitch & Timing', this)">Pitch & Timing</button>
+          <button class="btn btn-sm blog-cat-chip" onclick="App.filterBlogCategory('Formats', this)">Formats</button>
+        </div>
+      </div>
+
+      <!-- Full Article Reader (Shown when user opens any post inside Blog tab) -->
+      <div id="blogReaderWrap" style="display:none;" class="card">
+        <div style="margin-bottom:14px;">
+          <button class="btn btn-sm" onclick="App.closeBlogPost()">← Back to All Blog Posts</button>
+        </div>
+        <div id="blogReaderContent"></div>
+      </div>
+
+      <!-- Blog Article Cards Grid -->
+      <div id="blogPostsGrid" class="blog-grid"></div>
+    </div>
+  </section>
+
+  <!-- Commercial Trust, Blog & Compliance Footer -->
   <footer style="max-width:960px;margin:28px auto 12px;padding:18px 16px;border-top:1px solid var(--border);text-align:center;font-size:12px;color:var(--text-muted);">
     <div style="display:flex;justify-content:center;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
-      <a href="/guides" style="color:var(--text-secondary);text-decoration:none;">Vocal Guides</a>
+      <a href="/blog" onclick="event.preventDefault();App.drawerGo('blog');" style="color:var(--text-secondary);text-decoration:none;">Blog & Guides</a>
       <a href="/about" style="color:var(--text-secondary);text-decoration:none;">About Us</a>
       <a href="/contact" style="color:var(--text-secondary);text-decoration:none;">Contact Support</a>
       <a href="/privacy" style="color:var(--text-secondary);text-decoration:none;">Privacy Policy</a>
       <a href="/terms" style="color:var(--text-secondary);text-decoration:none;">Terms of Service</a>
       <a href="/refunds" style="color:var(--text-secondary);text-decoration:none;">Trial & Access Policy</a>
+      <button onclick="App.openPrivacySettings()" style="background:none;border:0;color:var(--text-secondary);font:inherit;cursor:pointer;padding:0;">Privacy Settings</button>
     </div>
-    <div>© 2026 KaroMix AI Studio • 100% Private Local Browser Vocal Processing</div>
+    <div>© 2026 KaroMix Studio • 100% Private Local Browser Vocal Processing</div>
   </footer>
 
-  <!-- Simple, Unmistakable 4-Tab Mobile Bottom Bar -->
+  <!-- Clean 5-Tab Mobile Bottom Bar (Home • Sing • Mix • Library • Blog) -->
   <nav class="mobile-bottom-nav">
     <button class="mob-tab active" data-view="home" onclick="App.switchView('home')">
       <svg class="icon" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
@@ -1266,16 +1468,20 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     </button>
     <button class="mob-tab" data-view="mix" onclick="App.switchView('mix')">
       <svg class="icon" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/></svg>
-      <span>Mix Studio</span>
+      <span>Mix</span>
     </button>
     <button class="mob-tab" data-view="library" onclick="App.switchView('library')">
       <svg class="icon" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
       <span>Library</span>
     </button>
+    <button class="mob-tab" data-view="blog" onclick="App.switchView('blog')">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      <span>Blog</span>
+    </button>
   </nav>
 
-  <script src="/vendor/confetti.min.js?v=9.0"></script>
-  <script src="/dsp-engine.js?v=9.0"></script>
-  <script src="/app.js?v=9.0"></script>
+  <script src="/vendor/confetti.min.js?v=10.0"></script>
+  <script src="/dsp-engine.js?v=10.0"></script>
+  <script src="/app.js?v=10.0"></script>
 </body>
 </html>
