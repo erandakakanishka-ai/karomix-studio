@@ -32,6 +32,7 @@ const App = (() => {
     lastMasterFilename: 'karomix-master.wav',
     ytPlayer: null,
     ytSyncInterval: null,
+    waitingForYtTap: false,
 
     isPlaying: false,
     playStartCtxTime: 0,
@@ -652,7 +653,17 @@ const App = (() => {
     const tryAttachPlayer = (attempt = 0) => {
       if (window.YT && window.YT.Player) {
         try {
-          state.ytPlayer = new window.YT.Player('ytKaraokeIframe', {});
+          state.ytPlayer = new window.YT.Player('ytKaraokeIframe', {
+            events: {
+              onStateChange: (ev) => {
+                // If mobile browser waited for 1 tap on the YouTube player, start recording THE EXACT INSTANT music starts!
+                if (state.waitingForYtTap && ev.data === 1) {
+                  state.waitingForYtTap = false;
+                  beginActiveMediaRecorder();
+                }
+              },
+            },
+          });
         } catch (_) {}
       } else if (attempt < 15) {
         setTimeout(() => tryAttachPlayer(attempt + 1), 350);
@@ -982,24 +993,86 @@ const App = (() => {
     });
   }
 
+  function beginActiveMediaRecorder() {
+    if (!state.micStream || state.isRecording) return;
+    const headphonesOnly = document.getElementById('useCleanMic').checked;
+    state.recChunks = [];
+    const bestMime = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm']
+      .find((m) => window.MediaRecorder?.isTypeSupported?.(m)) || '';
+    const recOpts = bestMime ? { mimeType: bestMime, audioBitsPerSecond: 128000 } : { audioBitsPerSecond: 128000 };
+    const rec = new MediaRecorder(state.micStream, recOpts);
+    state.mediaRecorder = rec;
+    rec.ondataavailable = (ev) => { if (ev.data.size > 0) state.recChunks.push(ev.data); };
+    rec.onstop = async () => {
+      releaseMic();
+      const blob = new Blob(state.recChunks, { type: rec.mimeType || bestMime || 'audio/webm' });
+      const ctx = ensureAudioCtx();
+      const vocalBuf = await ctx.decodeAudioData(await blob.arrayBuffer());
+      if (!state.userLoadedBacking) {
+        state.backingBuffer = null;
+        state.originalBackingBuffer = null;
+        state.backingPeaks = null;
+      }
+      state.rawVocalBuffer = vocalBuf;
+      state.tunedVocalBuffer = vocalBuf;
+      state.vocalPeaks = KaroDSP.computeWaveformPeaks(vocalBuf, 220);
+      state.isDemoSession = false;
+
+      switchView('mix');
+      runSmartVoiceMatch();
+      if (!headphonesOnly) {
+        state.params.hpFreq = 55;
+        state.params.noiseGate = 0.04;
+        document.getElementById('gateSlider').value = 4;
+        document.getElementById('gateValText').textContent = '4%';
+      }
+      await applyWorkerAutoTune();
+      startPlayback(0);
+    };
+
+    if (state.backingBuffer && state.userLoadedBacking) {
+      const ctx = ensureAudioCtx();
+      const bSrc = ctx.createBufferSource();
+      bSrc.buffer = state.backingBuffer;
+      bSrc.connect(ctx.destination);
+      bSrc.start();
+      state.liveNodes = { sources: [bSrc] };
+    }
+
+    if (state.lrcLines.length) updateActiveLyricAtTime(0);
+    rec.start();
+    state.isRecording = true;
+    state.recStartMs = Date.now();
+    document.getElementById('btnRecordVocal').classList.add('recording');
+    document.getElementById('recBtnLabel').textContent = 'Stop & Mix My Voice';
+    showToast('Recording live! Sing along now.');
+  }
+
   async function toggleMicRecording() {
     unlockMobileAudioSync();
+
+    // Cancel or stop active / armed recording
+    if (state.isRecording || state.waitingForYtTap) {
+      state.waitingForYtTap = false;
+      state.isRecording = false;
+      ytSendCommand('pauseVideo');
+      stopPlaybackInternal();
+      if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
+        state.mediaRecorder.stop();
+      } else {
+        releaseMic();
+      }
+      document.getElementById('btnRecordVocal').classList.remove('recording');
+      document.getElementById('recBtnLabel').textContent = 'Start Recording';
+      return;
+    }
 
     // Native Android App Bridge Hook (Android 10+ SDK >= 29 AudioPlaybackCapture support!)
     if (window.AndroidNativeStudio && typeof window.AndroidNativeStudio.canCaptureInternalAudio === 'function') {
       try {
         if (window.AndroidNativeStudio.canCaptureInternalAudio()) {
-          if (state.isRecording) {
-            state.isRecording = false;
-            ytSendCommand('pauseVideo');
-            window.AndroidNativeStudio.stopDualRecording();
-            document.getElementById('btnRecordVocal').classList.remove('recording');
-            document.getElementById('recBtnLabel').textContent = 'Start Recording';
-            return;
-          }
-          ytSendCommand('mute');
+          ytSendCommand('pauseVideo');
           ytSendCommand('seekTo', [0, true]);
-          ytSendCommand('playVideo');
           await runCountdown();
           ytSendCommand('seekTo', [0, true]);
           ytSendCommand('unMute');
@@ -1015,89 +1088,40 @@ const App = (() => {
       } catch (_) {}
     }
 
-    if (state.isRecording) {
-      state.isRecording = false;
-      ytSendCommand('pauseVideo');
-      stopPlaybackInternal();
-      if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
-        state.mediaRecorder.stop();
-      }
-      document.getElementById('btnRecordVocal').classList.remove('recording');
-      document.getElementById('recBtnLabel').textContent = 'Start Recording';
-      return;
-    }
-
-    // Unlock cross-origin YouTube player synchronously inside the direct user tap BEFORE any await!
     const hasYtIframe = !!document.getElementById('ytKaraokeIframe');
     if (hasYtIframe) {
-      ytSendCommand('mute');
+      // Pause & rewind to 00:00 cleanly WITHOUT muting so mobile audio unlock stays intact!
+      ytSendCommand('pauseVideo');
       ytSendCommand('seekTo', [0, true]);
-      ytSendCommand('playVideo');
     }
 
     try {
-      const stream = await initMicStream();
+      await initMicStream();
       await runCountdown();
 
-      const headphonesOnly = document.getElementById('useCleanMic').checked;
-      state.recChunks = [];
-      const bestMime = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm']
-        .find((m) => window.MediaRecorder?.isTypeSupported?.(m)) || '';
-      const recOpts = bestMime ? { mimeType: bestMime, audioBitsPerSecond: 128000 } : { audioBitsPerSecond: 128000 };
-      const rec = new MediaRecorder(stream, recOpts);
-      state.mediaRecorder = rec;
-      rec.ondataavailable = (ev) => { if (ev.data.size > 0) state.recChunks.push(ev.data); };
-      rec.onstop = async () => {
-        releaseMic();
-        const blob = new Blob(state.recChunks, { type: rec.mimeType || bestMime || 'audio/webm' });
-        const ctx = ensureAudioCtx();
-        const vocalBuf = await ctx.decodeAudioData(await blob.arrayBuffer());
-        if (!state.userLoadedBacking) {
-          state.backingBuffer = null;
-          state.originalBackingBuffer = null;
-          state.backingPeaks = null;
-        }
-        state.rawVocalBuffer = vocalBuf;
-        state.tunedVocalBuffer = vocalBuf;
-        state.vocalPeaks = KaroDSP.computeWaveformPeaks(vocalBuf, 220);
-        state.isDemoSession = false;
-
-        switchView('mix');
-        runSmartVoiceMatch();
-        // When singing on Phone Speaker without headphones, keep full music bass (55Hz) & disable harsh gating so music + voice stay seamless!
-        if (!headphonesOnly) {
-          state.params.hpFreq = 55;
-          state.params.noiseGate = 0.04;
-          document.getElementById('gateSlider').value = 4;
-          document.getElementById('gateValText').textContent = '4%';
-        }
-        await applyWorkerAutoTune();
-        startPlayback(0);
-      };
-
-      if (state.backingBuffer && state.userLoadedBacking) {
-        const ctx = ensureAudioCtx();
-        const bSrc = ctx.createBufferSource();
-        bSrc.buffer = state.backingBuffer;
-        bSrc.connect(ctx.destination);
-        bSrc.start();
-        state.liveNodes = { sources: [bSrc] };
-      }
-
-      // Auto-rewind & unmute YouTube Karaoke right from 00:00 at the exact millisecond recording starts!
       if (hasYtIframe) {
-        ytSendCommand('seekTo', [0, true]);
         ytSendCommand('unMute');
         ytSendCommand('setVolume', [100]);
+        ytSendCommand('seekTo', [0, true]);
         ytSendCommand('playVideo');
-        if (state.lrcLines.length) updateActiveLyricAtTime(0);
-      }
 
-      rec.start();
-      state.isRecording = true;
-      state.recStartMs = Date.now();
-      document.getElementById('btnRecordVocal').classList.add('recording');
-      document.getElementById('recBtnLabel').textContent = 'Stop & Mix My Voice';
+        // Check in 450ms if mobile browser auto-started YouTube or needs 1 tap on the YouTube ▶ icon
+        setTimeout(() => {
+          const st = state.ytPlayer?.getPlayerState?.();
+          if (st === 1 || st === 3) {
+            beginActiveMediaRecorder();
+          } else {
+            // Mobile browser hasn't had its one-time tap inside YouTube iframe yet — arm instant auto-start on ▶ tap!
+            state.waitingForYtTap = true;
+            document.getElementById('btnRecordVocal').classList.add('recording');
+            document.getElementById('recBtnLabel').textContent = 'Tap ▶ on Video to Start!';
+            document.getElementById('stageVideoWrap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            showToast('Tap ▶ on the video once — recording starts automatically!');
+          }
+        }, 450);
+      } else {
+        beginActiveMediaRecorder();
+      }
     } catch (_) {
       showToast('Microphone access blocked — please allow mic access');
     }
