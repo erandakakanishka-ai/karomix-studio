@@ -172,6 +172,11 @@ svg.icon {
   color: #090b10;
   font-weight: 700;
 }
+.btn-amber:hover:not(:disabled) {
+  background: linear-gradient(180deg, #fcd34d 0%, #f97316 100%);
+  border-color: #fde68a;
+  color: #090b10;
+}
 
 .btn-cyan {
   background: var(--cyan-soft);
