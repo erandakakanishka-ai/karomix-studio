@@ -56,37 +56,45 @@ svg.icon {
 /* ==================== CLEAN TOP BAR (ZERO BLUR LAG) ==================== */
 .navbar {
   height: 58px;
-  padding: 0 18px;
+  padding: 0 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   background: #090c15;
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 60;
 }
+@media (min-width: 640px) { .navbar { padding: 0 18px; gap: 12px; } }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   cursor: pointer;
+  min-width: 0;
 }
 
 .brand-logo-img {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   object-fit: cover;
+  flex-shrink: 0;
 }
 
 .brand-name {
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-weight: 800;
-  font-size: 16px;
+  font-size: 14px;
   letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+@media (min-width: 640px) {
+  .brand-logo-img { width: 34px; height: 34px; border-radius: 9px; }
+  .brand-name { font-size: 16px; }
 }
 
 .desktop-nav {

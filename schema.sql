@@ -56,4 +56,4 @@ CREATE TABLE IF NOT EXISTS contact_messages (
 );
 
 INSERT OR IGNORE INTO users (id, email, password_hash, display_name, plan, currency, exports_this_month, pro_until, daily_date, daily_exports, auth_provider)
-VALUES ('demo-singer-global', 'artist@karomix.ai', '', 'Guest Artist', 'free', 'USD', 0, 0, '', 0, 'guest');
+VALUES ('demo-singer-global', 'guest@karomixstudio.com', '', 'Guest Artist', 'free', 'USD', 0, 0, '', 0, 'guest');

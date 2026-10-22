@@ -1732,14 +1732,14 @@ const App = (() => {
 
     const badge = document.getElementById('topPlanBadge');
     if (badge) {
-      if (pro && daysLeft > 0) badge.textContent = `PRO FREE • ${daysLeft}d`;
+      if (pro && daysLeft > 0) badge.textContent = `PRO • ${daysLeft}d`;
       else if (pro) badge.textContent = 'PRO ∞';
-      else badge.textContent = `FREE • ${Math.min(limit, usedToday)}/${limit} Today`;
+      else badge.textContent = `${Math.min(limit, usedToday)}/${limit} Free`;
     }
 
     const authBtn = document.getElementById('authTriggerBtn');
     if (authBtn) {
-      authBtn.textContent = state.user ? state.user.display_name.slice(0, 10) : 'Sign In • Free Pro';
+      authBtn.textContent = state.user ? state.user.display_name.slice(0, 9) : 'Sign In';
     }
 
     const proBtn = document.getElementById('proActionBtn');
