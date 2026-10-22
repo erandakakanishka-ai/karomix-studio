@@ -1,1406 +1,1242 @@
 /**
- * KaroMix AI Studio v3 - Application Controller
- * Instant Song-Name Karaoke Video Search, LRCLIB Synced Teleprompter, AudioMotion Spectrum, SoundTouch & D1 Cloud
+ * KaroMix AI v4 — Ultra-Smooth Mobile-First Studio Controller
+ * - 0ms UI Freeze (All heavy pitch & SoundTouch DSP isolated in dsp-worker.js)
+ * - Synchronous Direct-Gesture iOS/Android Audio Unlock + Pre-Decoded Real Human Vocal Stems
+ * - Clean 4-Screen Architecture (Home | Sing | Mix Studio | Library)
  */
 
-window.App = (() => {
-  let audioCtx = null;
-  let audioMotion = null;
-  const buffers = {
-    originalBacking: null,
-    backing: null,
-    rawVocal: null,
-    tunedVocal: null,
+const App = (() => {
+  const state = {
+    view: 'home',
+    stageMode: 'video',
+    user: null,
+    projects: [],
+    authToken: localStorage.getItem('karomix_token') || '',
+    authMode: 'login',
+    isProDemo: localStorage.getItem('karomix_pro_demo') === '1',
+    exportsUsed: 0,
+
+    audioCtx: null,
+    audioUnlocked: false,
+    originalBackingBuffer: null,
+    backingBuffer: null,
+    rawVocalBuffer: null,
+    tunedVocalBuffer: null,
+    backingPeaks: null,
+    vocalPeaks: null,
+    pitchFrames: [],
+    pitchScore: 95,
+    isDemoSession: false,
+
+    isPlaying: false,
+    playStartCtxTime: 0,
+    playOffsetSec: 0,
+    pausePositionSec: 0,
+    liveNodes: null,
+    rafId: null,
+
+    karaokeCutActive: false,
+    transposeSemitones: 0,
+    karaokeResults: [],
+    karaokeIndex: 0,
+    lrcLines: [],
+
+    isRecording: false,
+    isMonitoring: false,
+    micStream: null,
+    micAnalyser: null,
+    mediaRecorder: null,
+    recChunks: [],
+    recStartMs: 0,
+    recMeterRaf: null,
+
+    activePreset: 'smule_hall',
+    params: {
+      ...KaroDSP.PRESETS.smule_hall,
+      vocalOffsetMs: 0,
+      scaleKey: 9,
+      bypassFx: false,
+      soloVocal: false,
+    },
   };
-  let backingSemitones = 0;
-  let karaokeCutActive = false;
-  let pitchCurveData = [];
-  let activePresetKey = 'sinhala_ballad';
-  let customD1Presets = [];
-  let savedD1Projects = [];
-  let authMode = 'login';
-  let authToken = '';
-  let userState = { display_name: 'Guest Artist', plan: 'free', exports_this_month: 0 };
 
-  let karaokeResults = [];
-  let activeKaraokeIdx = 0;
-  let currentYouTubeVideoId = '';
-  let parsedLyrics = [];
-  let lastActiveLyricIdx = -1;
+  let demoLoadPromise = null;
+  const fftBytes = new Uint8Array(512);
 
-  try {
-    authToken = localStorage.getItem('karomix_token') || '';
-  } catch (_) {}
-
-  const params = {
-    ...KaroDSP.PRESETS.sinhala_ballad,
-    vocalOffsetMs: 0,
-    bypassFx: false,
-    soloVocal: false,
-    muteBacking: false,
-    muteVocal: false,
-  };
-
-  let isPlaying = false;
-  let playStartCtxTime = 0;
-  let playStartOffsetSec = 0;
-  let liveNodes = null;
-  let animFrameId = null;
-
-  let isRecording = false;
-  let mediaRecorder = null;
-  let tabMediaRecorder = null;
-  let micStream = null;
-  let tabStream = null;
-  let recChunks = [];
-  let tabChunks = [];
-  let recStartTime = 0;
-  let monitorActive = false;
-  let analyserNode = null;
-  let meterRaf = null;
-
-  function escapeHtml(str) {
-    return String(str ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
-  function apiHeaders() {
-    const h = { 'Content-Type': 'application/json' };
-    if (authToken) h.Authorization = 'Bearer ' + authToken;
-    return h;
-  }
-
+  // ==================== iOS / ANDROID SYNCHRONOUS GESTURE UNLOCK ====================
   function ensureAudioCtx() {
-    if (!audioCtx) {
+    if (!state.audioCtx) {
       const AC = window.AudioContext || window.webkitAudioContext;
-      audioCtx = new AC({ latencyHint: 'interactive' });
+      state.audioCtx = new AC();
     }
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    return audioCtx;
+    return state.audioCtx;
   }
 
-  // Open-Source AudioMotionAnalyzer Integration (64-band Studio LED RTA Visualizer)
-  function connectSpectrumAnalyzer(masterNode) {
-    const container = document.getElementById('audioMotionBox');
-    if (!container || !window.AudioMotionAnalyzer || !masterNode) return;
+  function unlockMobileAudioSync() {
     try {
-      if (!audioMotion) {
-        audioMotion = new window.AudioMotionAnalyzer(container, {
-          audioCtx: ensureAudioCtx(),
-          connectSpeakers: false,
-          mode: 6,
-          barSpace: 0.25,
-          ledBars: true,
-          showPeaks: true,
-          showScaleX: false,
-          showScaleY: false,
-          bgAlpha: 0,
-          overlay: true,
-        });
-        audioMotion.registerGradient('karomix', {
-          bgColor: '#070910',
-          colorStops: [
-            { pos: 0.0, color: '#f59e0b' },
-            { pos: 0.55, color: '#fbbf24' },
-            { pos: 1.0, color: '#38bdf8' },
-          ],
-        });
-        audioMotion.gradient = 'karomix';
-      } else {
-        audioMotion.disconnectInput();
+      if (navigator.audioSession && navigator.audioSession.type !== 'playback') {
+        navigator.audioSession.type = 'playback';
       }
-      audioMotion.connectInput(masterNode);
     } catch (_) {}
+
+    const ctx = ensureAudioCtx();
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    if (!state.audioUnlocked) {
+      try {
+        const silent = ctx.createBuffer(1, 1, 22050);
+        const src = ctx.createBufferSource();
+        src.buffer = silent;
+        src.connect(ctx.destination);
+        src.start(0);
+        state.audioUnlocked = true;
+      } catch (_) {}
+    }
+    return ctx;
   }
 
   function showToast(msg) {
     const el = document.getElementById('toast');
-    el.innerText = msg;
+    if (!el) return;
+    el.textContent = msg;
     el.classList.add('show');
     clearTimeout(showToast._t);
     showToast._t = setTimeout(() => el.classList.remove('show'), 3200);
   }
 
-  // ==================== NAVIGATION & TABS ====================
-  function switchView(viewId) {
-    document.querySelectorAll('.app-view').forEach((v) => v.classList.remove('active'));
-    const target = document.getElementById('view-' + viewId);
-    if (target) target.classList.add('active');
+  function fmtTime(sec) {
+    const s = Math.max(0, Math.floor(sec || 0));
+    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  }
 
-    document.querySelectorAll('[data-view]').forEach((b) => {
-      b.classList.toggle('active', b.getAttribute('data-view') === viewId);
+  // ==================== NAVIGATION (CLEAN 4 VIEWS) ====================
+  function switchView(view) {
+    state.view = view;
+    document.querySelectorAll('.app-view').forEach((el) => el.classList.toggle('active', el.id === `view-${view}`));
+    document.querySelectorAll('.nav-item, .mob-tab').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.view === view);
     });
+    window.scrollTo({ top: 0, behavior: 'auto' });
 
-    if (viewId === 'studio') {
+    if (view === 'mix') {
       requestAnimationFrame(() => {
-        drawTimeline(getCurrentPlayheadSec());
+        drawSpectrum();
+        drawTimeline();
         drawPitchGraph();
       });
+    } else if (view === 'library') {
+      refreshServerState();
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function openInspectorTab(tabId) {
-    document.querySelectorAll('.insp-pane').forEach((p) => p.classList.remove('active'));
-    document.querySelectorAll('.insp-tab').forEach((b) => {
-      b.classList.toggle('active', b.getAttribute('data-itab') === tabId);
+  function setStageMode(mode) {
+    state.stageMode = mode;
+    document.getElementById('btnStageVideo').className = mode === 'video' ? 'btn btn-sm btn-cyan' : 'btn btn-sm';
+    document.getElementById('btnStageLyrics').className = mode === 'lyrics' ? 'btn btn-sm btn-cyan' : 'btn btn-sm';
+    document.getElementById('stageVideoWrap').style.display = mode === 'video' ? 'flex' : 'none';
+    document.getElementById('stageLyricsWrap').style.display = mode === 'lyrics' ? 'block' : 'none';
+  }
+
+  // ==================== REAL STUDIO VOCAL + BAND PRELOADER (ZERO FREEZE!) ====================
+  async function preloadRealDemoAssets() {
+    if (demoLoadPromise) return demoLoadPromise;
+    demoLoadPromise = (async () => {
+      const ctx = ensureAudioCtx();
+      const [irRes, backRes, vocRes] = await Promise.all([
+        fetch('/assets/hall-ir.mp3'),
+        fetch('/assets/demo-backing.mp3'),
+        fetch('/assets/demo-vocal.mp3'),
+      ]);
+      const [irArr, backArr, vocArr] = await Promise.all([
+        irRes.arrayBuffer(),
+        backRes.arrayBuffer(),
+        vocRes.arrayBuffer(),
+      ]);
+      const [irBuf, backBuf, vocBuf] = await Promise.all([
+        ctx.decodeAudioData(irArr),
+        ctx.decodeAudioData(backArr),
+        ctx.decodeAudioData(vocArr),
+      ]);
+
+      KaroDSP.setHallImpulseBuffer(irBuf);
+
+      if (!state.backingBuffer && !state.rawVocalBuffer) {
+        state.originalBackingBuffer = backBuf;
+        state.backingBuffer = backBuf;
+        state.rawVocalBuffer = vocBuf;
+        state.tunedVocalBuffer = vocBuf;
+        state.backingPeaks = KaroDSP.computeWaveformPeaks(backBuf, 220);
+        state.vocalPeaks = KaroDSP.computeWaveformPeaks(vocBuf, 220);
+        state.isDemoSession = true;
+        if (state.view === 'mix') drawTimeline();
+
+        KaroDSP.processVocalAsync(ctx, vocBuf, {
+          autotuneAmount: 0,
+          retuneSpeed: 0.3,
+          noiseGate: 0.45,
+          scaleKey: 9,
+        }).then((res) => {
+          if (state.isDemoSession) {
+            state.tunedVocalBuffer = res.buffer;
+            state.pitchFrames = res.pitchCurve || [];
+            state.pitchScore = res.pitchScore || 95;
+            updatePitchBadge();
+            if (state.view === 'mix') drawPitchGraph();
+          }
+        }).catch(() => {});
+      }
+      return { backBuf, vocBuf };
+    })().catch((err) => {
+      console.warn('Demo preload warning:', err);
+      demoLoadPromise = null;
+      throw err;
     });
-    const pane = document.getElementById('itab-' + tabId);
-    if (pane) pane.classList.add('active');
-    if (tabId === 'autotune') requestAnimationFrame(drawPitchGraph);
+    return demoLoadPromise;
   }
 
-  function switchSourceSub(subId, btn) {
-    ['yt', 'lyrics', 'upload', 'synth'].forEach((id) => {
-      const el = document.getElementById('sub-' + id);
-      if (el) el.style.display = id === subId ? 'block' : 'none';
+  function updatePitchBadge() {
+    const el = document.getElementById('pitchScoreBadge');
+    if (el) el.textContent = `Pitch ${state.pitchScore}%`;
+  }
+
+  async function toggleHeroDemo() {
+    unlockMobileAudioSync();
+    if (state.isPlaying) {
+      pausePlayback();
+      return;
+    }
+    if (!state.rawVocalBuffer || !state.backingBuffer) {
+      document.getElementById('heroPlayText').textContent = 'Loading...';
+      await preloadRealDemoAssets();
+    }
+    startPlayback(state.pausePositionSec);
+  }
+
+  async function openMixWithRealDemo() {
+    unlockMobileAudioSync();
+    switchView('mix');
+    if (!state.rawVocalBuffer || !state.backingBuffer) {
+      await preloadRealDemoAssets();
+    }
+    startPlayback(0);
+    showToast('Playing real studio vocal & band mix — tap any preset live!');
+  }
+
+  async function loadRealSingerDemo(autoPlay = true) {
+    unlockMobileAudioSync();
+    stopPlaybackInternal();
+    state.backingBuffer = null;
+    state.rawVocalBuffer = null;
+    demoLoadPromise = null;
+    await preloadRealDemoAssets();
+    document.getElementById('projectTitleInput').value = 'Slow Motion Dream — Studio Mix';
+    applyPreset('smule_hall', false);
+    state.pausePositionSec = 0;
+    drawTimeline();
+    if (autoPlay) startPlayback(0);
+    showToast('Loaded real female vocal stem + studio backing band!');
+  }
+
+  async function loadInstrumentalDemoForSing() {
+    unlockMobileAudioSync();
+    await preloadRealDemoAssets();
+    showToast('Studio backing band loaded — tap Start Recording to sing over it!');
+  }
+
+  // ==================== INSTANT LIVE PLAYBACK & RETINA SPECTRUM ====================
+  function drawSpectrum() {
+    const canvas = document.getElementById('spectrumCanvas');
+    if (!canvas) return;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    if (!w || !h) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+    }
+    const g = canvas.getContext('2d');
+    g.save();
+    g.scale(dpr, dpr);
+    g.fillStyle = '#060810';
+    g.fillRect(0, 0, w, h);
+
+    if (state.liveNodes?.analyser && state.isPlaying) {
+      state.liveNodes.analyser.getByteFrequencyData(fftBytes);
+    } else {
+      fftBytes.fill(0);
+    }
+
+    const bars = 46;
+    const gap = 3;
+    const barW = Math.max(2, (w - gap * (bars + 1)) / bars);
+    for (let i = 0; i < bars; i++) {
+      const bin = Math.min(fftBytes.length - 1, Math.floor(Math.pow(i / bars, 1.35) * 190) + 1);
+      const val = fftBytes[bin] / 255;
+      const bh = Math.max(3, val * (h - 10));
+      const x = gap + i * (barW + gap);
+      const y = h - bh - 4;
+      g.fillStyle = val > 0.66 ? '#fbbf24' : '#38bdf8';
+      g.fillRect(x, y, barW, bh);
+    }
+    g.restore();
+  }
+
+  function getMasterSignalRms() {
+    if (!state.liveNodes?.analyser) return 0;
+    const td = new Float32Array(state.liveNodes.analyser.fftSize);
+    state.liveNodes.analyser.getFloatTimeDomainData(td);
+    let s = 0;
+    for (let i = 0; i < td.length; i++) s += td[i] * td[i];
+    return Math.sqrt(s / td.length);
+  }
+
+  function getTotalDuration() {
+    const off = (state.params.vocalOffsetMs || 0) / 1000;
+    const bDur = state.backingBuffer ? state.backingBuffer.duration : 0;
+    const vDur = state.rawVocalBuffer ? state.rawVocalBuffer.duration + Math.max(0, off) : 0;
+    return Math.max(bDur, vDur, 1);
+  }
+
+  function getCurrentPlayhead() {
+    if (!state.isPlaying || !state.audioCtx) return state.pausePositionSec;
+    return state.playOffsetSec + Math.max(0, state.audioCtx.currentTime - state.playStartCtxTime);
+  }
+
+  function stopPlaybackInternal() {
+    if (state.liveNodes?.sources) {
+      state.liveNodes.sources.forEach((s) => { try { s.stop(); } catch (_) {} });
+    }
+    state.liveNodes = null;
+    state.isPlaying = false;
+    if (state.rafId) cancelAnimationFrame(state.rafId);
+    updatePlayButtonsUI(false);
+    if (state.view === 'mix') drawSpectrum();
+  }
+
+  function updatePlayButtonsUI(playing) {
+    const heroBtn = document.getElementById('heroPlayText');
+    if (heroBtn) heroBtn.textContent = playing ? 'Pause Vocal Demo' : 'Hear Vocal Demo';
+    const mixBtn = document.getElementById('playBtnText');
+    if (mixBtn) mixBtn.textContent = playing ? 'Pause Mix' : 'Play Mix';
+  }
+
+  function startPlayback(fromSec = 0) {
+    const ctx = unlockMobileAudioSync();
+    stopPlaybackInternal();
+
+    if (!state.backingBuffer && !state.rawVocalBuffer) return;
+
+    const total = getTotalDuration();
+    const startSec = fromSec >= total - 0.1 ? 0 : Math.max(0, fromSec);
+
+    state.liveNodes = KaroDSP.buildStudioGraph(
+      ctx,
+      { backing: state.backingBuffer, rawVocal: state.rawVocalBuffer, tunedVocal: state.tunedVocalBuffer },
+      state.params,
+      startSec
+    );
+
+    state.isPlaying = true;
+    state.playStartCtxTime = ctx.currentTime + 0.015;
+    state.playOffsetSec = startSec;
+    updatePlayButtonsUI(true);
+
+    const tick = () => {
+      if (!state.isPlaying) return;
+      const pos = getCurrentPlayhead();
+      const dur = getTotalDuration();
+      const tStr = `${fmtTime(pos)} / ${fmtTime(dur)}`;
+      const mixT = document.getElementById('transportTime');
+      const heroT = document.getElementById('heroDemoTime');
+      if (mixT) mixT.textContent = tStr;
+      if (heroT) heroT.textContent = fmtTime(pos);
+
+      if (state.view === 'mix') {
+        drawSpectrum();
+        drawTimeline(pos);
+      }
+      if (pos >= dur + 0.15) {
+        stopPlaybackInternal();
+        state.pausePositionSec = 0;
+        if (state.view === 'mix') drawTimeline(0);
+        return;
+      }
+      state.rafId = requestAnimationFrame(tick);
+    };
+    state.rafId = requestAnimationFrame(tick);
+  }
+
+  function pausePlayback() {
+    state.pausePositionSec = getCurrentPlayhead();
+    stopPlaybackInternal();
+  }
+
+  async function togglePlayback() {
+    unlockMobileAudioSync();
+    if (state.isPlaying) {
+      pausePlayback();
+      return;
+    }
+    if (!state.backingBuffer && !state.rawVocalBuffer) {
+      await preloadRealDemoAssets();
+    }
+    startPlayback(state.pausePositionSec);
+  }
+
+  function stopAndRewind() {
+    stopPlaybackInternal();
+    state.pausePositionSec = 0;
+    document.getElementById('transportTime').textContent = `00:00 / ${fmtTime(getTotalDuration())}`;
+    drawTimeline(0);
+  }
+
+  // ==================== ZERO-GLITCH LIVE CONTROLS ====================
+  function updateFxButtonsUI() {
+    const on = !state.params.bypassFx;
+    const label = on ? 'Studio FX: ON' : 'Raw Dry Mic';
+    ['btnBypassFx', 'btnHeroFx'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.textContent = label;
+        el.className = on ? 'btn btn-cyan' : 'btn';
+      }
     });
-    if (btn && btn.parentElement) {
-      btn.parentElement.querySelectorAll('.seg-btn').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
+    const sub = document.getElementById('heroDemoSub');
+    if (sub) {
+      sub.textContent = on
+        ? 'Studio Concert Hall + Stereo Doubler ACTIVE'
+        : 'Raw dry microphone stem (FX bypassed — hear the difference!)';
     }
   }
 
-  // ==================== INSTANT KARAOKE SEARCH & LRCLIB SYNCED LYRICS ====================
-  function extractYouTubeId(url) {
-    if (!url) return '';
-    const t = url.trim();
-    if (/^[a-zA-Z0-9_-]{11}$/.test(t)) return t;
-    for (const p of [/[?&]v=([a-zA-Z0-9_-]{11})/, /youtu\.be\/([a-zA-Z0-9_-]{11})/, /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/, /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/]) {
-      const m = t.match(p);
-      if (m) return m[1];
+  function toggleBypassFx() {
+    unlockMobileAudioSync();
+    state.params.bypassFx = !state.params.bypassFx;
+    updateFxButtonsUI();
+    if (state.liveNodes) KaroDSP.applyLiveParamsToGraph(state.liveNodes, state.params);
+  }
+
+  function toggleSoloVocal() {
+    state.params.soloVocal = !state.params.soloVocal;
+    document.getElementById('btnSoloVocal').className = state.params.soloVocal ? 'btn btn-sm btn-amber' : 'btn btn-sm';
+    if (state.liveNodes) KaroDSP.applyLiveParamsToGraph(state.liveNodes, state.params);
+  }
+
+  function renderPresets() {
+    const grid = document.getElementById('presetGrid');
+    if (!grid) return;
+    grid.innerHTML = Object.entries(KaroDSP.PRESETS).map(([key, p]) => `
+      <div class="preset-card ${state.activePreset === key ? 'active' : ''}" onclick="App.applyPreset('${key}', true)">
+        <div class="preset-card-tag">${p.tag}</div>
+        <div class="preset-card-name">${p.nameEn}</div>
+        <div class="preset-card-desc">${p.descEn}</div>
+      </div>
+    `).join('');
+  }
+
+  function applyPreset(key, notify = true) {
+    const p = KaroDSP.PRESETS[key];
+    if (!p) return;
+    state.activePreset = key;
+    state.params = { ...state.params, ...p, bypassFx: false };
+    updateFxButtonsUI();
+    renderPresets();
+    syncSlidersFromParams();
+
+    if (state.liveNodes) KaroDSP.applyLiveParamsToGraph(state.liveNodes, state.params);
+    if ((p.autotuneAmount || 0) > 0 && state.rawVocalBuffer) {
+      applyWorkerAutoTune();
     }
-    return '';
+    if (notify) showToast(`Preset active: ${p.nameEn}`);
+  }
+
+  function syncSlidersFromParams() {
+    const p = state.params;
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    const txt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+    set('vocalVolSlider', Math.round(p.vocalGain * 100));
+    txt('vocalVolVal', `${Math.round(p.vocalGain * 100)}%`);
+    set('backingVolSlider', Math.round(p.backingGain * 100));
+    txt('backingVolVal', `${Math.round(p.backingGain * 100)}%`);
+    set('reverbMixSlider', Math.round(p.reverbMix * 100));
+    txt('reverbMixText', `${Math.round(p.reverbMix * 100)}%`);
+    set('doublerMixSlider', Math.round((p.doublerMix ?? 0.4) * 100));
+    txt('doublerMixText', `${Math.round((p.doublerMix ?? 0.4) * 100)}%`);
+    set('delayMixSlider', Math.round(p.delayMix * 100));
+    txt('delayMixText', `${Math.round(p.delayMix * 100)}%`);
+    set('airSlider', p.airDb);
+    txt('airValText', `+${Number(p.airDb).toFixed(1)} dB`);
+    set('atStrength', Math.round((p.autotuneAmount || 0) * 100));
+    txt('atStrengthText', `${Math.round((p.autotuneAmount || 0) * 100)}%`);
+    set('gateSlider', Math.round((p.noiseGate || 0.55) * 100));
+    txt('gateValText', `${Math.round((p.noiseGate || 0.55) * 100)}%`);
+    setMasterProfile(p.masterProfile || 'warm', false);
+  }
+
+  function updateParam(name, val) {
+    state.params[name] = val;
+    syncSlidersFromParams();
+    if (state.liveNodes) KaroDSP.applyLiveParamsToGraph(state.liveNodes, state.params);
+  }
+
+  function setMasterProfile(profile, notify = true) {
+    state.params.masterProfile = profile;
+    ['warm', 'balanced', 'loud'].forEach((k) => {
+      const btn = document.getElementById(`mp-${k}`);
+      if (btn) btn.className = k === profile ? 'btn btn-sm btn-amber' : 'btn btn-sm';
+    });
+    if (state.liveNodes) KaroDSP.applyLiveParamsToGraph(state.liveNodes, state.params);
+    if (notify) showToast(`Master tone: ${profile.toUpperCase()}`);
+  }
+
+  function setVocalOffset(ms, restartAudio = false) {
+    const val = Math.round(Number(ms) || 0);
+    state.params.vocalOffsetMs = val;
+    document.getElementById('syncOffsetSlider').value = val;
+    document.getElementById('syncOffsetLabel').textContent = `${val > 0 ? '+' : ''}${val} ms`;
+    drawTimeline();
+    if (restartAudio && state.isPlaying) startPlayback(getCurrentPlayhead());
+  }
+
+  function autoAlignTracks() {
+    if (!state.backingBuffer || !state.rawVocalBuffer) {
+      showToast('Record or load a vocal track first');
+      return;
+    }
+    const ms = KaroDSP.estimateSyncOffsetMs(state.backingBuffer, state.rawVocalBuffer);
+    setVocalOffset(ms, true);
+    showToast(`Auto-aligned vocal sync (${ms > 0 ? '+' : ''}${ms} ms)`);
+  }
+
+  function runSmartVoiceMatch() {
+    if (!state.rawVocalBuffer) {
+      showToast('Load or record a voice track first');
+      return;
+    }
+    const res = KaroDSP.analyzeVoiceQuick(state.rawVocalBuffer);
+    state.activePreset = res.presetKey;
+    state.params = { ...state.params, ...res.settings, bypassFx: false };
+    updateFxButtonsUI();
+    renderPresets();
+    syncSlidersFromParams();
+    if (state.liveNodes) KaroDSP.applyLiveParamsToGraph(state.liveNodes, state.params);
+    const banner = document.getElementById('voiceReportBanner');
+    banner.style.display = 'block';
+    banner.textContent = `✓ ${res.note}`;
+    showToast('AI matched EQ, compression & hall space to your voice!');
+  }
+
+  // ==================== WEB WORKER AUTO-TUNE & SOUNDTOUCH KEY SHIFT ====================
+  async function applyWorkerAutoTune() {
+    if (!state.rawVocalBuffer) return;
+    const ctx = ensureAudioCtx();
+    state.params.autotuneAmount = Number(document.getElementById('atStrength').value) / 100;
+    state.params.noiseGate = Number(document.getElementById('gateSlider').value) / 100;
+    state.params.scaleKey = Number(document.getElementById('keySelect').value);
+
+    const res = await KaroDSP.processVocalAsync(ctx, state.rawVocalBuffer, {
+      autotuneAmount: state.params.autotuneAmount,
+      retuneSpeed: 0.45,
+      noiseGate: state.params.noiseGate,
+      scaleKey: state.params.scaleKey,
+    });
+    state.tunedVocalBuffer = res.buffer;
+    state.pitchFrames = res.pitchCurve || [];
+    state.pitchScore = res.pitchScore || 95;
+    updatePitchBadge();
+    drawPitchGraph();
+    if (state.isPlaying) startPlayback(getCurrentPlayhead());
+  }
+
+  async function shiftBackingKey(delta) {
+    if (!state.originalBackingBuffer) await preloadRealDemoAssets();
+    const next = Math.max(-6, Math.min(6, state.transposeSemitones + delta));
+    state.transposeSemitones = next;
+    document.getElementById('transposeLabel').textContent = `${next > 0 ? '+' : ''}${next} st`;
+    showToast(next === 0 ? 'Restored original song key' : `Shifting music key (${next > 0 ? '+' : ''}${next} st)...`);
+
+    const ctx = ensureAudioCtx();
+    const base = state.karaokeCutActive
+      ? KaroDSP.centerCutKaraokeBuffer(ctx, state.originalBackingBuffer)
+      : state.originalBackingBuffer;
+
+    state.backingBuffer = next === 0 ? base : await KaroDSP.transposeBufferAsync(ctx, base, next);
+    state.backingPeaks = KaroDSP.computeWaveformPeaks(state.backingBuffer, 220);
+    drawTimeline();
+    if (state.isPlaying) startPlayback(getCurrentPlayhead());
+  }
+
+  function applyKaraokeVocalCut() {
+    if (!state.originalBackingBuffer) {
+      showToast('Upload or load a stereo song first');
+      return;
+    }
+    const ctx = ensureAudioCtx();
+    state.karaokeCutActive = !state.karaokeCutActive;
+    document.getElementById('btnKaraokeCut').className = state.karaokeCutActive ? 'btn btn-sm btn-amber' : 'btn btn-sm';
+    state.backingBuffer = state.karaokeCutActive
+      ? KaroDSP.centerCutKaraokeBuffer(ctx, state.originalBackingBuffer)
+      : state.originalBackingBuffer;
+    state.backingPeaks = KaroDSP.computeWaveformPeaks(state.backingBuffer, 220);
+    drawTimeline();
+    if (state.isPlaying) startPlayback(getCurrentPlayhead());
+    showToast(state.karaokeCutActive ? 'Center lead vocals reduced!' : 'Original stereo track restored');
+  }
+
+  // ==================== INSTANT SONG-NAME KARAOKE VIDEO + LRC LYRICS ====================
+  function parseYoutubeId(input) {
+    const m = String(input || '').trim().match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([A-Za-z0-9_-]{11})/);
+    return m ? m[1] : null;
   }
 
   function heroSearchSubmit(e) {
     e.preventDefault();
     const q = document.getElementById('heroSongQuery').value.trim();
-    if (!q) return;
-    quickSingSong(q);
+    if (q) quickSingSong(q);
   }
 
-  async function quickSingSong(songQuery) {
-    switchView('studio');
-    openInspectorTab('source');
-    switchSourceSub('yt', document.getElementById('srcTabSearch'));
-    document.getElementById('ytUrlInput').value = songQuery;
-    await searchOrLoadKaraoke();
+  function quickSingSong(songName) {
+    unlockMobileAudioSync();
+    document.getElementById('ytUrlInput').value = songName;
+    switchView('sing');
+    searchOrLoadKaraoke(songName);
   }
 
-  async function searchOrLoadKaraoke() {
-    const input = document.getElementById('ytUrlInput').value.trim();
-    if (!input) return showToast('Type any song title or artist first');
+  function renderYoutubeEmbed(videoId, title = '') {
+    const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
+    const originParam = isIp ? '' : `&origin=${encodeURIComponent(window.location.origin)}`;
+    setStageMode('video');
+    document.getElementById('stageVideoWrap').innerHTML = `
+      <iframe
+        src="https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1&rel=0&modestbranding=1${originParam}"
+        title="${title.replace(/"/g, '')}"
+        referrerpolicy="strict-origin-when-cross-origin"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen></iframe>`;
+  }
 
-    const directId = extractYouTubeId(input);
-    if (directId && (input.includes('http') || input.length === 11)) {
-      selectKaraokeVideo({ id: directId, title: 'YouTube Karaoke Track', channel: 'Direct Link', duration: '' }, -1);
+  async function searchOrLoadKaraoke(overrideInput) {
+    const raw = (overrideInput || document.getElementById('ytUrlInput').value || '').trim();
+    if (!raw) {
+      showToast('Type any song name (e.g. Perfect Ed Sheeran)');
+      return;
+    }
+    const directId = parseYoutubeId(raw);
+    if (directId) {
+      renderYoutubeEmbed(directId, 'Karaoke Video');
       return;
     }
 
     const btn = document.getElementById('btnKaraokeSearch');
     btn.disabled = true;
-    btn.innerText = 'Searching...';
+    btn.textContent = 'Finding...';
+    document.getElementById('projectTitleInput').value = `${raw} — Vocal Cover`;
+
+    fetchLyrics(raw);
 
     try {
-      // Search playable HD Karaoke videos AND time-synced LRCLIB lyrics concurrently!
-      fetchSyncedLyrics(input, true);
-
-      const res = await fetch('/api/search-karaoke?q=' + encodeURIComponent(input));
+      const res = await fetch(`/api/search-karaoke?q=${encodeURIComponent(raw)}`);
       const data = await res.json();
-      karaokeResults = data.videos || [];
-
-      if (!karaokeResults.length) {
-        showToast('No videos matched — try adding artist name');
+      const videos = data.videos || data.results || [];
+      if (!videos.length) {
+        showToast('No karaoke video found — try adding the artist name');
         return;
       }
-
-      renderKaraokeResultsStrip();
-      selectKaraokeVideo(karaokeResults[0], 0);
-      document.getElementById('btnNextKaraoke').style.display = karaokeResults.length > 1 ? 'inline-flex' : 'none';
-      showToast('Loaded karaoke video + synced lyrics! Press Record anytime.');
+      state.karaokeResults = videos;
+      state.karaokeIndex = 0;
+      renderKaraokeStrip();
+      selectKaraokeVideo(0);
+      document.getElementById('btnNextKaraoke').style.display = videos.length > 1 ? 'inline-flex' : 'none';
+      showToast('Karaoke video ready! Tap Start Recording to sing.');
     } catch (_) {
-      showToast('Search temporarily busy — please retry');
+      showToast('Network issue finding karaoke video');
     } finally {
       btn.disabled = false;
-      btn.innerText = 'Search';
+      btn.textContent = 'Search';
     }
   }
 
-  function renderKaraokeResultsStrip() {
+  function renderKaraokeStrip() {
     const strip = document.getElementById('karaokeResultsStrip');
-    if (!karaokeResults.length) {
-      strip.style.display = 'none';
-      return;
-    }
     strip.style.display = 'flex';
-    strip.innerHTML = karaokeResults
-      .map(
-        (v, idx) => `
-      <div class="yt-card ${idx === activeKaraokeIdx ? 'active' : ''}" onclick="App.pickKaraokeByIndex(${idx})">
-        <div class="yt-card-thumb">
-          <img src="${escapeHtml(v.thumbnail)}" alt="" loading="lazy" />
-          ${v.duration ? `<span class="yt-dur mono">${escapeHtml(v.duration)}</span>` : ''}
-        </div>
-        <div class="yt-card-meta">
-          <div class="yt-card-title">${escapeHtml(v.title)}</div>
-        </div>
+    strip.innerHTML = state.karaokeResults.map((v, idx) => `
+      <div class="yt-item ${idx === state.karaokeIndex ? 'active' : ''}" onclick="App.selectKaraokeVideo(${idx})">
+        <img src="${v.thumbnail}" alt="" loading="lazy" />
+        <div class="yt-item-title">${v.title}</div>
       </div>
-    `
-      )
-      .join('');
+    `).join('');
   }
 
-  function pickKaraokeByIndex(idx) {
-    const v = karaokeResults[idx];
+  function selectKaraokeVideo(idx) {
+    const v = state.karaokeResults[idx];
     if (!v) return;
-    selectKaraokeVideo(v, idx);
+    state.karaokeIndex = idx;
+    renderKaraokeStrip();
+    renderYoutubeEmbed(v.id || v.videoId, v.title);
   }
 
   function nextKaraokeResult() {
-    if (!karaokeResults.length) return;
-    const nextIdx = (activeKaraokeIdx + 1) % karaokeResults.length;
-    selectKaraokeVideo(karaokeResults[nextIdx], nextIdx);
-    showToast(`Switched to version ${nextIdx + 1}/${karaokeResults.length}`);
+    if (!state.karaokeResults.length) return;
+    selectKaraokeVideo((state.karaokeIndex + 1) % state.karaokeResults.length);
   }
 
-  function selectKaraokeVideo(v, idx) {
-    activeKaraokeIdx = idx;
-    currentYouTubeVideoId = v.id;
-    renderKaraokeResultsStrip();
-    const originParam = encodeURIComponent(window.location.origin);
-    document.getElementById('ytPlayerContainer').innerHTML =
-      `<iframe id="ytIframe" src="https://www.youtube.com/embed/${encodeURIComponent(v.id)}?enablejsapi=1&autoplay=1&rel=0&origin=${originParam}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
-    document.getElementById('backingStatusBadge').innerText = v.title ? v.title.slice(0, 32) : `Karaoke (${v.id})`;
-    if (v.title && v.title !== 'YouTube Karaoke Track') {
-      document.getElementById('projectTitleInput').value = v.title.replace(/\(.*?\)|\[.*?\]/g, '').trim().slice(0, 38) + ' — Cover';
-    }
-  }
-
-  function parseLrcText(lrc) {
-    const lines = [];
-    const regex = /\[(\d{1,2}):(\d{2}(?:\.\d{1,3})?)\]\s*(.*)/;
-    lrc.split('\n').forEach((row) => {
-      const m = row.match(regex);
-      if (m) {
-        const sec = parseInt(m[1], 10) * 60 + parseFloat(m[2]);
-        const text = m[3].trim();
-        if (text) lines.push({ sec, text });
-      }
-    });
-    return lines.sort((a, b) => a.sec - b.sec);
-  }
-
-  async function fetchSyncedLyrics(query, silent = false) {
-    const q = (query || '').trim();
-    if (!q) return;
-    document.getElementById('lrcQueryInput').value = q;
-    const box = document.getElementById('lyricsStageBox');
-
+  async function fetchLyrics(query) {
     try {
-      const res = await fetch('/api/lyrics?q=' + encodeURIComponent(q));
+      const res = await fetch(`/api/lyrics?q=${encodeURIComponent(query)}`);
       const data = await res.json();
-      const track = data.track;
-      if (!track) {
-        if (!silent) showToast('No lyrics found for that title');
-        return;
-      }
+      const hit = data.track || (data.results || [])[0];
+      if (!hit) return;
 
-      if (track.syncedLyrics) {
-        parsedLyrics = parseLrcText(track.syncedLyrics);
-        box.innerHTML = parsedLyrics
-          .map((l, i) => `<div class="lyric-line ${i === 0 ? 'active' : ''}" id="lrc-line-${i}" onclick="App.seekToLyric(${l.sec})">${escapeHtml(l.text)}</div>`)
-          .join('');
-      } else if (track.plainLyrics) {
-        parsedLyrics = [];
-        box.innerHTML = track.plainLyrics
-          .split('\n')
-          .filter(Boolean)
-          .map((t, i) => `<div class="lyric-line ${i === 0 ? 'active' : ''}">${escapeHtml(t)}</div>`)
-          .join('');
+      const lines = [];
+      String(hit.syncedLyrics || hit.plainLyrics || '').split('\n').forEach((line) => {
+        const m = line.match(/\[(\d+):(\d+(?:\.\d+)?)\](.*)/);
+        if (m) {
+          const text = m[3].trim();
+          if (text) lines.push({ sec: Number(m[1]) * 60 + Number(m[2]), text });
+        } else if (line.trim()) {
+          lines.push({ sec: lines.length * 4, text: line.trim() });
+        }
+      });
+      state.lrcLines = lines;
+      const box = document.getElementById('lyricsStageBox');
+      if (lines.length) {
+        box.innerHTML = lines.map((l, i) => `<div class="lyric-row ${i === 0 ? 'active' : ''}" id="lr-${i}">${l.text}</div>`).join('');
       }
-      if (!silent) showToast(`Synced lyrics loaded: ${track.trackName} — ${track.artistName}`);
     } catch (_) {}
   }
 
-  function seekToLyric(sec) {
-    playStartOffsetSec = sec;
-    if (isPlaying) startPlayback(sec);
-    else {
-      drawTimeline(sec);
-      updateTimeReadout(sec, getProjectDuration());
-    }
-  }
-
-  function updateLyricsScroll(curSec) {
-    if (!parsedLyrics.length) return;
-    let idx = 0;
-    for (let i = 0; i < parsedLyrics.length; i++) {
-      if (curSec >= parsedLyrics[i].sec) idx = i;
-      else break;
-    }
-    if (idx !== lastActiveLyricIdx) {
-      lastActiveLyricIdx = idx;
-      document.querySelectorAll('.lyric-line.active').forEach((el) => el.classList.remove('active'));
-      const activeEl = document.getElementById('lrc-line-' + idx);
-      if (activeEl) {
-        activeEl.classList.add('active');
-        activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }
-  }
-
-  function sendYouTubeCommand(func) {
-    const iframe = document.getElementById('ytIframe');
-    if (iframe && iframe.contentWindow) {
-      iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args: [] }), '*');
-    }
-  }
-
-  // ==================== AUTH & CLOUD D1 ====================
-  function openAuthModal() {
-    const loggedIn = Boolean(authToken && userState.email && !userState.id?.startsWith('demo-singer'));
-    document.getElementById('authLoggedInBox').style.display = loggedIn ? 'block' : 'none';
-    document.getElementById('authForm').style.display = loggedIn ? 'none' : 'block';
-    if (loggedIn) {
-      document.getElementById('authUserName').innerText = userState.display_name || 'Artist';
-      document.getElementById('authUserEmail').innerText = userState.email || '';
-    }
-    document.getElementById('authModal').classList.add('open');
-  }
-
-  function closeAuthModal() {
-    document.getElementById('authModal').classList.remove('open');
-  }
-
-  function setAuthMode(mode) {
-    authMode = mode;
-    document.getElementById('tabLoginBtn').classList.toggle('btn-amber', mode === 'login');
-    document.getElementById('tabRegBtn').classList.toggle('btn-amber', mode === 'register');
-    document.getElementById('authNameWrap').style.display = mode === 'register' ? 'block' : 'none';
-    document.getElementById('authSubmitBtn').innerText = mode === 'login' ? 'Sign In to Studio' : 'Create Studio Account';
-  }
-
-  async function submitAuth(e) {
-    e.preventDefault();
-    const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
-    const payload = {
-      email: document.getElementById('authEmail').value,
-      password: document.getElementById('authPassword').value,
-      display_name: document.getElementById('authName').value,
-    };
-    try {
-      const res = await fetch(endpoint, { method: 'POST', headers: apiHeaders(), body: JSON.stringify(payload) });
-      const data = await res.json();
-      if (!res.ok) return showToast(data.error || 'Authentication failed');
-      authToken = data.token;
-      try { localStorage.setItem('karomix_token', authToken); } catch (_) {}
-      closeAuthModal();
-      await loadServerState();
-      showToast('Welcome, ' + (data.user.display_name || data.user.email));
-    } catch (_) {
-      showToast('Connection error');
-    }
-  }
-
-  function logout() {
-    authToken = '';
-    try { localStorage.removeItem('karomix_token'); } catch (_) {}
-    closeAuthModal();
-    loadServerState();
-    showToast('Signed out');
-  }
-
-  async function loadServerState() {
-    try {
-      const res = await fetch('/api/state', { headers: apiHeaders() });
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.user) {
-        userState = data.user;
-        updateQuotaUI(data.authenticated);
-      }
-      customD1Presets = data.presets || [];
-      renderPresetCards();
-      renderSavedProjects(data.projects || []);
-    } catch (_) {
-      renderPresetCards();
-    }
-  }
-
-  function updateQuotaUI(authenticated) {
-    const isPro = userState.plan && userState.plan.startsWith('pro');
-    const used = userState.exports_this_month ?? 0;
-    document.getElementById('topPlanBadge').innerText = isPro ? 'PRO ARTIST' : `FREE • ${used}/3`;
-    document.getElementById('proActionBtn').innerText = isPro ? 'Pro Active (Switch to Free)' : 'Activate Pro Artist Pass';
-    document.getElementById('authTriggerBtn').innerText = authenticated && userState.display_name
-      ? userState.display_name.slice(0, 12)
-      : 'Sign In';
-  }
-
-  async function toggleProDemo() {
-    const nextPlan = userState.plan === 'free' ? 'pro_global' : 'free';
-    await fetch('/api/upgrade-demo', {
-      method: 'POST',
-      headers: apiHeaders(),
-      body: JSON.stringify({ plan: nextPlan }),
-    });
-    await loadServerState();
-    showToast(nextPlan === 'free' ? 'Switched to Free Creator Plan' : 'Pro Artist Unlimited Unlocked!');
-  }
-
-  // ==================== TRACK UPLOAD, DEMO & VOCAL REMOVER ====================
+  // ==================== CLEAN LOW-LATENCY MIC RECORDING & FILE UPLOAD ====================
   async function handleBackingUpload(e) {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
-    stopPlayback();
+    unlockMobileAudioSync();
+    showToast('Decoding music track...');
     const ctx = ensureAudioCtx();
-    showToast('Decoding audio track...');
-    try {
-      buffers.originalBacking = await ctx.decodeAudioData(await file.arrayBuffer());
-      buffers.backing = buffers.originalBacking;
-      backingSemitones = 0;
-      karaokeCutActive = false;
-      document.getElementById('btnKaraokeCut').classList.remove('btn-cyan');
-      document.getElementById('transposeLabel').innerText = '0 st';
-      const cleanName = file.name.replace(/\.[^.]+$/, '');
-      document.getElementById('backingStatusBadge').innerText = `${cleanName.slice(0, 22)} (${buffers.backing.duration.toFixed(1)}s)`;
-      document.getElementById('projectTitleInput').value = cleanName + ' — Cover';
-      fetchSyncedLyrics(cleanName, true);
-      drawTimeline(0);
-      updateTimeReadout(0, getProjectDuration());
-      showToast('Instrumental loaded — tap Vocal Remover if song has original vocals!');
-    } catch (_) {
-      showToast('Unsupported format — please choose MP3, WAV, M4A, or MP4');
-    }
+    const buf = await ctx.decodeAudioData(await file.arrayBuffer());
+    state.originalBackingBuffer = buf;
+    state.backingBuffer = buf;
+    state.backingPeaks = KaroDSP.computeWaveformPeaks(buf, 220);
+    state.isDemoSession = false;
+    state.transposeSemitones = 0;
+    document.getElementById('projectTitleInput').value = file.name.replace(/\.[^.]+$/, '') + ' — Vocal Cover';
+    showToast(`Loaded music: ${file.name}`);
   }
 
   async function handleVocalUpload(e) {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
-    stopPlayback();
+    unlockMobileAudioSync();
+    showToast('Loading your vocal recording...');
     const ctx = ensureAudioCtx();
-    try {
-      buffers.rawVocal = await ctx.decodeAudioData(await file.arrayBuffer());
-      reprocessAutoTune();
-      drawTimeline(0);
-      showToast('Vocal imported to Track 02');
-    } catch (_) {
-      showToast('Could not decode vocal file');
-    }
+    const buf = await ctx.decodeAudioData(await file.arrayBuffer());
+    state.rawVocalBuffer = buf;
+    state.tunedVocalBuffer = buf;
+    state.vocalPeaks = KaroDSP.computeWaveformPeaks(buf, 220);
+    state.isDemoSession = false;
+    switchView('mix');
+    runSmartVoiceMatch();
+    startPlayback(0);
   }
 
-  function applyKaraokeVocalCut() {
-    if (!buffers.originalBacking) return showToast('Upload or load an audio track first');
-    const ctx = ensureAudioCtx();
-    karaokeCutActive = !karaokeCutActive;
-    const base = backingSemitones !== 0
-      ? KaroDSP.transposeBuffer(ctx, buffers.originalBacking, backingSemitones)
-      : buffers.originalBacking;
-    buffers.backing = karaokeCutActive ? KaroDSP.centerCutKaraokeBuffer(ctx, base) : base;
-    document.getElementById('btnKaraokeCut').classList.toggle('btn-cyan', karaokeCutActive);
-    drawTimeline(getCurrentPlayheadSec());
-    if (isPlaying) startPlayback(getCurrentPlayheadSec());
-    showToast(karaokeCutActive ? 'Stereo Center Vocal Remover ON' : 'Full Original Stereo Restored');
-  }
-
-  function loadFullDemo(includeVocal = true) {
-    stopPlayback();
-    const ctx = ensureAudioCtx();
-    const demo = KaroDSP.generateDemoSession(ctx);
-    buffers.originalBacking = demo.backing;
-    buffers.backing = demo.backing;
-    backingSemitones = 0;
-    karaokeCutActive = false;
-    document.getElementById('btnKaraokeCut').classList.remove('btn-cyan');
-    document.getElementById('transposeLabel').innerText = '0 st';
-    document.getElementById('backingStatusBadge').innerText = 'Midnight Ballad (Am • 90 BPM)';
-    document.getElementById('projectTitleInput').value = 'Midnight Ballad — Studio Cover';
-    document.getElementById('keySelect').value = '9';
-    document.getElementById('scaleSelect').value = 'minor';
-
-    if (includeVocal) {
-      buffers.rawVocal = demo.vocal;
-      setVocalOffset(-120, false);
-      applyPreset('sinhala_ballad', false);
-      reprocessAutoTune();
-    } else {
-      buffers.rawVocal = null;
-      buffers.tunedVocal = null;
-      pitchCurveData = [];
-      drawPitchGraph();
-    }
-    updateChips();
-    drawTimeline(0);
-    updateTimeReadout(0, getProjectDuration());
-  }
-
-  function launchInstantShowcase() {
-    switchView('studio');
-    loadFullDemo(true);
-    setTimeout(() => startPlayback(0), 120);
-  }
-
-  // ==================== RECORDING & LIVE VOCAL TUNER ====================
-  async function getConfiguredMicStream() {
-    const cleanMode = document.getElementById('micModeSelect').value === 'clean';
-    return navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: cleanMode, noiseSuppression: cleanMode, autoGainControl: cleanMode },
+  async function initMicStream() {
+    if (state.micStream) return state.micStream;
+    const clean = document.getElementById('useCleanMic').checked;
+    document.getElementById('micCleanLabel').textContent = clean ? 'AI Noise Clean ON' : 'Raw Studio Direct';
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        noiseSuppression: clean,
+        echoCancellation: false,
+        autoGainControl: clean,
+      },
     });
+    state.micStream = stream;
+    const ctx = ensureAudioCtx();
+    const src = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    src.connect(analyser);
+    state.micAnalyser = analyser;
+    startMicMeterLoop();
+    return stream;
+  }
+
+  function startMicMeterLoop() {
+    cancelAnimationFrame(state.recMeterRaf);
+    const buf = new Float32Array(2048);
+    let frameSkip = 0;
+    const loop = () => {
+      if (!state.micAnalyser) return;
+      state.micAnalyser.getFloatTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i += 4) sum += buf[i] * buf[i];
+      const rms = Math.sqrt(sum / (buf.length / 4));
+      document.getElementById('micMeterFill').style.width = `${Math.min(100, rms * 340)}%`;
+
+      if (++frameSkip % 5 === 0) {
+        const note = KaroDSP.detectPitchLive(buf, state.audioCtx.sampleRate);
+        document.getElementById('livePitchText').textContent = note ? `Note: ${note}` : 'Note: --';
+      }
+      if (state.isRecording) {
+        const elapsed = (Date.now() - state.recStartMs) / 1000;
+        document.getElementById('recTimerText').textContent = fmtTime(elapsed);
+        state.lrcLines.forEach((l, i) => {
+          if (elapsed >= l.sec) {
+            const el = document.getElementById(`lr-${i}`);
+            if (el && !el.classList.contains('active')) {
+              document.querySelectorAll('.lyric-row.active').forEach((r) => r.classList.remove('active'));
+              el.classList.add('active');
+              el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            }
+          }
+        });
+      }
+      state.recMeterRaf = requestAnimationFrame(loop);
+    };
+    state.recMeterRaf = requestAnimationFrame(loop);
+  }
+
+  function releaseMic() {
+    cancelAnimationFrame(state.recMeterRaf);
+    if (state.micStream) state.micStream.getTracks().forEach((t) => t.stop());
+    state.micStream = null;
+    state.micAnalyser = null;
+    document.getElementById('micMeterFill').style.width = '0%';
   }
 
   async function toggleMicMonitor() {
-    const btn = document.getElementById('btnMicCheck');
-    if (monitorActive) {
-      monitorActive = false;
-      if (micStream && !isRecording) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
-      cancelAnimationFrame(meterRaf);
-      document.getElementById('micMeterFill').style.width = '0%';
-      document.getElementById('livePitchText').innerText = 'Tuner: --';
-      btn.innerText = 'Mic Check';
+    unlockMobileAudioSync();
+    if (state.isMonitoring) {
+      state.isMonitoring = false;
+      releaseMic();
+      document.getElementById('btnMicCheck').textContent = 'Test Mic';
       return;
     }
     try {
-      const ctx = ensureAudioCtx();
-      micStream = await getConfiguredMicStream();
-      startLiveMicMeter(ctx, micStream);
-      monitorActive = true;
-      btn.innerText = 'Stop Check';
+      await initMicStream();
+      state.isMonitoring = true;
+      document.getElementById('btnMicCheck').textContent = 'Stop Test';
+      showToast('Speak or sing now to check your mic level');
     } catch (_) {
-      showToast('Allow microphone permission in your browser settings');
+      showToast('Please allow Microphone permission in your browser');
     }
-  }
-
-  function startLiveMicMeter(ctx, stream) {
-    const src = ctx.createMediaStreamSource(stream);
-    analyserNode = ctx.createAnalyser();
-    analyserNode.fftSize = 2048;
-    src.connect(analyserNode);
-    const timeBuf = new Float32Array(analyserNode.fftSize);
-
-    const loop = () => {
-      if (!analyserNode || (!monitorActive && !isRecording)) return;
-      analyserNode.getFloatTimeDomainData(timeBuf);
-      let sum = 0;
-      for (let i = 0; i < timeBuf.length; i++) sum += timeBuf[i] * timeBuf[i];
-      const rms = Math.sqrt(sum / timeBuf.length);
-      document.getElementById('micMeterFill').style.width = Math.min(100, Math.round(rms * 340)) + '%';
-
-      const { f0, confidence } = KaroDSP.detectPitchFrame(timeBuf, 0, 1536, ctx.sampleRate);
-      if (f0 > 0 && confidence > 0.72) {
-        const midi = 69 + 12 * Math.log2(f0 / 440);
-        const rounded = Math.round(midi);
-        const note = KaroDSP.NOTE_NAMES[((rounded % 12) + 12) % 12] + (Math.floor(rounded / 12) - 1);
-        const cents = Math.round((midi - rounded) * 100);
-        document.getElementById('livePitchText').innerText = `${note} (${cents >= 0 ? '+' : ''}${cents}c)`;
-      }
-
-      if (isRecording) {
-        const sec = Math.floor((performance.now() - recStartTime) / 1000);
-        document.getElementById('recTimerText').innerText =
-          String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
-        updateLyricsScroll((performance.now() - recStartTime) / 1000);
-      }
-      meterRaf = requestAnimationFrame(loop);
-    };
-    cancelAnimationFrame(meterRaf);
-    loop();
   }
 
   function runCountdown() {
     return new Promise((resolve) => {
       if (!document.getElementById('useCountdown').checked) return resolve();
-      const overlay = document.getElementById('countdownOverlay');
-      const numEl = document.getElementById('countdownNum');
-      overlay.classList.add('show');
-      let count = 3;
-      numEl.innerText = count;
+      const mask = document.getElementById('countdownOverlay');
+      const num = document.getElementById('countdownNum');
+      let n = 3;
+      mask.classList.add('show');
+      num.textContent = '3';
       const iv = setInterval(() => {
-        count--;
-        if (count <= 0) { clearInterval(iv); overlay.classList.remove('show'); resolve(); }
-        else numEl.innerText = count;
-      }, 700);
+        n--;
+        if (n <= 0) {
+          clearInterval(iv);
+          mask.classList.remove('show');
+          resolve();
+        } else {
+          num.textContent = String(n);
+        }
+      }, 650);
     });
-  }
-
-  async function startTabPlusMicRecord() {
-    if (isRecording) return stopAllRecording();
-    try {
-      const ctx = ensureAudioCtx();
-      tabStream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      });
-      if (tabStream.getAudioTracks().length === 0) {
-        tabStream.getTracks().forEach((t) => t.stop());
-        return showToast('Enable "Share tab audio" in the popup prompt');
-      }
-      micStream = await getConfiguredMicStream();
-      await runCountdown();
-
-      tabChunks = []; recChunks = [];
-      tabMediaRecorder = new MediaRecorder(new MediaStream(tabStream.getAudioTracks()));
-      mediaRecorder = new MediaRecorder(micStream);
-      tabMediaRecorder.ondataavailable = (ev) => { if (ev.data.size > 0) tabChunks.push(ev.data); };
-      mediaRecorder.ondataavailable = (ev) => { if (ev.data.size > 0) recChunks.push(ev.data); };
-
-      const done = Promise.all([
-        new Promise((r) => { tabMediaRecorder.onstop = r; }),
-        new Promise((r) => { mediaRecorder.onstop = r; }),
-      ]);
-
-      isRecording = true;
-      recStartTime = performance.now();
-      startLiveMicMeter(ctx, micStream);
-      sendYouTubeCommand('playVideo');
-      tabMediaRecorder.start(200);
-      mediaRecorder.start(200);
-      setRecordingButtonsUI(true);
-
-      done.then(async () => {
-        buffers.originalBacking = await ctx.decodeAudioData(await new Blob(tabChunks).arrayBuffer());
-        buffers.backing = buffers.originalBacking;
-        buffers.rawVocal = await ctx.decodeAudioData(await new Blob(recChunks).arrayBuffer());
-        setVocalOffset(-95, false);
-        reprocessAutoTune();
-        drawTimeline(0);
-        document.getElementById('backingStatusBadge').innerText = `Captured Karaoke (${buffers.backing.duration.toFixed(1)}s)`;
-        showToast('Captured karaoke music + vocal cleanly!');
-      });
-    } catch (_) {
-      showToast('Screen audio capture cancelled');
-    }
   }
 
   async function toggleMicRecording() {
-    if (isRecording) return stopAllRecording();
-    stopPlayback();
+    unlockMobileAudioSync();
+    if (state.isRecording) {
+      state.isRecording = false;
+      stopPlaybackInternal();
+      if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
+        state.mediaRecorder.stop();
+      }
+      document.getElementById('btnRecordVocal').classList.remove('recording');
+      document.getElementById('recBtnLabel').textContent = 'Start Recording';
+      return;
+    }
+
     try {
-      const ctx = ensureAudioCtx();
-      micStream = await getConfiguredMicStream();
+      const stream = await initMicStream();
       await runCountdown();
 
-      recChunks = [];
-      mediaRecorder = new MediaRecorder(micStream);
-      mediaRecorder.ondataavailable = (ev) => { if (ev.data.size > 0) recChunks.push(ev.data); };
-      mediaRecorder.onstop = async () => {
-        try {
-          buffers.rawVocal = await ctx.decodeAudioData(await new Blob(recChunks).arrayBuffer());
-          setVocalOffset(-110, false);
-          reprocessAutoTune();
-          drawTimeline(0);
-          showToast('Vocal take captured — press Play to hear your studio mix!');
-        } catch (_) {
-          showToast('Recording was too short — please try again');
-        }
+      state.recChunks = [];
+      const rec = new MediaRecorder(stream);
+      state.mediaRecorder = rec;
+      rec.ondataavailable = (ev) => { if (ev.data.size > 0) state.recChunks.push(ev.data); };
+      rec.onstop = async () => {
+        releaseMic();
+        const blob = new Blob(state.recChunks, { type: rec.mimeType || 'audio/webm' });
+        const ctx = ensureAudioCtx();
+        const vocalBuf = await ctx.decodeAudioData(await blob.arrayBuffer());
+        state.rawVocalBuffer = vocalBuf;
+        state.tunedVocalBuffer = vocalBuf;
+        state.vocalPeaks = KaroDSP.computeWaveformPeaks(vocalBuf, 220);
+        state.isDemoSession = false;
+
+        switchView('mix');
+        runSmartVoiceMatch();
+        startPlayback(0);
       };
 
-      if (buffers.backing) {
-        const monitorBacking = ctx.createBufferSource();
-        monitorBacking.buffer = buffers.backing;
-        const g = ctx.createGain();
-        g.gain.value = params.backingGain ?? 0.82;
-        monitorBacking.connect(g);
-        g.connect(ctx.destination);
-        monitorBacking.start();
-        liveNodes = { sources: [monitorBacking] };
-      } else if (currentYouTubeVideoId) {
-        sendYouTubeCommand('playVideo');
+      if (state.backingBuffer && !state.isDemoSession) {
+        const ctx = ensureAudioCtx();
+        const bSrc = ctx.createBufferSource();
+        bSrc.buffer = state.backingBuffer;
+        bSrc.connect(ctx.destination);
+        bSrc.start();
+        state.liveNodes = { sources: [bSrc] };
       }
 
-      isRecording = true;
-      recStartTime = performance.now();
-      startLiveMicMeter(ctx, micStream);
-      mediaRecorder.start(200);
-      setRecordingButtonsUI(true);
+      rec.start();
+      state.isRecording = true;
+      state.recStartMs = Date.now();
+      document.getElementById('btnRecordVocal').classList.add('recording');
+      document.getElementById('recBtnLabel').textContent = 'Stop & Mix My Voice';
     } catch (_) {
-      showToast('Microphone permission is required to record');
+      showToast('Microphone access blocked — please allow mic access');
     }
   }
 
-  function setRecordingButtonsUI(rec) {
-    const b1 = document.getElementById('btnRecordVocal');
-    const b2 = document.getElementById('btnTopRecord');
-    b1.classList.toggle('recording', rec);
-    b2.classList.toggle('recording', rec);
-    document.getElementById('topRecText').innerText = rec ? 'Stop' : 'Record';
-    b1.querySelector('span').innerText = rec ? 'Stop Recording' : 'Start Recording';
-  }
-
-  function stopAllRecording() {
-    isRecording = false;
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-    if (tabMediaRecorder && tabMediaRecorder.state !== 'inactive') tabMediaRecorder.stop();
-    if (liveNodes && liveNodes.sources) {
-      liveNodes.sources.forEach((s) => { try { s.stop(); } catch (_) {} });
-      liveNodes = null;
-    }
-    sendYouTubeCommand('pauseVideo');
-    if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
-    if (tabStream) { tabStream.getTracks().forEach((t) => t.stop()); tabStream = null; }
-    monitorActive = false;
-    setRecordingButtonsUI(false);
-  }
-
-  // ==================== PLAYBACK ENGINE ====================
-  function getProjectDuration() {
-    const b = buffers.backing ? buffers.backing.duration : 0;
-    const v = buffers.rawVocal ? buffers.rawVocal.duration + Math.max(0, params.vocalOffsetMs / 1000) : 0;
-    return Math.max(b, v, 0);
-  }
-
-  function getCurrentPlayheadSec() {
-    if (!isPlaying || !audioCtx) return playStartOffsetSec;
-    return Math.min(getProjectDuration(), playStartOffsetSec + (audioCtx.currentTime - playStartCtxTime));
-  }
-
-  function startPlayback(fromSec = playStartOffsetSec) {
-    if (!buffers.backing && !buffers.rawVocal) loadFullDemo(true);
-    stopPlayback(false);
-    const ctx = ensureAudioCtx();
-    const dur = getProjectDuration();
-    const startSec = fromSec >= dur - 0.15 ? 0 : Math.max(0, fromSec);
-
-    if (!buffers.backing && currentYouTubeVideoId) sendYouTubeCommand('playVideo');
-
-    liveNodes = KaroDSP.buildStudioGraph(ctx, buffers, params, startSec);
-    if (liveNodes.masterAnalyser) connectSpectrumAnalyzer(liveNodes.masterAnalyser);
-
-    isPlaying = true;
-    playStartOffsetSec = startSec;
-    playStartCtxTime = ctx.currentTime;
-    document.getElementById('playBtnText').innerText = 'Pause';
-
-    const tick = () => {
-      if (!isPlaying) return;
-      const cur = getCurrentPlayheadSec();
-      drawTimeline(cur);
-      updateLyricsScroll(cur);
-      updateTimeReadout(cur, dur);
-      if (cur >= dur) { stopPlayback(true); return; }
-      animFrameId = requestAnimationFrame(tick);
-    };
-    tick();
-  }
-
-  function stopPlayback(resetToZero = false) {
-    if (isPlaying && audioCtx) playStartOffsetSec = resetToZero ? 0 : getCurrentPlayheadSec();
-    else if (resetToZero) playStartOffsetSec = 0;
-
-    isPlaying = false;
-    cancelAnimationFrame(animFrameId);
-    if (!buffers.backing && currentYouTubeVideoId) sendYouTubeCommand('pauseVideo');
-    if (liveNodes && liveNodes.sources) {
-      liveNodes.sources.forEach((s) => { try { s.stop(); } catch (_) {} });
-    }
-    liveNodes = null;
-    document.getElementById('playBtnText').innerText = 'Play';
-    drawTimeline(playStartOffsetSec);
-    updateTimeReadout(playStartOffsetSec, getProjectDuration());
-  }
-
-  function togglePlayback() {
-    if (isPlaying) stopPlayback(false);
-    else startPlayback(playStartOffsetSec);
-  }
-
-  function stopAndRewind() {
-    stopPlayback(true);
-  }
-
-  function updateTimeReadout(cur, total) {
-    const fmt = (s) => String(Math.floor(s / 60)).padStart(2, '0') + ':' + (s % 60).toFixed(1).padStart(4, '0');
-    document.getElementById('transportTime').innerText = `${fmt(cur)} / ${fmt(total)}`;
-  }
-
-  // ==================== DSP PARAMS, PRESETS & AUTO-TUNE ====================
-  function updateChips() {
-    const kName = KaroDSP.NOTE_NAMES[Number(document.getElementById('keySelect')?.value || 9)];
-    const sc = document.getElementById('scaleSelect')?.value || 'minor';
-    document.getElementById('chipKey').innerText = kName + (sc === 'minor' ? 'm' : '');
-    document.getElementById('chipSync').innerText = (params.vocalOffsetMs > 0 ? '+' : '') + params.vocalOffsetMs + 'ms';
-    const p = KaroDSP.PRESETS[activePresetKey];
-    if (p) document.getElementById('chipPreset').innerText = p.nameEn;
-  }
-
-  function updateParam(key, val, rebuildIfPlaying = false) {
-    params[key] = val;
-    syncSlidersFromParams();
-    if (liveNodes && isPlaying) {
-      if (rebuildIfPlaying) return startPlayback(getCurrentPlayheadSec());
-      if (key === 'backingGain' && liveNodes.backingGain) liveNodes.backingGain.gain.value = params.soloVocal ? 0 : val;
-      if (key === 'vocalGain' && liveNodes.vocalGain) liveNodes.vocalGain.gain.value = val;
-      if (key === 'warmthDb' && liveNodes.warmth) liveNodes.warmth.gain.value = val;
-      if (key === 'presenceDb' && liveNodes.presence) liveNodes.presence.gain.value = val;
-      if (key === 'airDb' && liveNodes.air) liveNodes.air.gain.value = val;
-      if (key === 'doublerMix' && liveNodes.dblWet) liveNodes.dblWet.gain.value = val * 0.55;
-      if (key === 'reverbMix' && liveNodes.rWet) liveNodes.rWet.gain.value = val * 1.35;
-      if (key === 'delayMix' && liveNodes.dWet) liveNodes.dWet.gain.value = val * 1.25;
-      if (key === 'delayTimeSec' && liveNodes.delay) liveNodes.delay.delayTime.value = val;
-      if (key === 'vocalPocket' && liveNodes.pocketEq) liveNodes.pocketEq.gain.value = val ? -2.5 : 0;
-    }
-  }
-
-  function setMasterProfile(profileKey) {
-    params.masterProfile = profileKey;
-    ['warm', 'balanced', 'loud'].forEach((k) => {
-      document.getElementById('mp-' + k).classList.toggle('active', k === profileKey);
-    });
-    if (isPlaying) startPlayback(getCurrentPlayheadSec());
-  }
-
-  function onNoiseGateChange(val) {
-    params.noiseGate = Number(val) / 100;
-    document.getElementById('gateValText').innerText = Math.round(Number(val)) + '%';
-    if (buffers.rawVocal) reprocessAutoTune();
-  }
-
-  function onCompChange(sliderVal) {
-    const thresh = -Number(sliderVal);
-    const ratio = Number((1.5 + (Number(sliderVal) / 36) * 5).toFixed(1));
-    params.compThreshold = thresh;
-    params.compRatio = ratio;
-    syncSlidersFromParams();
-    if (liveNodes && liveNodes.comp) {
-      liveNodes.comp.threshold.value = thresh;
-      liveNodes.comp.ratio.value = ratio;
-    }
-  }
-
-  function toggleBypassFx() {
-    params.bypassFx = !params.bypassFx;
-    const btn = document.getElementById('btnBypassFx');
-    btn.innerText = params.bypassFx ? 'RAW MIC' : 'FX ON';
-    btn.classList.toggle('btn-cyan', !params.bypassFx);
-    if (isPlaying) startPlayback(getCurrentPlayheadSec());
-  }
-
-  function toggleSoloVocal() {
-    params.soloVocal = !params.soloVocal;
-    document.getElementById('btnSoloVocal').classList.toggle('btn-amber', params.soloVocal);
-    if (liveNodes && liveNodes.backingGain) {
-      liveNodes.backingGain.gain.value = params.soloVocal ? 0 : params.backingGain;
-    }
-  }
-
-  function reprocessAutoTune() {
-    updateChips();
-    if (!buffers.rawVocal) return;
-    const ctx = ensureAudioCtx();
-    const keyRoot = Number(document.getElementById('keySelect').value);
-    const scaleName = document.getElementById('scaleSelect').value;
-    const strength = Number(document.getElementById('atStrength').value) / 100;
-    const retuneSpeed = Number(document.getElementById('atSpeed').value) / 100;
-    params.autotuneAmount = strength;
-    params.retuneSpeed = retuneSpeed;
-
-    const result = KaroDSP.pitchCorrectBuffer(ctx, buffers.rawVocal, {
-      keyRoot, scaleName, strength, retuneSpeed, noiseGate: params.noiseGate ?? 0.55,
-    });
-    buffers.tunedVocal = result.buffer;
-    pitchCurveData = result.pitchCurve;
-    document.getElementById('pitchScoreBadge').innerText = `PITCH ${result.pitchScore || 94}%`;
-    drawPitchGraph();
-    if (isPlaying) startPlayback(getCurrentPlayheadSec());
-  }
-
-  function runSmartVoiceMatch() {
-    if (!buffers.rawVocal) loadFullDemo(true);
-    const report = KaroDSP.analyzeVoiceProfile(buffers.rawVocal);
-    activePresetKey = report.recommendedPreset;
-    Object.assign(params, report.settings);
-    document.getElementById('keySelect').value = String(report.suggestedKeyIndex);
-
-    syncSlidersFromParams();
-    renderPresetCards();
-    reprocessAutoTune();
-
-    const banner = document.getElementById('voiceReportBanner');
-    banner.classList.add('visible');
-    banner.innerHTML = `
-      <div style="font-weight:700;color:var(--emerald);margin-bottom:3px;">AI Voice Profile Matched</div>
-      <div><strong>Register:</strong> ${escapeHtml(report.registerEn)} • Fundamental <strong>${report.medianHz} Hz</strong> • Key <strong>${report.suggestedKeyName}</strong></div>
-      <div style="color:var(--text-secondary);margin-top:2px;">${escapeHtml(report.toneNoteEn)}</div>
-    `;
-    showToast('AI matched vocal chain: ' + KaroDSP.PRESETS[activePresetKey].nameEn);
-  }
-
-  function applyPreset(key, restart = true) {
-    const preset = KaroDSP.PRESETS[key];
-    if (!preset) return;
-    activePresetKey = key;
-    Object.assign(params, preset);
-    setMasterProfile(preset.masterProfile || 'warm');
-    syncSlidersFromParams();
-    renderPresetCards();
-    updateChips();
-    if (buffers.rawVocal) reprocessAutoTune();
-    else if (restart && isPlaying) startPlayback(getCurrentPlayheadSec());
-  }
-
-  function syncSlidersFromParams() {
-    const fmtDb = (v) => (v >= 0 ? '+' : '') + Number(v).toFixed(1) + ' dB';
-    const pct = Math.round((params.autotuneAmount ?? 0.25) * 100);
-    document.getElementById('atStrength').value = pct;
-    document.getElementById('atStrengthText').innerText = pct + '%';
-    document.getElementById('autotunePctVal').innerText = pct + '%';
-
-    const spd = Math.round((params.retuneSpeed ?? 0.28) * 100);
-    document.getElementById('atSpeed').value = spd;
-    document.getElementById('atSpeedText').innerText = spd + '%';
-
-    const gatePct = Math.round((params.noiseGate ?? 0.55) * 100);
-    document.getElementById('gateSlider').value = gatePct;
-    document.getElementById('gateValText').innerText = gatePct + '%';
-
-    const dblPct = Math.round((params.doublerMix ?? 0.34) * 100);
-    document.getElementById('doublerMixSlider').value = dblPct;
-    document.getElementById('doublerMixText').innerText = dblPct + '%';
-
-    document.getElementById('compSlider').value = Math.abs(params.compThreshold ?? -24);
-    document.getElementById('compValText').innerText = `${params.compThreshold} dB (${params.compRatio}:1)`;
-
-    document.getElementById('warmthSlider').value = params.warmthDb;
-    document.getElementById('warmthValText').innerText = fmtDb(params.warmthDb);
-
-    document.getElementById('presenceSlider').value = params.presenceDb;
-    document.getElementById('presenceValText').innerText = fmtDb(params.presenceDb);
-
-    document.getElementById('airSlider').value = params.airDb;
-    document.getElementById('airValText').innerText = fmtDb(params.airDb);
-
-    document.getElementById('reverbMixSlider').value = Math.round(params.reverbMix * 100);
-    document.getElementById('reverbMixText').innerText = Math.round(params.reverbMix * 100) + '%';
-
-    document.getElementById('reverbDecaySlider').value = params.reverbDecay;
-    document.getElementById('reverbDecayText').innerText = Number(params.reverbDecay).toFixed(1) + 's';
-
-    document.getElementById('delayMixSlider').value = Math.round(params.delayMix * 100);
-    document.getElementById('delayMixText').innerText = Math.round(params.delayMix * 100) + '%';
-
-    document.getElementById('delayTimeSlider').value = Math.round(params.delayTimeSec * 1000);
-    document.getElementById('delayTimeText').innerText = Math.round(params.delayTimeSec * 1000) + ' ms';
-
-    document.getElementById('backingVolSlider').value = Math.round(params.backingGain * 100);
-    document.getElementById('backingVolVal').innerText = Math.round(params.backingGain * 100) + '%';
-
-    document.getElementById('vocalVolSlider').value = Math.round(params.vocalGain * 100);
-    document.getElementById('vocalVolVal').innerText = Math.round(params.vocalGain * 100) + '%';
-
-    document.getElementById('chkVocalPocket').checked = !!params.vocalPocket;
-    document.getElementById('chkAutoMaster').checked = !!params.autoMaster;
-  }
-
-  // ==================== RETINA HIGH-DPI WAVEFORM & PITCH CONTOUR ====================
-  function prepareRetinaCanvas(canvas) {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const rect = canvas.getBoundingClientRect();
-    const w = Math.max(300, Math.round(rect.width));
-    const h = Math.max(90, Math.round(rect.height));
-    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
-    }
-    const c = canvas.getContext('2d');
-    c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    return { c, W: w, H: h };
-  }
-
-  function drawBufferPeaks(c, buffer, xOffsetPx, yTop, height, widthPx, color, totalDurSec) {
-    if (!buffer || totalDurSec <= 0) return;
-    const ch = buffer.getChannelData(0);
-    const drawWidth = Math.max(1, widthPx * (buffer.duration / totalDurSec));
-    const samplesPerPx = Math.max(1, Math.floor(ch.length / drawWidth));
-    const midY = yTop + height / 2;
-
-    c.fillStyle = color;
-    for (let px = 0; px < drawWidth; px += 2) {
-      const drawX = xOffsetPx + px;
-      if (drawX < 0 || drawX > widthPx) continue;
-      const start = px * samplesPerPx;
-      let peak = 0;
-      for (let k = 0; k < samplesPerPx; k += 8) {
-        const v = Math.abs(ch[start + k] || 0);
-        if (v > peak) peak = v;
-      }
-      const barH = Math.max(2, Math.min(height * 0.9, peak * height * 1.6));
-      c.fillRect(drawX, midY - barH / 2, 1.4, barH);
-    }
-  }
-
-  function drawTimeline(playheadSec = 0) {
+  // ==================== ULTRA-LIGHT 60FPS WAVEFORM & PITCH CANVAS ====================
+  function drawTimeline(playheadSec = getCurrentPlayhead()) {
     const canvas = document.getElementById('waveformCanvas');
     if (!canvas) return;
-    const { c, W, H } = prepareRetinaCanvas(canvas);
-    c.fillStyle = '#070910';
-    c.fillRect(0, 0, W, H);
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    if (!w || !h) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+    }
+    const g = canvas.getContext('2d');
+    g.save();
+    g.scale(dpr, dpr);
+    g.fillStyle = '#060810';
+    g.fillRect(0, 0, w, h);
 
-    const totalDur = Math.max(getProjectDuration(), 12);
-    c.strokeStyle = 'rgba(255,255,255,0.045)';
-    c.lineWidth = 1;
-    for (let s = 0; s <= totalDur; s += 1) {
-      const x = (s / totalDur) * W;
-      c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H); c.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.08)';
+    g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke();
+
+    const total = getTotalDuration();
+
+    const drawPeaks = (peaks, dur, startSec, yCenter, halfH, color) => {
+      if (!peaks || !dur) return;
+      g.fillStyle = color;
+      const startX = (startSec / total) * w;
+      const trackW = (dur / total) * w;
+      const barW = Math.max(1.5, trackW / peaks.length - 1);
+      for (let i = 0; i < peaks.length; i++) {
+        const x = startX + (i / peaks.length) * trackW;
+        if (x < -4 || x > w + 4) continue;
+        const amp = Math.max(2, peaks[i] * halfH);
+        g.fillRect(x, yCenter - amp, barW, amp * 2);
+      }
+    };
+
+    if (state.backingBuffer && state.backingPeaks) {
+      drawPeaks(state.backingPeaks, state.backingBuffer.duration, 0, h * 0.27, h * 0.2, '#38bdf8');
+    }
+    if (state.rawVocalBuffer && state.vocalPeaks) {
+      const offSec = (state.params.vocalOffsetMs || 0) / 1000;
+      drawPeaks(state.vocalPeaks, state.rawVocalBuffer.duration, offSec, h * 0.74, h * 0.2, '#fbbf24');
     }
 
-    c.strokeStyle = 'rgba(255,255,255,0.1)';
-    c.beginPath(); c.moveTo(0, H / 2); c.lineTo(W, H / 2); c.stroke();
+    const px = Math.max(0, Math.min(w, (playheadSec / total) * w));
+    g.strokeStyle = '#ffffff';
+    g.lineWidth = 2;
+    g.beginPath(); g.moveTo(px, 0); g.lineTo(px, h); g.stroke();
+    g.restore();
+  }
 
-    c.font = '600 10.5px Inter, sans-serif';
-    c.fillStyle = '#38bdf8';
-    c.fillText('01 INSTRUMENTAL  •  TAP TO SEEK', 10, 15);
-    if (buffers.backing) {
-      drawBufferPeaks(c, buffers.backing, 0, 20, H / 2 - 24, W, '#38bdf8', totalDur);
-    } else {
-      c.fillStyle = '#475569';
-      c.fillText('Search karaoke below, upload MP3/MP4, or click Demo', 10, 48);
-    }
+  function initTimelinePointerInteractions() {
+    const canvas = document.getElementById('waveformCanvas');
+    if (!canvas) return;
+    let draggingVocal = false;
+    let startX = 0;
+    let startOffset = 0;
 
-    const offsetPx = ((params.vocalOffsetMs / 1000) / totalDur) * W;
-    c.fillStyle = '#fbbf24';
-    c.fillText(`02 LEAD VOCAL  •  DRAG TO SYNC (${params.vocalOffsetMs} ms)`, 10, H / 2 + 15);
-    if (buffers.rawVocal) {
-      drawBufferPeaks(c, buffers.rawVocal, offsetPx, H / 2 + 20, H / 2 - 24, W, '#f59e0b', totalDur);
-    } else {
-      c.fillStyle = '#475569';
-      c.fillText('Press Record to capture clean studio vocals', 10, H / 2 + 48);
-    }
+    canvas.addEventListener('pointerdown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      if (y > rect.height * 0.5) {
+        draggingVocal = true;
+        startX = e.clientX;
+        startOffset = state.params.vocalOffsetMs || 0;
+        canvas.setPointerCapture(e.pointerId);
+      } else {
+        const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const seek = ratio * getTotalDuration();
+        state.pausePositionSec = seek;
+        if (state.isPlaying) startPlayback(seek);
+        else drawTimeline(seek);
+      }
+    });
 
-    const playX = Math.min(W, Math.max(0, (playheadSec / totalDur) * W));
-    c.strokeStyle = '#ffffff';
-    c.lineWidth = 1.8;
-    c.beginPath(); c.moveTo(playX, 0); c.lineTo(playX, H); c.stroke();
+    canvas.addEventListener('pointermove', (e) => {
+      if (!draggingVocal) return;
+      const rect = canvas.getBoundingClientRect();
+      const deltaSec = ((e.clientX - startX) / rect.width) * getTotalDuration();
+      const clamped = Math.max(-500, Math.min(500, Math.round(startOffset + deltaSec * 1000)));
+      setVocalOffset(clamped, false);
+    });
+
+    canvas.addEventListener('pointerup', () => {
+      if (draggingVocal) {
+        draggingVocal = false;
+        if (state.isPlaying) startPlayback(getCurrentPlayhead());
+      }
+    });
   }
 
   function drawPitchGraph() {
     const canvas = document.getElementById('pitchCanvas');
     if (!canvas) return;
-    const { c, W, H } = prepareRetinaCanvas(canvas);
-    c.fillStyle = '#070910';
-    c.fillRect(0, 0, W, H);
+    const w = canvas.clientWidth || 500;
+    const h = canvas.clientHeight || 110;
+    canvas.width = w;
+    canvas.height = h;
+    const g = canvas.getContext('2d');
+    g.fillStyle = '#060810';
+    g.fillRect(0, 0, w, h);
 
-    const voiced = pitchCurveData.filter((p) => p.voiced);
-    if (voiced.length < 3) {
-      c.fillStyle = '#64748b';
-      c.font = '12px Inter, sans-serif';
-      c.fillText('Record vocals or load Demo to inspect note contour', 14, H / 2 + 4);
-      return;
-    }
-
-    let minM = Infinity, maxM = -Infinity;
-    voiced.forEach((p) => {
-      if (p.rawMidi < minM) minM = p.rawMidi;
-      if (p.rawMidi > maxM) maxM = p.rawMidi;
-    });
-    minM = Math.floor(minM) - 1;
-    maxM = Math.ceil(maxM) + 1;
-    const span = Math.max(6, maxM - minM);
-
-    c.font = '10px JetBrains Mono, monospace';
-    for (let m = minM; m <= maxM; m++) {
-      const y = H - ((m - minM) / span) * H;
-      c.strokeStyle = 'rgba(255,255,255,0.06)';
-      c.beginPath(); c.moveTo(28, y); c.lineTo(W, y); c.stroke();
-      c.fillStyle = '#64748b';
-      c.fillText(KaroDSP.NOTE_NAMES[((m % 12) + 12) % 12], 6, y + 3);
-    }
+    const curve = Array.isArray(state.pitchFrames) ? state.pitchFrames : [];
+    const voiced = curve.filter((f) => f && f.voiced && f.rawMidi > 0);
+    if (!voiced.length) return;
+    const minM = Math.min(...voiced.map((f) => f.rawMidi)) - 2;
+    const maxM = Math.max(...voiced.map((f) => f.rawMidi)) + 2;
+    const span = Math.max(8, maxM - minM);
 
     const plot = (key, color, width) => {
-      c.strokeStyle = color;
-      c.lineWidth = width;
-      c.beginPath();
-      let down = false, prevVal = 0;
-      pitchCurveData.forEach((pt, idx) => {
-        if (!pt.voiced) { down = false; return; }
-        const x = 28 + (idx / pitchCurveData.length) * (W - 32);
-        const y = H - ((pt[key] - minM) / span) * H;
-        if (!down || Math.abs(pt[key] - prevVal) > 2.1) {
-          c.moveTo(x, y);
-          down = true;
-        } else {
-          c.lineTo(x, y);
-        }
-        prevVal = pt[key];
+      g.strokeStyle = color;
+      g.lineWidth = width;
+      g.beginPath();
+      let down = false;
+      curve.forEach((f, i) => {
+        if (!f || !f.voiced || f.rawMidi <= 0) { down = false; return; }
+        const x = (i / curve.length) * w;
+        const y = h - ((f[key] - minM) / span) * (h - 16) - 8;
+        if (!down) { g.moveTo(x, y); down = true; } else g.lineTo(x, y);
       });
-      c.stroke();
+      g.stroke();
     };
-
-    plot('rawMidi', 'rgba(245, 158, 11, 0.65)', 1.4);
+    plot('rawMidi', 'rgba(148,163,184,0.55)', 1.5);
     plot('tunedMidi', '#38bdf8', 2.2);
   }
 
-  function setVocalOffset(ms, restartLive = false) {
-    const clamped = Math.max(-800, Math.min(800, Math.round(Number(ms))));
-    params.vocalOffsetMs = clamped;
-    document.getElementById('syncOffsetSlider').value = clamped;
-    document.getElementById('syncOffsetLabel').innerText = (clamped > 0 ? '+' : '') + clamped + ' ms';
-    updateChips();
-    drawTimeline(getCurrentPlayheadSec());
-    if (restartLive && isPlaying) startPlayback(getCurrentPlayheadSec());
+  // ==================== CLOUD D1 STATE, AUTH, SAVE & WAV EXPORT ====================
+  async function apiFetch(url, opts = {}) {
+    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+    if (state.authToken) headers.Authorization = `Bearer ${state.authToken}`;
+    const res = await fetch(url, { ...opts, headers });
+    return res.json();
   }
 
-  function nudgeOffset(d) {
-    setVocalOffset(params.vocalOffsetMs + d, true);
-  }
-
-  function autoAlignTracks() {
-    if (!buffers.backing || !buffers.rawVocal) {
-      setVocalOffset(-115, true);
-      return showToast('Applied -115ms mic latency alignment');
-    }
-    const suggested = KaroDSP.estimateSyncOffsetMs(buffers.backing, buffers.rawVocal);
-    setVocalOffset(suggested, true);
-    showToast(`Auto-aligned vocal sync to ${suggested} ms`);
-  }
-
-  function shiftBackingKey(delta) {
-    if (!buffers.originalBacking) return showToast('Load an instrumental track or Demo first');
-    const next = Math.max(-6, Math.min(6, backingSemitones + delta));
-    if (next === backingSemitones) return;
-    const prevDelta = next - backingSemitones;
-    backingSemitones = next;
-    const ctx = ensureAudioCtx();
-    const shifted = KaroDSP.transposeBuffer(ctx, buffers.originalBacking, backingSemitones);
-    buffers.backing = karaokeCutActive ? KaroDSP.centerCutKaraokeBuffer(ctx, shifted) : shifted;
-
-    const keySel = document.getElementById('keySelect');
-    keySel.value = String((((Number(keySel.value) + prevDelta) % 12) + 12) % 12);
-    document.getElementById('transposeLabel').innerText = (backingSemitones > 0 ? '+' : '') + backingSemitones + ' st';
-    updateChips();
-    if (buffers.rawVocal) reprocessAutoTune();
-    else if (isPlaying) startPlayback(getCurrentPlayheadSec());
-    drawTimeline(getCurrentPlayheadSec());
-    showToast(`Key shifted ${backingSemitones > 0 ? '+' : ''}${backingSemitones} semitones via SoundTouch`);
-  }
-
-  function setupCanvasInteractions() {
-    const canvas = document.getElementById('waveformCanvas');
-    let dragging = false, startX = 0, startOff = 0;
-    const cx = (e) => (e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX);
-    const cy = (e) => (e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY);
-
-    const onDown = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const totalDur = Math.max(getProjectDuration(), 12);
-      if (cy(e) - rect.top > rect.height / 2) {
-        dragging = true; startX = cx(e); startOff = params.vocalOffsetMs;
-      } else {
-        const seek = Math.max(0, Math.min(totalDur, ((cx(e) - rect.left) / rect.width) * totalDur));
-        playStartOffsetSec = seek;
-        if (isPlaying) startPlayback(seek);
-        else { drawTimeline(seek); updateTimeReadout(seek, getProjectDuration()); }
-      }
-    };
-    const onMove = (e) => {
-      if (!dragging) return;
-      const rect = canvas.getBoundingClientRect();
-      setVocalOffset(startOff + ((cx(e) - startX) / rect.width) * 2200, false);
-    };
-    const onUp = () => {
-      if (dragging) { dragging = false; if (isPlaying) startPlayback(getCurrentPlayheadSec()); }
-    };
-
-    canvas.addEventListener('mousedown', onDown);
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    canvas.addEventListener('touchstart', onDown, { passive: true });
-    window.addEventListener('touchmove', onMove, { passive: true });
-    window.addEventListener('touchend', onUp);
-    window.addEventListener('resize', () => {
-      drawTimeline(getCurrentPlayheadSec());
-      drawPitchGraph();
-    });
-  }
-
-  // ==================== PRESETS, CLOUD PROJECTS & EXPORT ====================
-  function renderPresetCards() {
-    const grid = document.getElementById('presetGrid');
-    if (!grid) return;
-    let html = '';
-    Object.entries(KaroDSP.PRESETS).forEach(([key, p]) => {
-      const active = key === activePresetKey ? 'active' : '';
-      html += `
-        <div class="preset-tile ${active}" onclick="App.applyPreset('${key}')">
-          <div class="preset-tag">${escapeHtml(p.tag)}</div>
-          <div class="preset-title">${escapeHtml(p.nameEn)}</div>
-          <div class="preset-sub">${escapeHtml(p.descEn)}</div>
-        </div>
-      `;
-    });
-    customD1Presets.forEach((cp, idx) => {
-      html += `
-        <div class="preset-tile" onclick="App.applyCustomD1Preset(${idx})">
-          <div class="preset-tag">CLOUD CUSTOM</div>
-          <div class="preset-title">${escapeHtml(cp.name)}</div>
-          <div class="preset-sub">${escapeHtml(cp.voice_profile || 'Saved vocal chain')}</div>
-        </div>
-      `;
-    });
-    grid.innerHTML = html;
-  }
-
-  function applyCustomD1Preset(idx) {
-    const cp = customD1Presets[idx];
-    if (!cp) return;
+  async function refreshServerState() {
     try {
-      Object.assign(params, JSON.parse(cp.settings_json));
-      syncSlidersFromParams();
-      reprocessAutoTune();
-      showToast('Loaded chain: ' + cp.name);
+      const data = await apiFetch('/api/state');
+      if (data.authenticated && data.user) {
+        state.user = data.user;
+      } else {
+        state.user = null;
+      }
+      state.projects = data.projects || [];
+      if (data.user && typeof data.user.exports_this_month === 'number') {
+        state.exportsUsed = Math.max(state.exportsUsed, data.user.exports_this_month);
+      }
+      updateAccountUI();
+      renderSavedProjects();
     } catch (_) {}
   }
 
-  async function saveCustomPresetToD1() {
-    const name = prompt('Name your custom vocal chain:', 'My Signature Chain');
-    if (!name) return;
-    await fetch('/api/presets', {
+  function updateAccountUI() {
+    const isPro = state.isProDemo || (state.user && state.user.plan !== 'free');
+    document.getElementById('topPlanBadge').textContent = isPro ? 'PRO ∞' : `FREE • ${state.exportsUsed}/3`;
+    document.getElementById('authTriggerBtn').textContent = state.user ? state.user.display_name.slice(0, 10) : 'Sign In';
+    const proBtn = document.getElementById('proActionBtn');
+    if (proBtn) proBtn.textContent = isPro ? 'Pro Pass Active ✓' : 'Activate Pro Pass';
+  }
+
+  function openAuthModal() {
+    document.getElementById('authModal').classList.add('open');
+    document.getElementById('authLoggedInBox').style.display = state.user ? 'block' : 'none';
+    document.getElementById('authForm').style.display = state.user ? 'none' : 'block';
+    if (state.user) {
+      document.getElementById('authUserName').textContent = state.user.display_name;
+      document.getElementById('authUserEmail').textContent = state.user.email;
+    }
+  }
+
+  function closeAuthModal() { document.getElementById('authModal').classList.remove('open'); }
+
+  function setAuthMode(mode) {
+    state.authMode = mode;
+    document.getElementById('authNameWrap').style.display = mode === 'register' ? 'block' : 'none';
+    document.getElementById('tabLoginBtn').className = mode === 'login' ? 'btn btn-sm btn-amber' : 'btn btn-sm';
+    document.getElementById('tabRegBtn').className = mode === 'register' ? 'btn btn-sm btn-amber' : 'btn btn-sm';
+    document.getElementById('authSubmitBtn').textContent = mode === 'login' ? 'Sign In' : 'Create Account';
+  }
+
+  async function submitAuth(e) {
+    e.preventDefault();
+    const payload = {
+      email: document.getElementById('authEmail').value.trim(),
+      password: document.getElementById('authPassword').value,
+      display_name: document.getElementById('authName').value.trim(),
+    };
+    const path = state.authMode === 'register' ? '/api/auth/register' : '/api/auth/login';
+    const data = await apiFetch(path, { method: 'POST', body: JSON.stringify(payload) });
+    if (data.error) { showToast(data.error); return; }
+    state.authToken = data.token;
+    state.user = data.user;
+    localStorage.setItem('karomix_token', data.token);
+    updateAccountUI();
+    closeAuthModal();
+    showToast(`Signed in as ${data.user.display_name}`);
+  }
+
+  function logout() {
+    state.authToken = '';
+    state.user = null;
+    localStorage.removeItem('karomix_token');
+    updateAccountUI();
+    closeAuthModal();
+    showToast('Signed out');
+  }
+
+  async function toggleProDemo() {
+    state.isProDemo = !state.isProDemo;
+    localStorage.setItem('karomix_pro_demo', state.isProDemo ? '1' : '0');
+    apiFetch('/api/upgrade-demo', {
       method: 'POST',
-      headers: apiHeaders(),
-      body: JSON.stringify({
-        name,
-        voice_profile: `Key ${KaroDSP.NOTE_NAMES[Number(document.getElementById('keySelect').value)]}`,
-        settings: params,
-        is_public: false,
-      }),
-    });
-    await loadServerState();
-    showToast('Custom vocal chain saved to Cloud D1');
+      body: JSON.stringify({ plan: state.isProDemo ? 'pro_global' : 'free' }),
+    }).catch(() => {});
+    updateAccountUI();
+    showToast(state.isProDemo ? 'Pro Unlimited Pass activated!' : 'Switched to Free Tier');
   }
 
   async function saveProjectToD1() {
-    const title = document.getElementById('projectTitleInput').value || 'Untitled Studio Cover';
-    await fetch('/api/projects', {
+    const title = document.getElementById('projectTitleInput').value.trim() || 'Untitled Mix';
+    const data = await apiFetch('/api/projects', {
       method: 'POST',
-      headers: apiHeaders(),
       body: JSON.stringify({
         title,
-        youtube_url: currentYouTubeVideoId ? `https://youtu.be/${currentYouTubeVideoId}` : '',
-        preset_key: activePresetKey,
-        musical_key: document.getElementById('keySelect').value,
-        musical_scale: document.getElementById('scaleSelect').value,
-        vocal_offset_ms: params.vocalOffsetMs,
-        settings: params,
-        duration_sec: getProjectDuration(),
+        preset_key: state.activePreset,
+        vocal_offset_ms: state.params.vocalOffsetMs,
+        duration_sec: getTotalDuration(),
+        settings: state.params,
       }),
     });
-    await loadServerState();
-    showToast('Project saved to Cloud Library');
+    if (data.ok || data.id) showToast('Saved mix settings to Cloudflare D1!');
   }
 
-  async function deleteProject(id) {
-    await fetch('/api/projects/' + encodeURIComponent(id), { method: 'DELETE', headers: apiHeaders() });
-    await loadServerState();
-  }
-
-  function renderSavedProjects(projects) {
-    savedD1Projects = projects || [];
+  function renderSavedProjects() {
     const box = document.getElementById('savedProjectsList');
     if (!box) return;
-    if (!savedD1Projects.length) {
-      box.innerHTML = '<div style="text-align:center;padding:28px;color:var(--text-muted);">No cloud projects saved yet. Open Vocal Studio and click <strong>Save</strong> to store your cover session.</div>';
+    const list = state.projects || [];
+    if (!list.length) {
+      box.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">No saved mixes yet — save any mix from Mix Studio.</div>';
       return;
     }
-    box.innerHTML = savedD1Projects
-      .map(
-        (p, idx) => `
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+    box.innerHTML = list.map((p) => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:8px;">
         <div>
-          <div style="font-weight:700;font-size:14px;">${escapeHtml(p.title)}</div>
-          <div class="mono" style="font-size:11.5px;color:var(--text-muted);">Chain: ${escapeHtml(p.preset_key)} • Sync: ${p.vocal_offset_ms}ms</div>
+          <div style="font-weight:700;">${p.title}</div>
+          <div style="font-size:11.5px;color:var(--text-secondary);">Preset: ${p.preset_key || p.preset_name} • Sync: ${p.vocal_offset_ms}ms</div>
         </div>
-        <div style="display:flex;gap:6px;">
-          <button class="btn btn-sm btn-amber" onclick="App.loadProjectByIndex(${idx})">Open in Studio</button>
-          <button class="btn btn-sm" onclick="App.deleteProject('${escapeHtml(p.id)}')">Delete</button>
-        </div>
+        <button class="btn btn-sm" onclick='App.restoreProject(${JSON.stringify(p).replace(/'/g, "&#39;")})'>Load</button>
       </div>
-    `
-      )
-      .join('');
+    `).join('');
   }
 
-  function loadProjectByIndex(idx) {
-    const p = savedD1Projects[idx];
-    if (!p) return;
+  function restoreProject(p) {
+    document.getElementById('projectTitleInput').value = p.title;
     try {
       const s = typeof p.settings_json === 'string' ? JSON.parse(p.settings_json) : p.settings_json;
-      Object.assign(params, s);
-      document.getElementById('projectTitleInput').value = p.title || 'Loaded Mix';
-      setVocalOffset(params.vocalOffsetMs || 0, false);
+      state.activePreset = p.preset_key || p.preset_name || 'smule_hall';
+      state.params = { ...state.params, ...s };
+      renderPresets();
       syncSlidersFromParams();
-      reprocessAutoTune();
-      switchView('studio');
-      showToast('Project loaded into Vocal Studio');
     } catch (_) {}
+    switchView('mix');
+    showToast(`Loaded "${p.title}"`);
   }
 
   async function exportMasteredWav() {
-    if (!buffers.backing && !buffers.rawVocal) loadFullDemo(true);
-    const isPro = userState.plan && userState.plan.startsWith('pro');
-    if (!isPro && (userState.exports_this_month || 0) >= 3) {
-      switchView('pricing');
-      return showToast('Free plan limit (3/3) reached — activate Pro Artist Pass for unlimited exports!');
+    unlockMobileAudioSync();
+    if (!state.backingBuffer && !state.rawVocalBuffer) {
+      await preloadRealDemoAssets();
+    }
+    const isPro = state.isProDemo || (state.user && state.user.plan !== 'free');
+    if (!isPro && state.exportsUsed >= 3) {
+      switchView('library');
+      showToast('Free 3 exports used — tap Activate Pro Pass!');
+      return;
     }
 
     const btn = document.getElementById('btnRenderMaster');
     btn.disabled = true;
-    const compact = document.getElementById('exportFormatSelect').value === 'compact';
-    btn.querySelector('span').innerText = 'Mastering Studio Record...';
+    btn.textContent = 'Mastering...';
 
     try {
-      const wavBlob = await KaroDSP.renderMasterWav(buffers, { ...params, bypassFx: false, soloVocal: false }, compact);
-      const url = URL.createObjectURL(wavBlob);
-      document.getElementById('renderedAudioPlayer').src = url;
-      document.getElementById('masterOutputArea').style.display = 'block';
+      const compact = document.getElementById('exportFormatSelect').value === 'compact';
+      const wavBlob = await KaroDSP.renderMasterWav(
+        { backing: state.backingBuffer, rawVocal: state.rawVocalBuffer, tunedVocal: state.tunedVocalBuffer },
+        state.params,
+        compact
+      );
+      state.exportsUsed++;
+      updateAccountUI();
+      apiFetch('/api/track-export', { method: 'POST' }).catch(() => {});
 
-      const safeTitle = (document.getElementById('projectTitleInput').value || 'karomix-master').replace(/[^a-zA-Z0-9_-]+/g, '_');
+      const url = URL.createObjectURL(wavBlob);
+      document.getElementById('masterOutputArea').style.display = 'block';
+      document.getElementById('renderedAudioPlayer').src = url;
+
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${safeTitle}_${compact ? 'Share' : 'Master'}.wav`;
-      document.body.appendChild(a);
+      a.download = `${(document.getElementById('projectTitleInput').value || 'karomix').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.wav`;
       a.click();
-      a.remove();
 
-      if (window.confetti) {
-        window.confetti({ particleCount: 70, spread: 68, origin: { y: 0.72 } });
-      }
-
-      await fetch('/api/track-export', { method: 'POST', headers: apiHeaders() });
-      await loadServerState();
-      showToast('Mastered audio rendered & downloaded!');
+      if (window.confetti) window.confetti({ particleCount: 70, spread: 65, origin: { y: 0.7 } });
+      showToast('Mastered WAV downloaded!');
     } catch (err) {
-      showToast('Render failed: ' + err.message);
+      showToast('Export error: ' + err.message);
     } finally {
       btn.disabled = false;
-      btn.querySelector('span').innerText = 'Render Master & Download';
+      btn.textContent = 'Download Master';
     }
   }
 
-  window.addEventListener('DOMContentLoaded', () => {
-    setupCanvasInteractions();
+  // ==================== BOOT ====================
+  function init() {
+    renderPresets();
     syncSlidersFromParams();
-    renderPresetCards();
-    updateChips();
-    drawTimeline(0);
-    loadServerState();
-  });
+    updateFxButtonsUI();
+    initTimelinePointerInteractions();
+    refreshServerState();
+
+    window.addEventListener('pointerdown', unlockMobileAudioSync, { once: true, passive: true });
+    window.addEventListener('touchstart', unlockMobileAudioSync, { once: true, passive: true });
+
+    // Pre-decode real female vocal + studio band + Matrix Hall IR silently in background!
+    setTimeout(() => { preloadRealDemoAssets().catch(() => {}); }, 80);
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
 
   return {
-    switchView, openInspectorTab, switchSourceSub,
-    heroSearchSubmit, quickSingSong, searchOrLoadKaraoke, pickKaraokeByIndex, nextKaraokeResult,
-    fetchSyncedLyrics, seekToLyric,
-    openAuthModal, closeAuthModal, setAuthMode, submitAuth, logout,
-    handleBackingUpload, handleVocalUpload, applyKaraokeVocalCut,
-    loadFullDemo, launchInstantShowcase,
-    toggleMicMonitor, toggleMicRecording, startTabPlusMicRecord,
-    togglePlayback, stopAndRewind, updateParam, setMasterProfile,
-    onNoiseGateChange, onCompChange, toggleBypassFx, toggleSoloVocal,
-    reprocessAutoTune, runSmartVoiceMatch, applyPreset, applyCustomD1Preset,
-    setVocalOffset, nudgeOffset, autoAlignTracks, shiftBackingKey,
-    saveCustomPresetToD1, saveProjectToD1, deleteProject, loadProjectByIndex,
-    exportMasteredWav, toggleProDemo,
+    switchView, setStageMode, getMasterSignalRms,
+    toggleHeroDemo, openMixWithRealDemo, loadRealSingerDemo, loadInstrumentalDemoForSing,
+    togglePlayback, stopAndRewind, toggleBypassFx, toggleSoloVocal,
+    applyPreset, updateParam, setMasterProfile, setVocalOffset, autoAlignTracks, runSmartVoiceMatch,
+    applyWorkerAutoTune, shiftBackingKey, applyKaraokeVocalCut,
+    heroSearchSubmit, quickSingSong, searchOrLoadKaraoke, selectKaraokeVideo, nextKaraokeResult,
+    handleBackingUpload, handleVocalUpload, toggleMicMonitor, toggleMicRecording,
+    openAuthModal, closeAuthModal, setAuthMode, submitAuth, logout, toggleProDemo,
+    saveProjectToD1, restoreProject, exportMasteredWav,
   };
 })();

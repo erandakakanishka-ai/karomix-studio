@@ -1,6 +1,4 @@
-import worker from "../../src/worker";
-
-// Automatically enables all /api/* + D1 routes when deployed via Cloudflare Pages too!
-export const onRequest = (context: any) => {
+import worker from './_worker_core';
+export const onRequest: PagesFunction<any> = (context) => {
   return worker.fetch(context.request, context.env);
 };
