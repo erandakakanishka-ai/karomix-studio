@@ -369,8 +369,8 @@ export default {
 
       // 4b. Permanent Account & Data Deletion (GDPR + Google Play Store Data Safety Requirement)
       if (url.pathname === '/api/auth/account' && request.method === 'DELETE') {
-        const authUser: any = await getAuthenticatedUser(request, env);
-        if (!authUser || !env.DB) {
+        const { user: authUser, authenticated } = await resolveUser(request, env);
+        if (!authenticated || !authUser || !env.DB) {
           return json({ error: 'Not signed in' }, 401);
         }
         await env.DB.batch([
