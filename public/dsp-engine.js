@@ -82,8 +82,29 @@ window.KaroDSP = (() => {
   }
 
   function getHallImpulse(ctx) {
-    if (cachedHallImpulse && Math.abs(cachedHallImpulse.sampleRate - ctx.sampleRate) < 8000) {
-      return cachedHallImpulse;
+    if (cachedHallImpulse) {
+      if (cachedHallImpulse.sampleRate === ctx.sampleRate) {
+        return cachedHallImpulse;
+      }
+      // Resample studio Matrix Hall IR cleanly to match OfflineAudioContext sampleRate (prevents W3C ConvolverNode sampleRate mismatch error!)
+      const srcSr = cachedHallImpulse.sampleRate;
+      const dstSr = ctx.sampleRate;
+      const ratio = srcSr / dstSr;
+      const dstLen = Math.max(1, Math.floor(cachedHallImpulse.length / ratio));
+      const out = ctx.createBuffer(cachedHallImpulse.numberOfChannels, dstLen, dstSr);
+      for (let c = 0; c < cachedHallImpulse.numberOfChannels; c++) {
+        const srcCh = cachedHallImpulse.getChannelData(c);
+        const dstCh = out.getChannelData(c);
+        for (let i = 0; i < dstLen; i++) {
+          const pos = i * ratio;
+          const idx = Math.floor(pos);
+          const frac = pos - idx;
+          const s0 = srcCh[idx] || 0;
+          const s1 = srcCh[Math.min(srcCh.length - 1, idx + 1)] || 0;
+          dstCh[i] = s0 + (s1 - s0) * frac;
+        }
+      }
+      return out;
     }
     const sr = ctx.sampleRate;
     const length = Math.floor(sr * 2.1);
