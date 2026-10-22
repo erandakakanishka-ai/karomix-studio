@@ -1,4 +1,4 @@
--- KaroMix Studio v10.0 - Cloudflare D1 Database Schema (Global Timezone Quota + 30-Day Free Pro Pass + Google Auth + Contact)
+-- KaroMix Studio v11.0 - Cloudflare D1 Database Schema (Human Blog CMS + Global Timezone Quota + 30-Day Free Pro Pass + Auth + Contact)
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT UNIQUE,
@@ -53,6 +53,19 @@ CREATE TABLE IF NOT EXISTS contact_messages (
   subject TEXT DEFAULT 'General Inquiry',
   message TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS blog_posts (
+  id TEXT PRIMARY KEY,
+  slug TEXT UNIQUE NOT NULL,
+  title TEXT NOT NULL,
+  category TEXT DEFAULT 'Studio Guide',
+  cover_image TEXT DEFAULT '/assets/studio-girl-card.jpg',
+  excerpt TEXT DEFAULT '',
+  content TEXT NOT NULL,
+  author_name TEXT DEFAULT 'Editor',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 INSERT OR IGNORE INTO users (id, email, password_hash, display_name, plan, currency, exports_this_month, pro_until, daily_date, daily_exports, auth_provider)

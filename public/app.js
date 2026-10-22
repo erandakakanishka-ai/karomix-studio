@@ -2096,109 +2096,33 @@ const App = (() => {
     showToast(`Saved ${state.lastMasterFilename} to device!`);
   }
 
-  // ==================== TOP-LEFT HAMBURGER DRAWER, PRIVACY SETTINGS & STUDIO BLOG ====================
-  const BLOG_POSTS = [
-    {
-      id: 'phone-mic-technique',
-      cat: 'Mic Setup',
-      readTime: '5 min read',
-      date: 'October 2026',
-      image: '/assets/studio-girl-card.jpg',
-      slug: '/blog#phone-mic-technique',
-      title: 'How to Record Clean Studio Vocals on Your Phone Without Expensive Gear',
-      excerpt: 'Simple room acoustics, off-axis phone angles, and distance tricks that immediately stop plosive pops and hollow bedroom echo.',
-      body: `
-        <p>Modern smartphones contain surprisingly accurate omnidirectional MEMS condenser capsules capable of capturing frequencies from 30 Hz up to 18 kHz. The main reason home vocal recordings sound amateur is almost never the microphone itself—it is hard room reflections and air bursts hitting the bottom mic port directly.</p>
-        <h4>1. Record Near Soft Surfaces</h4>
-        <p>Bare tile, glass windows, and concrete walls bounce vocal midrange energy back into the microphone 10 to 25 milliseconds later, creating a hollow boxy ring. Singing facing thick curtains, a bed, upholstered furniture, or an open wardrobe filled with clothes absorbs flutter echo naturally before it ever touches the mic.</p>
-        <h4>2. Follow the 15 cm Off-Axis Rule</h4>
-        <p>Hold your phone <strong>15 to 20 cm (6 to 8 inches)</strong> away rather than right against your lips, angled <strong>30 degrees slightly across your mouth</strong>. Consonant air bursts on "P", "T", and "B" shoot straight forward; holding the phone slightly off-axis lets air pass harmlessly beside the capsule while capturing rich vocal tone.</p>
-        <h4>3. Manage Dynamic Distance</h4>
-        <p>Lean slightly closer on intimate, breathy verses for natural warmth, and pull back 5–8 cm during powerful high chorus notes so your phone preamp never clips or distorts.</p>
-      `,
-    },
-    {
-      id: 'vocal-eq-clarity',
-      cat: 'Vocal Mixing',
-      readTime: '6 min read',
-      date: 'October 2026',
-      image: '/assets/hero-singer.jpg',
-      slug: '/blog#vocal-eq-clarity',
-      title: 'Understanding Vocal EQ: Removing Boxy Mud (250 Hz) & Adding Crisp Air',
-      excerpt: 'Why professional mix engineers cut low-mid room mud before boosting treble—and how each frequency band shapes your voice.',
-      body: `
-        <p>When beginners want clearer vocals, their first instinct is turning volume all the way up until the backing music gets buried. Professional engineers instead carve clean frequency pockets using subtractive equalization first.</p>
-        <h4>Key Vocal Frequency Bands Explained</h4>
-        <p><strong>Below 90 Hz (Rumble Filter):</strong> Contains AC hum, table vibrations, and handling noise with zero singing fundamentals. Filtering below 90 Hz frees clean headroom for your master limiter.</p>
-        <p><strong>220 Hz – 320 Hz (The Mud Zone):</strong> Small bedrooms build resonant standing waves here, making vocals sound muffled under acoustic guitars and pianos. A gentle -2.5 dB to -3.5 dB cut immediately opens up clarity.</p>
-        <p><strong>3.2 kHz – 4.2 kHz (Vocal Presence):</strong> Human hearing is most sensitive here. A smooth bell lift brings lyric consonants forward so every word cuts clearly through dense backing tracks.</p>
-        <p><strong>7 kHz De-Essing + 10 kHz Air:</strong> Taming sharp "S" sibilance around 7 kHz while lifting high-shelf air above 10 kHz delivers smooth, modern studio polish without ear fatigue.</p>
-      `,
-    },
-    {
-      id: 'latency-sync-guide',
-      cat: 'Pitch & Timing',
-      readTime: '4 min read',
-      date: 'October 2026',
-      image: '/assets/studio-stage-card.jpg',
-      slug: '/blog#latency-sync-guide',
-      title: 'Fixing Phone Recording Delay: Why Your Singing Sounds Behind the Beat',
-      excerpt: 'Every phone operating system adds 45–160 ms of audio buffer lag during recording. Here is how to lock your vocal right onto the drums.',
-      body: `
-        <p>Have you ever sung completely in time while recording, yet noticed on playback that your voice sounds slightly late behind every snare drum hit? That lag is hardware round-trip audio latency.</p>
-        <h4>Why Latency Happens</h4>
-        <p>Backing music must travel out of your device audio buffer, into the air or headphones, into the microphone converter, and back into the recorder encoder—adding <strong>45 ms to 165 ms</strong> depending on your phone model. Bluetooth earbuds add another 150–250 ms on top, so wired earphones or direct speaker mode are always strongly recommended.</p>
-        <h4>One-Tap Fix in Mix Studio</h4>
-        <p>Inside <strong>Mix Studio</strong>, click <strong>Auto-Fix Sync</strong> to cross-correlate transient envelopes automatically, or slide <strong>Voice Sync Timing</strong> slightly left (-45 ms to -95 ms) until your vocal locks tightly into the rhythm pocket.</p>
-      `,
-    },
-    {
-      id: 'concert-hall-reverb',
-      cat: 'Vocal Mixing',
-      readTime: '5 min read',
-      date: 'October 2026',
-      image: '/assets/studio-stage-card.jpg',
-      slug: '/blog#concert-hall-reverb',
-      title: 'Concert Hall Reverb & Pre-Delay: Lush Space Without Washing Out Lyrics',
-      excerpt: 'Learn the 35 ms studio pre-delay secret that keeps lead vocals upfront and intimate while filling stereo headphones with wide ambience.',
-      body: `
-        <p>Turning basic reverb past 60% pushes your voice backward as if you are singing from the back of an empty hall. Studio records sound both intimate and huge at the same time thanks to <strong>Pre-Delay</strong> and <strong>Filtered Reverb Sends</strong>.</p>
-        <p>By waiting <strong>30 to 42 milliseconds</strong> after each syllable before starting the hall reflections, the listener hears your crisp dry consonant first, followed smoothly by a warm stereo tail. Filtering bass below 260 Hz and highs above 6 kHz out of the reverb return prevents low-end mud and metallic sibilance splash.</p>
-      `,
-    },
-    {
-      id: 'vocal-warmup-routine',
-      cat: 'Mic Setup',
-      readTime: '5 min read',
-      date: 'October 2026',
-      image: '/assets/studio-girl-card.jpg',
-      slug: '/blog#vocal-warmup-routine',
-      title: 'Daily 5-Minute Vocal Warm-Ups Before Recording Cover Songs',
-      excerpt: 'Gentle lip trills, humming sirens, and breath support exercises used by session singers to hit high chorus notes effortlessly.',
-      body: `
-        <p>Jumping straight into a loud chorus on cold vocal cords causes throat tension and pitch instability. Spending just five minutes warming up dramatically improves pitch accuracy before you hit Record:</p>
-        <p><strong>Minute 1–2 (Lip Trills / Bubbles):</strong> Blow steady gentle air through relaxed lips on five-note scales. This balances subglottal air pressure without straining the vocal folds.</p>
-        <p><strong>Minute 3–4 (Gentle "NG" Sirens):</strong> Sing the "ng" sound at the end of the word "sing", sliding smoothly from your comfortable low note up into head voice and back down to smooth your chest-to-head bridge.</p>
-        <p><strong>Minute 5 (Open Vowel Resonance):</strong> Sing relaxed "Mah-May-Mee-Moh-Moo" scales at moderate volume, keeping your jaw loose and shoulders relaxed, sipping room-temperature water rather than ice-cold drinks.</p>
-      `,
-    },
-    {
-      id: 'mp3-vs-wav-formats',
-      cat: 'Formats',
-      readTime: '4 min read',
-      date: 'October 2026',
-      image: '/assets/hero-singer.jpg',
-      slug: '/blog#mp3-vs-wav-formats',
-      title: '128 kbps Stereo MP3 vs 44.1 kHz WAV: Choosing the Best Export Format',
-      excerpt: 'How modern LAME stereo encoding cuts song file sizes by over 90% (~3 MB vs ~35 MB) while preserving studio vocal detail.',
-      body: `
-        <p>Uncompressed 16-bit 44.1 kHz stereo WAV files store raw PCM samples at roughly <strong>10.1 MB per minute</strong>—meaning a four-minute cover song takes 38–42 MB of storage and struggles to send smoothly over mobile data or messaging apps.</p>
-        <p>KaroMix Studio encodes <strong>128 kbps 44.1 kHz Stereo MP3</strong> directly inside your browser with zero server upload. Psychoacoustic modeling removes only masked frequencies the ear cannot perceive alongside louder musical harmonics, shrinking a full song down to roughly <strong>3.0–3.4 MB</strong> while keeping crisp highs, warm bass, and full stereo width.</p>
-      `,
-    },
-  ];
+  // ==================== TOP-LEFT HAMBURGER DRAWER, PRIVACY SETTINGS & HUMAN BLOG CMS ====================
+  let liveBlogPosts = [];
+  let blogLoadedOnce = false;
 
-  let activeBlogCat = 'All';
+  function escHtml(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function formatArticleBodyHtml(raw) {
+    return String(raw || '')
+      .replace(/\r\n/g, '\n')
+      .split(/\n{2,}/)
+      .map((b) => {
+        const t = b.trim();
+        if (!t) return '';
+        if (t.startsWith('## ')) return `<h3 style="color:var(--amber-bright);margin:16px 0 6px;">${escHtml(t.slice(3))}</h3>`;
+        if (t.startsWith('### ')) return `<h4 style="color:var(--text);margin:14px 0 6px;">${escHtml(t.slice(4))}</h4>`;
+        return `<p style="margin-bottom:12px;">${escHtml(t).replace(/\n/g, '<br />')}</p>`;
+      })
+      .filter(Boolean)
+      .join('');
+  }
 
   function toggleDrawer(forceOpen = null) {
     const bd = document.getElementById('sideDrawerBackdrop');
@@ -2212,6 +2136,7 @@ const App = (() => {
   function drawerGo(viewName) {
     toggleDrawer(false);
     if (viewName !== 'sing') pauseYoutubeStage();
+    if (viewName === 'blog') loadBlogPostsFromServer();
     switchView(viewName);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -2245,6 +2170,20 @@ const App = (() => {
     showToast('Cleared local browser preferences.');
   }
 
+  async function loadBlogPostsFromServer(force = false) {
+    if (blogLoadedOnce && !force) {
+      renderBlogList();
+      return;
+    }
+    try {
+      const res = await fetch('/api/blog');
+      const data = await res.json();
+      liveBlogPosts = Array.isArray(data.posts) ? data.posts : [];
+      blogLoadedOnce = true;
+    } catch (_) {}
+    renderBlogList();
+  }
+
   function renderBlogList() {
     const grid = document.getElementById('blogPostsGrid');
     const reader = document.getElementById('blogReaderWrap');
@@ -2252,52 +2191,64 @@ const App = (() => {
     if (reader) reader.style.display = 'none';
     grid.style.display = 'grid';
 
-    const list = activeBlogCat === 'All'
-      ? BLOG_POSTS
-      : BLOG_POSTS.filter((b) => b.cat === activeBlogCat);
+    if (!liveBlogPosts.length) {
+      grid.innerHTML = `
+        <div class="card" style="grid-column:1 / -1;text-align:center;padding:34px 20px;">
+          <div style="font-size:16px;font-weight:700;margin-bottom:6px;">No Articles Published Yet</div>
+          <p style="font-size:13.5px;color:var(--text-secondary);max-width:440px;margin:0 auto;">
+            Original singing guides, microphone tips, and studio stories will appear here as soon as they are published.
+          </p>
+        </div>
+      `;
+      return;
+    }
 
-    grid.innerHTML = list.map((b) => `
-      <article class="blog-card" onclick="App.openBlogPost('${b.id}')">
-        <img src="${b.image}" alt="${b.title}" loading="lazy" />
+    grid.innerHTML = liveBlogPosts.map((b) => `
+      <article class="blog-card" onclick="App.openBlogPost('${escHtml(b.id)}')">
+        <img src="${escHtml(b.cover_image || '/assets/studio-girl-card.jpg')}" alt="${escHtml(b.title)}" loading="lazy" />
         <div class="blog-card-body">
           <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:6px;">
-            <span style="color:var(--cyan);font-weight:800;text-transform:uppercase;letter-spacing:0.06em;">${b.cat}</span>
-            <span style="color:var(--text-muted);">${b.readTime}</span>
+            <span style="color:var(--cyan);font-weight:800;text-transform:uppercase;letter-spacing:0.06em;">${escHtml(b.category || 'Vocal Guide')}</span>
+            <span style="color:var(--text-muted);">${escHtml(String(b.created_at || '').slice(0, 10))}</span>
           </div>
-          <h3 style="font-size:16px;line-height:1.35;margin-bottom:8px;">${b.title}</h3>
-          <p style="font-size:13px;color:var(--text-secondary);line-height:1.55;flex:1;margin-bottom:12px;">${b.excerpt}</p>
+          <h3 style="font-size:16px;line-height:1.35;margin-bottom:8px;">${escHtml(b.title)}</h3>
+          <p style="font-size:13px;color:var(--text-secondary);line-height:1.55;flex:1;margin-bottom:12px;">${escHtml(b.excerpt || '')}</p>
           <span style="font-size:12.5px;font-weight:700;color:var(--amber-bright);">Read Article →</span>
         </div>
       </article>
     `).join('');
   }
 
-  function filterBlogCategory(cat, btnEl) {
-    activeBlogCat = cat;
-    document.querySelectorAll('.blog-cat-chip').forEach((el) => el.classList.remove('btn-amber'));
-    if (btnEl) btnEl.classList.add('btn-amber');
-    renderBlogList();
-  }
-
   function openBlogPost(postId) {
-    const post = BLOG_POSTS.find((b) => b.id === postId);
+    const post = liveBlogPosts.find((b) => String(b.id) === String(postId));
     if (!post) return;
     const grid = document.getElementById('blogPostsGrid');
     const reader = document.getElementById('blogReaderWrap');
     const content = document.getElementById('blogReaderContent');
+    const ownerBar = document.getElementById('blogOwnerActions');
     if (!grid || !reader || !content) return;
     grid.style.display = 'none';
     reader.style.display = 'block';
+
+    const hasSavedAdmin = Boolean(localStorage.getItem('karomix_blog_admin'));
+    if (ownerBar) {
+      ownerBar.style.display = hasSavedAdmin ? 'flex' : 'none';
+      ownerBar.innerHTML = hasSavedAdmin
+        ? `<button class="btn btn-sm" onclick="App.openBlogEditor('${escHtml(post.id)}')">Edit</button>
+           <button class="btn btn-sm" style="color:#f87171;" onclick="App.deleteBlogPost('${escHtml(post.id)}')">Delete</button>`
+        : '';
+    }
+
     content.innerHTML = `
-      <img src="${post.image}" alt="${post.title}" style="width:100%;max-height:260px;object-fit:cover;border-radius:14px;margin-bottom:16px;" />
+      ${post.cover_image ? `<img src="${escHtml(post.cover_image)}" alt="${escHtml(post.title)}" style="width:100%;max-height:280px;object-fit:cover;border-radius:14px;margin-bottom:16px;" />` : ''}
       <div style="font-size:11.5px;font-weight:800;color:var(--cyan);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">
-        ${post.cat} • ${post.readTime} • ${post.date}
+        ${escHtml(post.category || 'Vocal Guide')} • By ${escHtml(post.author_name || 'Editor')} • ${escHtml(String(post.created_at || '').slice(0, 10))}
       </div>
-      <h2 style="font-size:22px;line-height:1.25;margin-bottom:14px;">${post.title}</h2>
-      <div style="font-size:14.5px;color:#cbd5e1;line-height:1.78;">${post.body}</div>
+      <h2 style="font-size:22px;line-height:1.25;margin-bottom:14px;">${escHtml(post.title)}</h2>
+      <div style="font-size:14.5px;color:#cbd5e1;line-height:1.78;">${formatArticleBodyHtml(post.content)}</div>
       <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
-        <button class="btn btn-amber" onclick="App.drawerGo('sing')">Try This in Vocal Studio →</button>
-        <a href="${post.slug}" class="btn btn-sm" style="text-decoration:none;">Direct Article Link ↗</a>
+        <button class="btn btn-amber" onclick="App.drawerGo('sing')">Open Vocal Studio →</button>
+        <a href="/blog/${escHtml(post.slug)}" class="btn btn-sm" style="text-decoration:none;">Direct SEO Page ↗</a>
       </div>
     `;
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2305,6 +2256,82 @@ const App = (() => {
 
   function closeBlogPost() {
     renderBlogList();
+  }
+
+  function openBlogEditor(editPostId = '') {
+    toggleDrawer(false);
+    const savedPass = localStorage.getItem('karomix_blog_admin') || '';
+    document.getElementById('blogAdminPass').value = savedPass;
+    const existing = editPostId ? liveBlogPosts.find((p) => String(p.id) === String(editPostId)) : null;
+    document.getElementById('blogEditorHeading').textContent = existing ? 'Edit Blog Article' : 'Publish Blog Article';
+    document.getElementById('blogPostId').value = existing ? existing.id : '';
+    document.getElementById('blogPostTitle').value = existing ? existing.title : '';
+    document.getElementById('blogPostCat').value = existing ? (existing.category || 'Vocal Tips') : 'Vocal Tips';
+    document.getElementById('blogPostAuthor').value = existing ? (existing.author_name || '') : '';
+    document.getElementById('blogPostImage').value = existing ? (existing.cover_image || '/assets/studio-girl-card.jpg') : '/assets/studio-girl-card.jpg';
+    document.getElementById('blogPostExcerpt').value = existing ? (existing.excerpt || '') : '';
+    document.getElementById('blogPostBody').value = existing ? (existing.content || '') : '';
+    document.getElementById('blogAdminModal').classList.add('open');
+  }
+
+  function closeBlogEditor() {
+    document.getElementById('blogAdminModal').classList.remove('open');
+  }
+
+  async function submitBlogPost(e) {
+    e.preventDefault();
+    const adminCode = document.getElementById('blogAdminPass').value.trim();
+    const btn = document.getElementById('btnSaveBlogPost');
+    btn.disabled = true;
+    btn.textContent = 'Publishing...';
+    try {
+      const res = await fetch('/api/blog', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Code': adminCode,
+        },
+        body: JSON.stringify({
+          id: document.getElementById('blogPostId').value.trim(),
+          title: document.getElementById('blogPostTitle').value.trim(),
+          category: document.getElementById('blogPostCat').value.trim(),
+          author_name: document.getElementById('blogPostAuthor').value.trim(),
+          cover_image: document.getElementById('blogPostImage').value.trim(),
+          excerpt: document.getElementById('blogPostExcerpt').value.trim(),
+          content: document.getElementById('blogPostBody').value.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        showToast(data.error || 'Failed to publish article');
+        return;
+      }
+      localStorage.setItem('karomix_blog_admin', adminCode);
+      closeBlogEditor();
+      await loadBlogPostsFromServer(true);
+      switchView('blog');
+      showToast(`Published live at ${data.url}!`);
+    } catch (err) {
+      showToast('Network error: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Publish Article Live';
+    }
+  }
+
+  async function deleteBlogPost(postId) {
+    if (!window.confirm('Delete this blog post permanently?')) return;
+    const adminCode = localStorage.getItem('karomix_blog_admin') || '';
+    try {
+      const res = await fetch(`/api/blog/${encodeURIComponent(postId)}`, {
+        method: 'DELETE',
+        headers: { 'X-Admin-Code': adminCode },
+      });
+      const data = await res.json();
+      if (data.error) { showToast(data.error); return; }
+      await loadBlogPostsFromServer(true);
+      showToast('Article deleted.');
+    } catch (_) {}
   }
 
   // ==================== ULTRA-FAST ZERO-RAM BOOT ====================
@@ -2334,10 +2361,10 @@ const App = (() => {
   }
 
   return {
-    switchView: (v) => { if (v !== 'sing') pauseYoutubeStage(); if (v === 'blog') renderBlogList(); switchView(v); },
+    switchView: (v) => { if (v !== 'sing') pauseYoutubeStage(); if (v === 'blog') loadBlogPostsFromServer(); switchView(v); },
     toggleDrawer, drawerGo,
     openPrivacySettings, closePrivacySettings, savePrivacySettings, clearLocalStudioData,
-    filterBlogCategory, openBlogPost, closeBlogPost,
+    openBlogPost, closeBlogPost, openBlogEditor, closeBlogEditor, submitBlogPost, deleteBlogPost,
     setStageMode, getMasterSignalRms,
     hwStateDebug: () => ({
       src: hwAudio.src,

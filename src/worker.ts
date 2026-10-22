@@ -2,22 +2,24 @@ export interface Env {
   DB: D1Database;
   ASSETS?: Fetcher;
   GOOGLE_CLIENT_ID?: string;
+  BLOG_ADMIN_CODE?: string;
 }
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Timezone',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Timezone, X-Admin-Code',
 };
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const DAILY_FREE_LIMIT = 2;
+const DEFAULT_ADMIN_SHA256 = 'b5098ccafc515b07d2d7033a3102e61dcd6ea5d61e91b77d1fce82a4cc3cac16';
 
 let schemaChecked = false;
 
 async function ensureSchema(db?: D1Database) {
   if (!db || schemaChecked) return;
-  const alterStatements = [
+  const statements = [
     `ALTER TABLE users ADD COLUMN pro_until INTEGER DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN daily_date TEXT DEFAULT ''`,
     `ALTER TABLE users ADD COLUMN daily_exports INTEGER DEFAULT 0`,
@@ -30,14 +32,119 @@ async function ensureSchema(db?: D1Database) {
       message TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
+    `CREATE TABLE IF NOT EXISTS blog_posts (
+      id TEXT PRIMARY KEY,
+      slug TEXT UNIQUE NOT NULL,
+      title TEXT NOT NULL,
+      category TEXT DEFAULT 'Studio Guide',
+      cover_image TEXT DEFAULT '/assets/studio-girl-card.jpg',
+      excerpt TEXT DEFAULT '',
+      content TEXT NOT NULL,
+      author_name TEXT DEFAULT 'Editor',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
   ];
-  for (const sql of alterStatements) {
+  for (const sql of statements) {
     try { await db.prepare(sql).run(); } catch (_) {}
   }
   schemaChecked = true;
 }
 
-// Accurate Global Local-Day Calculator (Uses Cloudflare Edge IP Geo Timezone first + Browser IANA fallback)
+function escapeHtml(str: string): string {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderPlainBodyToHtml(raw: string): string {
+  const blocks = String(raw || '').replace(/\r\n/g, '\n').split(/\n{2,}/);
+  return blocks
+    .map((b) => {
+      const trimmed = b.trim();
+      if (!trimmed) return '';
+      if (trimmed.startsWith('## ')) {
+        return `<h2>${escapeHtml(trimmed.slice(3).trim())}</h2>`;
+      }
+      if (trimmed.startsWith('### ')) {
+        return `<h3>${escapeHtml(trimmed.slice(4).trim())}</h3>`;
+      }
+      return `<p>${escapeHtml(trimmed).replace(/\n/g, '<br />')}</p>`;
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+function renderBlogShellHtml(opts: { origin: string; title: string; description: string; canonicalPath: string; bodyHtml: string }) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#07090f" />
+  <title>${escapeHtml(opts.title)}</title>
+  <meta name="description" content="${escapeHtml(opts.description)}" />
+  <link rel="canonical" href="${escapeHtml(opts.origin + opts.canonicalPath)}" />
+  <link rel="icon" type="image/png" href="/assets/logo.png" />
+  <style>
+    :root { --bg:#07090f; --surface:#111625; --border:rgba(148,163,184,0.16); --text:#f8fafc; --muted:#94a3b8; --amber:#fbbf24; --cyan:#38bdf8; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; line-height:1.75; padding:24px 16px 64px; }
+    .wrap { max-width:860px; margin:0 auto; }
+    .top { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:28px; padding-bottom:16px; border-bottom:1px solid var(--border); }
+    .brand { display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--text); font-weight:800; font-size:18px; }
+    .brand img { width:34px; height:34px; border-radius:9px; }
+    .nav-links { display:flex; gap:14px; flex-wrap:wrap; font-size:13.5px; }
+    .nav-links a { color:var(--muted); text-decoration:none; }
+    .nav-links a:hover { color:var(--amber); }
+    h1 { font-size:clamp(25px,4vw,35px); line-height:1.22; margin-bottom:12px; }
+    h2 { font-size:20px; margin:20px 0 8px; color:var(--amber); }
+    h3 { font-size:17px; margin:16px 0 6px; color:var(--text); }
+    p { color:#cbd5e1; margin-bottom:14px; font-size:15px; }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:24px; margin-bottom:18px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(265px,1fr)); gap:16px; }
+    .post-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; overflow:hidden; text-decoration:none; color:inherit; display:flex; flex-direction:column; }
+    .post-card:hover { border-color:var(--amber); }
+    .post-card img { width:100%; height:160px; object-fit:cover; display:block; }
+    .post-body { padding:16px; flex:1; }
+    .tag { font-size:11px; font-weight:800; letter-spacing:0.07em; color:var(--cyan); text-transform:uppercase; }
+    .btn { display:inline-block; background:var(--amber); color:#07090f; font-weight:700; text-decoration:none; padding:9px 16px; border-radius:10px; font-size:13.5px; }
+    footer { margin-top:34px; padding-top:18px; border-top:1px solid var(--border); text-align:center; font-size:12.5px; color:var(--muted); }
+    footer a { color:var(--muted); margin:0 8px; text-decoration:none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <a class="brand" href="/"><img src="/assets/logo.png" alt="KaroMix Studio" /><span>KAROMIX <span style="color:var(--amber);">STUDIO</span></span></a>
+      <nav class="nav-links">
+        <a href="/">Open Studio</a>
+        <a href="/blog" style="color:var(--amber);font-weight:700;">Blog</a>
+        <a href="/about">About</a>
+        <a href="/contact">Contact</a>
+        <a href="/privacy">Privacy</a>
+      </nav>
+    </header>
+    ${opts.bodyHtml}
+    <footer>
+      <div>
+        <a href="/">Home Studio</a> •
+        <a href="/blog">Blog</a> •
+        <a href="/about">About Us</a> •
+        <a href="/contact">Contact Support</a> •
+        <a href="/privacy">Privacy Policy</a> •
+        <a href="/terms">Terms of Service</a>
+      </div>
+      <div style="margin-top:8px;">© 2026 KaroMix Studio</div>
+    </footer>
+  </div>
+</body>
+</html>`;
+}
+
 function getUserLocalDayInfo(request: Request) {
   const cfTz = String((request as any).cf?.timezone || '').trim();
   const headerTz = String(request.headers.get('X-Client-Timezone') || '').trim();
@@ -102,6 +209,14 @@ async function sha256Hex(input: string): Promise<string> {
     .join('');
 }
 
+async function isValidBlogAdmin(request: Request, env: Env): Promise<boolean> {
+  const code = String(request.headers.get('X-Admin-Code') || '').trim();
+  if (!code) return false;
+  if (env.BLOG_ADMIN_CODE && code === env.BLOG_ADMIN_CODE) return true;
+  const hashed = await sha256Hex('admin:' + code);
+  return hashed === DEFAULT_ADMIN_SHA256;
+}
+
 async function resolveUser(request: Request, env: Env) {
   await ensureSchema(env.DB);
   const auth = request.headers.get('Authorization') || '';
@@ -136,7 +251,6 @@ async function resolveUser(request: Request, env: Env) {
   };
 }
 
-// Instant Zero-Key Karaoke Video Search (YouTube Primary + Piped/Invidious Public Fallbacks)
 async function searchKaraokeVideos(rawQuery: string) {
   const clean = rawQuery.trim();
   if (!clean) return [];
@@ -241,6 +355,176 @@ export default {
     }
 
     try {
+      // Dynamic Sitemap XML (Automatically includes every published D1 human blog article!)
+      if (url.pathname === '/sitemap.xml' && request.method === 'GET') {
+        await ensureSchema(env.DB);
+        const staticPaths = [
+          { p: '/', pri: '1.0' },
+          { p: '/blog', pri: '0.9' },
+          { p: '/about', pri: '0.8' },
+          { p: '/contact', pri: '0.8' },
+          { p: '/privacy', pri: '0.7' },
+          { p: '/terms', pri: '0.6' },
+          { p: '/refunds', pri: '0.6' },
+        ];
+        let postUrls = '';
+        if (env.DB) {
+          try {
+            const rows = await env.DB.prepare('SELECT slug, updated_at FROM blog_posts ORDER BY updated_at DESC LIMIT 200').all();
+            for (const r of (rows.results || []) as any[]) {
+              const d = String(r.updated_at || '').slice(0, 10) || '2026-10-22';
+              postUrls += `\n  <url>\n    <loc>${escapeHtml(url.origin)}/blog/${escapeHtml(r.slug)}</loc>\n    <lastmod>${d}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.85</priority>\n  </url>`;
+            }
+          } catch (_) {}
+        }
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${staticPaths
+          .map((s) => `\n  <url>\n    <loc>${escapeHtml(url.origin + s.p)}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>${s.pri}</priority>\n  </url>`)
+          .join('')}${postUrls}\n</urlset>\n`;
+        return new Response(xml, { headers: { 'Content-Type': 'application/xml; charset=utf-8' } });
+      }
+
+      // Dynamic SEO Server-Side Rendered Blog Index & Single Post Pages (/blog & /blog/:slug)
+      if ((url.pathname === '/blog' || url.pathname === '/blog/' || url.pathname.startsWith('/blog/')) && request.method === 'GET') {
+        await ensureSchema(env.DB);
+        const slugPart = url.pathname.replace(/^\/blog\/?/, '').replace(/\/$/, '').trim();
+        if (!slugPart) {
+          const rows = env.DB
+            ? await env.DB.prepare('SELECT id, slug, title, category, cover_image, excerpt, author_name, created_at FROM blog_posts ORDER BY created_at DESC LIMIT 100').all()
+            : { results: [] };
+          const list = (rows.results || []) as any[];
+          const bodyHtml = `
+            <h1>KaroMix Studio Blog</h1>
+            <p style="color:var(--muted);margin-bottom:24px;">Original vocal recording tutorials, microphone reviews, singing techniques, and home audio guides.</p>
+            ${list.length === 0
+              ? `<div class="card"><p style="margin:0;">New articles are coming soon. <a href="/" style="color:var(--amber);">Open KaroMix Studio →</a></p></div>`
+              : `<div class="grid">${list.map((p) => `
+                <a class="post-card" href="/blog/${escapeHtml(p.slug)}">
+                  <img src="${escapeHtml(p.cover_image || '/assets/studio-girl-card.jpg')}" alt="${escapeHtml(p.title)}" />
+                  <div class="post-body">
+                    <div class="tag">${escapeHtml(p.category || 'Guide')}</div>
+                    <h2 style="font-size:17px;color:var(--text);margin:6px 0 8px;">${escapeHtml(p.title)}</h2>
+                    <p style="font-size:13.5px;color:var(--muted);margin:0;">${escapeHtml(p.excerpt || '')}</p>
+                  </div>
+                </a>`).join('')}</div>`
+            }`;
+          return new Response(
+            renderBlogShellHtml({
+              origin: url.origin,
+              title: 'Blog — KaroMix Studio',
+              description: 'Original articles on home vocal recording, microphone setup, singing technique, and audio mixing.',
+              canonicalPath: '/blog',
+              bodyHtml,
+            }),
+            { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          );
+        }
+
+        const post: any = env.DB
+          ? await env.DB.prepare('SELECT * FROM blog_posts WHERE slug = ?').bind(slugPart).first()
+          : null;
+        if (!post) {
+          return new Response(
+            renderBlogShellHtml({
+              origin: url.origin,
+              title: 'Article Not Found — KaroMix Studio',
+              description: 'Article not found.',
+              canonicalPath: '/blog',
+              bodyHtml: `<div class="card"><h1>Article Not Found</h1><p><a class="btn" href="/blog">← View All Blog Posts</a></p></div>`,
+            }),
+            { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          );
+        }
+
+        const bodyHtml = `
+          <article class="card">
+            <p style="margin-bottom:14px;"><a href="/blog" style="color:var(--cyan);text-decoration:none;font-size:13.5px;">← Back to All Posts</a></p>
+            ${post.cover_image ? `<img src="${escapeHtml(post.cover_image)}" alt="${escapeHtml(post.title)}" style="width:100%;max-height:340px;object-fit:cover;border-radius:12px;margin-bottom:18px;" />` : ''}
+            <div class="tag">${escapeHtml(post.category || 'Studio Guide')} • By ${escapeHtml(post.author_name || 'Editor')} • ${escapeHtml(String(post.created_at || '').slice(0, 10))}</div>
+            <h1 style="margin-top:8px;">${escapeHtml(post.title)}</h1>
+            <div style="margin-top:16px;">${renderPlainBodyToHtml(post.content)}</div>
+            <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);">
+              <a class="btn" href="/">Open Vocal Studio →</a>
+            </div>
+          </article>
+        `;
+        return new Response(
+          renderBlogShellHtml({
+            origin: url.origin,
+            title: `${post.title} — KaroMix Studio Blog`,
+            description: post.excerpt || String(post.content || '').slice(0, 155),
+            canonicalPath: `/blog/${post.slug}`,
+            bodyHtml,
+          }),
+          { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+        );
+      }
+
+      // Blog JSON API & Admin CMS Endpoints
+      if (url.pathname === '/api/blog' && request.method === 'GET') {
+        await ensureSchema(env.DB);
+        if (!env.DB) return json({ posts: [] });
+        const rows = await env.DB.prepare('SELECT * FROM blog_posts ORDER BY created_at DESC LIMIT 100').all();
+        return json({ posts: rows.results || [] });
+      }
+
+      if (url.pathname === '/api/blog/verify' && request.method === 'POST') {
+        const ok = await isValidBlogAdmin(request, env);
+        return ok ? json({ ok: true }) : json({ error: 'Invalid admin passcode.' }, 401);
+      }
+
+      if (url.pathname === '/api/blog' && request.method === 'POST') {
+        await ensureSchema(env.DB);
+        if (!(await isValidBlogAdmin(request, env))) {
+          return json({ error: 'Invalid admin passcode.' }, 401);
+        }
+        if (!env.DB) return json({ error: 'Database unavailable' }, 500);
+        const body: any = await request.json();
+        const title = String(body.title || '').trim();
+        const content = String(body.content || '').trim();
+        if (title.length < 3 || content.length < 20) {
+          return json({ error: 'Please enter a post title and full article content.' }, 400);
+        }
+        const rawSlug = String(body.slug || title)
+          .toLowerCase()
+          .replace(/[^a-z0-9\s-]/g, '')
+          .trim()
+          .replace(/\s+/g, '-')
+          .slice(0, 80) || ('post-' + Date.now());
+        const id = String(body.id || '').trim() || crypto.randomUUID();
+        const category = String(body.category || 'Vocal Guide').trim().slice(0, 50);
+        const coverImage = String(body.cover_image || '/assets/studio-girl-card.jpg').trim().slice(0, 400);
+        const excerpt = String(body.excerpt || content.slice(0, 150) + '...').trim().slice(0, 260);
+        const authorName = String(body.author_name || 'Editor').trim().slice(0, 80);
+
+        await env.DB.prepare(
+          `INSERT INTO blog_posts (id, slug, title, category, cover_image, excerpt, content, author_name, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+           ON CONFLICT(id) DO UPDATE SET
+             slug = excluded.slug,
+             title = excluded.title,
+             category = excluded.category,
+             cover_image = excluded.cover_image,
+             excerpt = excluded.excerpt,
+             content = excluded.content,
+             author_name = excluded.author_name,
+             updated_at = CURRENT_TIMESTAMP`
+        ).bind(id, rawSlug, title, category, coverImage, excerpt, content, authorName).run();
+
+        return json({ ok: true, id, slug: rawSlug, url: `/blog/${rawSlug}` });
+      }
+
+      if (url.pathname.startsWith('/api/blog/') && request.method === 'DELETE') {
+        await ensureSchema(env.DB);
+        if (!(await isValidBlogAdmin(request, env))) {
+          return json({ error: 'Invalid admin passcode.' }, 401);
+        }
+        const postId = url.pathname.split('/').pop();
+        if (env.DB && postId) {
+          await env.DB.prepare('DELETE FROM blog_posts WHERE id = ?').bind(postId).run();
+        }
+        return json({ ok: true, deleted: true });
+      }
+
       const tzInfo = getUserLocalDayInfo(request);
 
       // 1. Instant Song Name -> Karaoke Video Search (7-Day Cloudflare Edge Cache)
@@ -299,7 +583,7 @@ export default {
           try {
             const lrcRes = await fetch(
               `https://lrclib.net/api/search?q=${encodeURIComponent(cand)}`,
-              { headers: { 'User-Agent': 'KaroMixStudio/10.0 (https://karomix-studio.pages.dev)' } }
+              { headers: { 'User-Agent': 'KaroMixStudio/11.0 (https://karomix-studio.pages.dev)' } }
             );
             if (lrcRes.ok) {
               const list = (await lrcRes.json()) as any[];
@@ -388,7 +672,7 @@ export default {
         return outResp;
       }
 
-      // 3a. Official Google Sign-In (Gmail 1-Click OAuth Token Verification -> Instant 30-Day FREE Pro Pass!)
+      // 3a. Official Google Sign-In
       if (url.pathname === '/api/auth/google' && request.method === 'POST') {
         await ensureSchema(env.DB);
         const body: any = await request.json();
@@ -428,7 +712,6 @@ export default {
             exports_this_month: 0, pro_until: proUntil, daily_date: tzInfo.localDate, daily_exports: 0,
           };
         } else if (!Number(existing.pro_until || 0)) {
-          // One-time 30-day Free Pro Welcome Gift if never granted before
           const proUntil = Date.now() + THIRTY_DAYS_MS;
           await env.DB.prepare('UPDATE users SET pro_until = ?, auth_provider = ? WHERE id = ?')
             .bind(proUntil, 'google', existing.id).run();
@@ -441,7 +724,7 @@ export default {
         return json({ ok: true, isNewUser, token, user: existing, quota });
       }
 
-      // 3b. Auth Register (Automatically grants 30 Full Days FREE Pro Studio Pass!)
+      // 3b. Auth Register
       if (url.pathname === '/api/auth/register' && request.method === 'POST') {
         await ensureSchema(env.DB);
         const body: any = await request.json();
@@ -513,7 +796,7 @@ export default {
         return json({ ok: true, token, user: safeUser, quota: buildQuotaSummary(safeUser, true, tzInfo) });
       }
 
-      // 4b. Permanent Account & Data Deletion (GDPR + Google Play Store Requirement)
+      // 4b. Permanent Account & Data Deletion
       if (url.pathname === '/api/auth/account' && request.method === 'DELETE') {
         const { user: authUser, authenticated } = await resolveUser(request, env);
         if (!authenticated || !authUser || !env.DB) {
@@ -609,7 +892,7 @@ export default {
         return json({ ok: true, id });
       }
 
-      // 7. Timezone-Aware Daily Export Counter (2/day local midnight reset + Unlimited during 30-day Free Pro Pass)
+      // 7. Timezone-Aware Daily Export Counter
       if (url.pathname === '/api/track-export' && request.method === 'POST') {
         if (env.DB) {
           const { user, authenticated } = await resolveUser(request, env);
@@ -640,7 +923,7 @@ export default {
         return json({ ok: true, plan });
       }
 
-      // 8. Support & Feedback Contact Form Endpoint (Stored directly in Cloudflare D1!)
+      // 8. Support & Feedback Contact Form Endpoint
       if (url.pathname === '/api/contact' && request.method === 'POST') {
         await ensureSchema(env.DB);
         const body: any = await request.json();

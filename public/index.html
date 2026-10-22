@@ -888,7 +888,50 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     <a class="drawer-link" href="/privacy"><span>Privacy Policy</span></a>
     <a class="drawer-link" href="/terms"><span>Terms of Service</span></a>
     <a class="drawer-link" href="/refunds"><span>Trial & Access Policy</span></a>
+    <button class="drawer-link" style="color:var(--text-muted);font-size:12.5px;margin-top:6px;" onclick="App.openBlogEditor()">
+      <span>✎ Admin Blog Publisher</span>
+    </button>
   </aside>
+
+  <!-- Owner Blog Publisher Modal (Protected by Secret Server Passcode) -->
+  <div id="blogAdminModal" class="modal-backdrop" onclick="if(event.target===this)App.closeBlogEditor()">
+    <div class="modal-card" style="max-width:560px;max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 style="font-size:17px;" id="blogEditorHeading">Publish Blog Article</h3>
+        <button class="btn btn-sm" onclick="App.closeBlogEditor()">✕</button>
+      </div>
+      <form onsubmit="App.submitBlogPost(event)">
+        <input type="hidden" id="blogPostId" value="" />
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;">Admin Passcode</label>
+        <input type="password" id="blogAdminPass" class="input" style="width:100%;margin-bottom:10px;" placeholder="Enter owner passcode" required />
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;">Article Title</label>
+        <input type="text" id="blogPostTitle" class="input" style="width:100%;margin-bottom:10px;" placeholder="Write your own original article title..." required />
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+          <div>
+            <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;">Category</label>
+            <input type="text" id="blogPostCat" class="input" style="width:100%;" value="Vocal Tips" />
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;">Author Name</label>
+            <input type="text" id="blogPostAuthor" class="input" style="width:100%;" placeholder="Your Name" />
+          </div>
+        </div>
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;">Cover Photo URL (optional)</label>
+        <input type="text" id="blogPostImage" class="input" style="width:100%;margin-bottom:10px;" value="/assets/studio-girl-card.jpg" />
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;">Short Summary (1–2 sentences for Google Search)</label>
+        <input type="text" id="blogPostExcerpt" class="input" style="width:100%;margin-bottom:10px;" placeholder="Short human summary of your post..." />
+
+        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;">Your Article (Leave blank line between paragraphs; start headings with ## )</label>
+        <textarea id="blogPostBody" class="input" rows="8" style="width:100%;margin-bottom:12px;line-height:1.6;" placeholder="Write your own genuine experience, tips, and story here..." required></textarea>
+
+        <button type="submit" class="btn btn-amber" style="width:100%;" id="btnSaveBlogPost">Publish Article Live</button>
+      </form>
+    </div>
+  </div>
 
   <!-- Privacy & Cookie Preferences Modal -->
   <div id="privacyModal" class="modal-backdrop" onclick="if(event.target===this)App.closePrivacySettings()">
@@ -1026,31 +1069,6 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
             <div class="step-badge">STEP 03</div>
             <h3 style="font-size:16.5px;margin-bottom:5px;">One-Tap Studio Mix & MP3</h3>
             <p style="font-size:13px;color:var(--text-secondary);">Choose Concert Hall or Pop Air, align vocal timing in 1 tap, and download a compact stereo MP3 (~3 MB).</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Original Vocal Engineering & Home Recording Reference -->
-      <div class="card" style="margin-top:26px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
-          <div>
-            <span class="step-badge">VOCAL RECORDING & MASTERING GUIDE</span>
-            <h2 style="font-size:19px;">How Studio Vocal Mastering Works in Your Browser</h2>
-          </div>
-          <button class="btn btn-sm" onclick="App.drawerGo('blog')">Read Vocal Blog →</button>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;font-size:13.5px;color:var(--text-secondary);line-height:1.68;">
-          <div>
-            <h3 style="font-size:15px;color:var(--text);margin-bottom:6px;">1. Private Local Signal Chain</h3>
-            <p>Raw smartphone microphones pick up boxy low-mid room reflections between 220 Hz and 320 Hz alongside background fan hum. KaroMix Studio processes audio locally inside your browser using a multi-stage vocal chain: an adaptive noise gate, subtractive mud-cut EQ, dual-stage optical compression, de-essing, true-stereo concert hall pre-delay reverb, and peak limiting.</p>
-          </div>
-          <div>
-            <h3 style="font-size:15px;color:var(--text);margin-bottom:6px;">2. Phone Placement & Sync Alignment</h3>
-            <p>Hold your phone 15–20 cm (6–8 inches) away at a slight 30-degree angle across your mouth so plosive "P" and "B" air bursts pass beside the capsule instead of clipping it. Because mobile operating systems add 45–160 ms of audio buffer delay during recording, tap <strong>Auto-Fix Sync</strong> in Mix Studio to lock your vocal phrasing tightly onto the beat.</p>
-          </div>
-          <div>
-            <h3 style="font-size:15px;color:var(--text);margin-bottom:6px;">3. Compact 128 kbps MP3 vs Studio WAV</h3>
-            <p>Uncompressed stereo WAV files consume roughly 10 MB per minute (~35 MB per song). KaroMix Studio includes a built-in client-side LAME stereo MP3 encoder that masters clean 128 kbps stereo tracks at ~0.95 MB per minute (~3.2 MB per full song)—ideal for instant WhatsApp sharing and mobile storage without server uploads.</p>
           </div>
         </div>
       </div>
@@ -1419,28 +1437,22 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     </div>
   </section>
 
-  <!-- ==================== VIEW 5: VOCAL BLOG & STUDIO GUIDES ==================== -->
+  <!-- ==================== VIEW 5: STUDIO BLOG (100% HUMAN AUTHOR ARTICLES FROM D1) ==================== -->
   <section id="view-blog" class="app-view">
     <div class="container" style="max-width:960px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
         <div>
-          <span class="step-badge">VOCAL RECORDING & MIXING BLOG</span>
-          <h2 style="font-size:24px;">Studio Guides & Singing Tips</h2>
-          <p style="font-size:13.5px;color:var(--text-secondary);">Practical tutorials on smartphone mic technique, room acoustics, vocal EQ, latency sync, and clean MP3 mastering.</p>
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="btn btn-sm btn-amber blog-cat-chip" onclick="App.filterBlogCategory('All', this)">All</button>
-          <button class="btn btn-sm blog-cat-chip" onclick="App.filterBlogCategory('Mic Setup', this)">Mic Setup</button>
-          <button class="btn btn-sm blog-cat-chip" onclick="App.filterBlogCategory('Vocal Mixing', this)">Vocal Mixing</button>
-          <button class="btn btn-sm blog-cat-chip" onclick="App.filterBlogCategory('Pitch & Timing', this)">Pitch & Timing</button>
-          <button class="btn btn-sm blog-cat-chip" onclick="App.filterBlogCategory('Formats', this)">Formats</button>
+          <span class="step-badge">KAROMIX STUDIO BLOG</span>
+          <h2 style="font-size:24px;">Articles & Singing Tips</h2>
+          <p style="font-size:13.5px;color:var(--text-secondary);">Real guides, singing experiences, microphone setup notes, and studio tips.</p>
         </div>
       </div>
 
-      <!-- Full Article Reader (Shown when user opens any post inside Blog tab) -->
+      <!-- Full Article Reader -->
       <div id="blogReaderWrap" style="display:none;" class="card">
-        <div style="margin-bottom:14px;">
-          <button class="btn btn-sm" onclick="App.closeBlogPost()">← Back to All Blog Posts</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-sm" onclick="App.closeBlogPost()">← Back to Blog</button>
+          <div id="blogOwnerActions" style="display:none;gap:6px;"></div>
         </div>
         <div id="blogReaderContent"></div>
       </div>
@@ -1488,8 +1500,8 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     </button>
   </nav>
 
-  <script src="/vendor/confetti.min.js?v=10.0"></script>
-  <script src="/dsp-engine.js?v=10.0"></script>
-  <script src="/app.js?v=10.0"></script>
+  <script src="/vendor/confetti.min.js?v=11.0"></script>
+  <script src="/dsp-engine.js?v=11.0"></script>
+  <script src="/app.js?v=11.0"></script>
 </body>
 </html>
