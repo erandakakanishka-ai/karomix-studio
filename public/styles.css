@@ -164,7 +164,7 @@ svg.icon {
   touch-action: manipulation;
 }
 .btn:hover:not(:disabled) { background: var(--surface-3); border-color: var(--border-strong); }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled { opacity: 0.72; cursor: not-allowed; }
 
 .btn-amber {
   background: linear-gradient(180deg, #fbbf24 0%, #ea580c 100%);

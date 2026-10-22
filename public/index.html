@@ -217,7 +217,7 @@ svg.icon {
   touch-action: manipulation;
 }
 .btn:hover:not(:disabled) { background: var(--surface-3); border-color: var(--border-strong); }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled { opacity: 0.72; cursor: not-allowed; }
 
 .btn-amber {
   background: linear-gradient(180deg, #fbbf24 0%, #ea580c 100%);
@@ -1171,9 +1171,9 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
         </div>
 
         <select id="exportFormatSelect" onchange="App.onExportFormatChange()" style="width:100%;margin-bottom:10px;">
-          <option value="mp3_compact" selected>Compact Studio Stereo MP3 — 128 kbps (~1 MB/min, Small MB — Recommended)</option>
-          <option value="mp3_ultra">Ultra-Light Mobile MP3 — 96 kbps (~0.7 MB/min, Data Saver)</option>
-          <option value="wav_hq">Studio Archive Lossless WAV — 44.1 kHz Stereo</option>
+          <option value="mp3_compact" selected>MP3 Stereo • 128 kbps (~1 MB/min • Recommended)</option>
+          <option value="mp3_ultra">MP3 Light • 96 kbps (~0.7 MB/min • Data Saver)</option>
+          <option value="wav_hq">WAV Lossless • 44.1 kHz Studio Archive</option>
         </select>
         <div style="display:grid;grid-template-columns:1fr 1.35fr;gap:8px;">
           <button class="btn" onclick="App.saveProjectToD1()">Save Cloud</button>

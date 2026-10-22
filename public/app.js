@@ -2050,6 +2050,9 @@ const App = (() => {
       }
       document.getElementById('renderedAudioPlayer').src = url;
 
+      btn.disabled = false;
+      onExportFormatChange();
+
       const a = document.createElement('a');
       a.href = url;
       a.download = fname;
