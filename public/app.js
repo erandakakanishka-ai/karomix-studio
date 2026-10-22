@@ -56,6 +56,9 @@ const App = (() => {
     pausePositionSec: 0,
     uiTimerId: null,
     refreshTimerId: null,
+    cropStartRatio: 0,
+    cropEndRatio: 1,
+    uncroppedBackup: null,
 
     karaokeCutActive: false,
     transposeSemitones: 0,
@@ -178,13 +181,8 @@ const App = (() => {
     }
   }
 
-  function setStageMode(mode) {
-    state.stageMode = mode;
-    document.getElementById('btnStageVideo').className = mode === 'video' ? 'btn btn-sm btn-cyan' : 'btn btn-sm';
-    document.getElementById('btnStageLyrics').className = mode === 'lyrics' ? 'btn btn-sm btn-cyan' : 'btn btn-sm';
-    const vw = document.getElementById('stageVideoWrap');
-    vw.classList.toggle('collapsed-audio-only', mode === 'lyrics');
-    document.getElementById('stageLyricsWrap').style.display = mode === 'lyrics' ? 'block' : 'none';
+  function setStageMode() {
+    // Video and scrollable clean lyrics box remain visible together directly beneath one another!
   }
 
   // ==================== ON-DEMAND STEM DECODER (ZERO BOOT RAM SPIKE ON ANDROID 8.1!) ====================
@@ -913,6 +911,9 @@ const App = (() => {
     state.karaokeIndex = idx;
     renderKaraokeStrip();
     renderYoutubeEmbed(v.id || v.videoId, v.title);
+    if (!state.lrcLines.length && v.title) {
+      fetchLyrics(v.title);
+    }
   }
 
   function nextKaraokeResult() {
@@ -920,43 +921,87 @@ const App = (() => {
     selectKaraokeVideo((state.karaokeIndex + 1) % state.karaokeResults.length);
   }
 
+  function renderPlainLyricsText(rawText, sourceLabel = 'Lyrics ready') {
+    const htmlRows = [];
+    String(rawText || '').split('\n').forEach((line) => {
+      const cleaned = line.replace(/\[\d+:\d+(?:\.\d+)?\]/g, '').trim();
+      if (cleaned) {
+        htmlRows.push(`<div class="lyric-row">${cleaned}</div>`);
+      } else if (htmlRows.length && !htmlRows[htmlRows.length - 1].includes('lyric-spacer')) {
+        htmlRows.push('<div class="lyric-spacer"></div>');
+      }
+    });
+    state.lrcLines = htmlRows;
+    const box = document.getElementById('lyricsStageBox');
+    const lbl = document.getElementById('lyricsStatusLabel');
+    if (box && htmlRows.length) {
+      box.innerHTML = htmlRows.join('');
+      box.scrollTop = 0;
+      if (lbl) lbl.textContent = sourceLabel;
+      const ta = document.getElementById('customLyricsTextarea');
+      if (ta) ta.value = String(rawText || '').replace(/\[\d+:\d+(?:\.\d+)?\]/g, '').trim();
+      return true;
+    }
+    return false;
+  }
+
+  function toggleCustomLyricsEditor() {
+    const wrap = document.getElementById('customLyricsEditorWrap');
+    if (!wrap) return;
+    wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
+  }
+
+  function saveCustomLyrics() {
+    const val = document.getElementById('customLyricsTextarea')?.value?.trim() || '';
+    if (!val) {
+      showToast('Paste or type lyrics first');
+      return;
+    }
+    renderPlainLyricsText(val, 'Custom lyrics');
+    document.getElementById('customLyricsEditorWrap').style.display = 'none';
+    showToast('Lyrics updated!');
+  }
+
   async function fetchLyrics(query) {
+    const lbl = document.getElementById('lyricsStatusLabel');
+    const box = document.getElementById('lyricsStageBox');
+    state.lrcLines = [];
+    if (lbl) lbl.textContent = 'Finding lyrics...';
+    if (box) box.innerHTML = '<div class="lyric-row" style="color:var(--text-secondary);">Loading song lyrics...</div>';
+
     try {
       const cleanQ = String(query || '').replace(/\b(karaoke|instrumental|lyrics|version|official|acoustic)\b/gi, '').trim() || query;
       let hit = null;
 
+      // Primary: Edge Multi-Source API (works on Android 8.1 TLS + covers 3M+ Global LRCLIB + 2,370+ Regional songs!)
       try {
-        const directRes = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(cleanQ)}`);
-        if (directRes.ok) {
-          const list = await directRes.json();
-          if (Array.isArray(list) && list.length) {
-            hit = list.find((item) => item.syncedLyrics) || list.find((item) => item.plainLyrics) || null;
-          }
+        const res = await fetch(`/api/lyrics?q=${encodeURIComponent(cleanQ)}`);
+        if (res.ok) {
+          const data = await res.json();
+          hit = data.track || (data.results || [])[0] || null;
         }
       } catch (_) {}
 
+      // Fallback: Direct LRCLIB query
       if (!hit) {
-        const res = await fetch(`/api/lyrics?q=${encodeURIComponent(cleanQ)}`);
-        const data = await res.json();
-        hit = data.track || (data.results || [])[0];
+        try {
+          const directRes = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(cleanQ)}`);
+          if (directRes.ok) {
+            const list = await directRes.json();
+            if (Array.isArray(list) && list.length) {
+              hit = list.find((item) => item.plainLyrics) || list.find((item) => item.syncedLyrics) || null;
+            }
+          }
+        } catch (_) {}
       }
-      if (!hit) return;
 
-      const rawText = String(hit.plainLyrics || hit.syncedLyrics || '');
-      const htmlRows = [];
-      rawText.split('\n').forEach((line) => {
-        const cleaned = line.replace(/\[\d+:\d+(?:\.\d+)?\]/g, '').trim();
-        if (cleaned) {
-          htmlRows.push(`<div class="lyric-row">${cleaned}</div>`);
-        } else if (htmlRows.length && !htmlRows[htmlRows.length - 1].includes('lyric-spacer')) {
-          htmlRows.push('<div class="lyric-spacer"></div>');
-        }
-      });
-      state.lrcLines = htmlRows;
-      const box = document.getElementById('lyricsStageBox');
-      if (box && htmlRows.length) {
-        box.innerHTML = htmlRows.join('');
-        box.scrollTop = 0;
+      if (hit && renderPlainLyricsText(hit.plainLyrics || hit.syncedLyrics || '', 'Full song lyrics')) {
+        return;
+      }
+
+      if (lbl) lbl.textContent = 'Tap Edit Lyrics to paste';
+      if (box) {
+        box.innerHTML = '<div class="lyric-row" style="color:var(--text-secondary);">Lyrics not found in database for this version — read directly from the video above or tap "Edit Lyrics" to paste yours.</div>';
       }
     } catch (_) {}
   }
@@ -1286,8 +1331,147 @@ const App = (() => {
     await startPlayback(0);
   }
 
-  // ==================== LOW-CPU WAVEFORM & PITCH CANVAS ====================
-  function drawTimeline(playheadSec = getCurrentPlayhead()) {
+  // ==================== PRO DRAGGABLE PLAYHEAD + VISUAL AUDIO CROP TIMELINE ====================
+  function updateCropLabels() {
+    const total = getTotalDuration();
+    const sSec = state.cropStartRatio * total;
+    const eSec = state.cropEndRatio * total;
+    const st = document.getElementById('cropStartText');
+    const et = document.getElementById('cropEndText');
+    const rl = document.getElementById('cropRangeLabel');
+    if (st) st.textContent = fmtTime(sSec);
+    if (et) et.textContent = state.cropEndRatio >= 0.998 ? fmtTime(total) : fmtTime(eSec);
+    if (rl) rl.textContent = `${fmtTime(sSec)} → ${fmtTime(eSec)} (${Math.max(0.1, eSec - sSec).toFixed(1)}s)`;
+  }
+
+  function resetCropMarkers() {
+    state.cropStartRatio = 0;
+    state.cropEndRatio = 1;
+    const cs = document.getElementById('cropStartSlider');
+    const ce = document.getElementById('cropEndSlider');
+    if (cs) cs.value = 0;
+    if (ce) ce.value = 1000;
+    updateCropLabels();
+  }
+
+  function scrubPlayhead(sliderVal, commitAudio = false) {
+    const total = getTotalDuration();
+    const ratio = Math.max(0, Math.min(1, Number(sliderVal) / 1000));
+    const targetSec = ratio * total;
+    state.pausePositionSec = targetSec;
+    const mixT = document.getElementById('transportTime');
+    if (mixT) mixT.textContent = `${fmtTime(targetSec)} / ${fmtTime(total)}`;
+    drawTimeline(targetSec, false);
+    if (commitAudio && state.isPlaying) {
+      try { hwAudio.currentTime = targetSec; } catch (_) {}
+    }
+  }
+
+  function updateCropSlider(edge, rawVal) {
+    const val = Math.max(0, Math.min(1, Number(rawVal) / 1000));
+    if (edge === 'start') {
+      state.cropStartRatio = Math.min(val, state.cropEndRatio - 0.03);
+      document.getElementById('cropStartSlider').value = Math.round(state.cropStartRatio * 1000);
+    } else {
+      state.cropEndRatio = Math.max(val, state.cropStartRatio + 0.03);
+      document.getElementById('cropEndSlider').value = Math.round(state.cropEndRatio * 1000);
+    }
+    updateCropLabels();
+    drawTimeline();
+  }
+
+  function markCropAtPlayhead(edge) {
+    const total = getTotalDuration();
+    const curRatio = Math.max(0, Math.min(1, getCurrentPlayhead() / Math.max(0.1, total)));
+    updateCropSlider(edge, Math.round(curRatio * 1000));
+    showToast(edge === 'start' ? `Crop Start set at ${fmtTime(curRatio * total)}` : `Crop End set at ${fmtTime(curRatio * total)}`);
+  }
+
+  async function applyAudioCrop() {
+    if (state.cropStartRatio <= 0.002 && state.cropEndRatio >= 0.998) {
+      showToast('Move Start Cut or End Cut sliders first to select the part to keep');
+      return;
+    }
+    unlockMobileAudioSync();
+    if (!state.backingBuffer && !state.rawVocalBuffer) {
+      await preloadRealDemoAssets();
+    }
+    const total = getTotalDuration();
+    const startSec = state.cropStartRatio * total;
+    const endSec = state.cropEndRatio * total;
+    if (endSec - startSec < 0.4) {
+      showToast('Selected audio region is too short');
+      return;
+    }
+
+    stopPlaybackInternal();
+
+    if (!state.uncroppedBackup) {
+      state.uncroppedBackup = {
+        originalBackingBuffer: state.originalBackingBuffer,
+        backingBuffer: state.backingBuffer,
+        rawVocalBuffer: state.rawVocalBuffer,
+        tunedVocalBuffer: state.tunedVocalBuffer,
+        isDemoSession: state.isDemoSession,
+      };
+    }
+
+    const ctx = ensureAudioCtx();
+    if (state.originalBackingBuffer) {
+      state.originalBackingBuffer = KaroDSP.sliceAudioBuffer(ctx, state.originalBackingBuffer, startSec, endSec);
+    }
+    if (state.backingBuffer) {
+      state.backingBuffer = KaroDSP.sliceAudioBuffer(ctx, state.backingBuffer, startSec, endSec);
+      state.backingPeaks = KaroDSP.computeWaveformPeaks(state.backingBuffer, 220);
+    }
+    if (state.rawVocalBuffer) {
+      state.rawVocalBuffer = KaroDSP.sliceAudioBuffer(ctx, state.rawVocalBuffer, startSec, endSec);
+      state.vocalPeaks = KaroDSP.computeWaveformPeaks(state.rawVocalBuffer, 220);
+    }
+    if (state.tunedVocalBuffer) {
+      state.tunedVocalBuffer = KaroDSP.sliceAudioBuffer(ctx, state.tunedVocalBuffer, startSec, endSec);
+    }
+    suspendIdleWebAudio();
+
+    state.demoEdited = true;
+    markMixDirty();
+    state.pausePositionSec = 0;
+    resetCropMarkers();
+    const undoBtn = document.getElementById('btnUndoCrop');
+    if (undoBtn) undoBtn.style.display = 'inline-flex';
+
+    await ensureHardwareStreamUrl();
+    hwAudio.src = state.cachedMixUrl;
+    drawTimeline(0);
+    updateCropLabels();
+    document.getElementById('transportTime').textContent = `00:00 / ${fmtTime(endSec - startSec)}`;
+    showToast(`Cropped cleanly to ${fmtTime(endSec - startSec)}!`);
+  }
+
+  async function undoAudioCrop() {
+    if (!state.uncroppedBackup) return;
+    stopPlaybackInternal();
+    const b = state.uncroppedBackup;
+    state.originalBackingBuffer = b.originalBackingBuffer;
+    state.backingBuffer = b.backingBuffer;
+    state.rawVocalBuffer = b.rawVocalBuffer;
+    state.tunedVocalBuffer = b.tunedVocalBuffer;
+    state.isDemoSession = b.isDemoSession;
+    state.backingPeaks = state.backingBuffer ? KaroDSP.computeWaveformPeaks(state.backingBuffer, 220) : null;
+    state.vocalPeaks = state.rawVocalBuffer ? KaroDSP.computeWaveformPeaks(state.rawVocalBuffer, 220) : null;
+    state.uncroppedBackup = null;
+    markMixDirty();
+    state.pausePositionSec = 0;
+    resetCropMarkers();
+    document.getElementById('btnUndoCrop').style.display = 'none';
+    await ensureHardwareStreamUrl();
+    if (state.cachedMixUrl) hwAudio.src = state.cachedMixUrl;
+    drawTimeline(0);
+    updateCropLabels();
+    showToast('Restored full original audio!');
+  }
+
+  function drawTimeline(playheadSec = getCurrentPlayhead(), syncScrubber = true) {
     const canvas = document.getElementById('waveformCanvas');
     if (!canvas) return;
     const w = canvas.clientWidth;
@@ -1325,63 +1509,89 @@ const App = (() => {
 
     const bDur = state.backingBuffer ? state.backingBuffer.duration : (state.isDemoSession ? total : 0);
     if (state.backingPeaks && bDur > 0) {
-      drawPeaks(state.backingPeaks, bDur, 0, h * 0.27, h * 0.2, '#38bdf8');
+      drawPeaks(state.backingPeaks, bDur, 0, h * 0.28, h * 0.19, '#38bdf8');
     }
     const vDur = state.rawVocalBuffer ? state.rawVocalBuffer.duration : (state.isDemoSession ? total : 0);
     if (state.vocalPeaks && vDur > 0) {
       const offSec = (state.params.vocalOffsetMs || 0) / 1000;
-      drawPeaks(state.vocalPeaks, vDur, offSec, h * 0.74, h * 0.2, '#fbbf24');
+      drawPeaks(state.vocalPeaks, vDur, offSec, h * 0.74, h * 0.19, '#fbbf24');
     }
 
-    const px = Math.max(0, Math.min(w, (playheadSec / total) * w));
+    // Visual Crop Region Shading + Left/Right Cut Markers
+    const cropX0 = state.cropStartRatio * w;
+    const cropX1 = state.cropEndRatio * w;
+    if (state.cropStartRatio > 0.002) {
+      g.fillStyle = 'rgba(0, 0, 0, 0.68)';
+      g.fillRect(0, 0, cropX0, h);
+      g.strokeStyle = '#38bdf8';
+      g.lineWidth = 2.5;
+      g.beginPath(); g.moveTo(cropX0, 0); g.lineTo(cropX0, h); g.stroke();
+    }
+    if (state.cropEndRatio < 0.998) {
+      g.fillStyle = 'rgba(0, 0, 0, 0.68)';
+      g.fillRect(cropX1, 0, w - cropX1, h);
+      g.strokeStyle = '#fbbf24';
+      g.lineWidth = 2.5;
+      g.beginPath(); g.moveTo(cropX1, 0); g.lineTo(cropX1, h); g.stroke();
+    }
+
+    // Prominent Easy-Grip White Playhead Line + Top Handle Knob
+    const px = Math.max(6, Math.min(w - 6, (playheadSec / total) * w));
     g.strokeStyle = '#ffffff';
-    g.lineWidth = 2;
+    g.lineWidth = 2.5;
     g.beginPath(); g.moveTo(px, 0); g.lineTo(px, h); g.stroke();
+
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.arc(px, 10, 6.5, 0, Math.PI * 2);
+    g.fill();
+
     g.restore();
+
+    if (syncScrubber) {
+      const sl = document.getElementById('playheadSlider');
+      if (sl) sl.value = Math.round(Math.max(0, Math.min(1, playheadSec / total)) * 1000);
+    }
+    updateCropLabels();
   }
 
   function initTimelinePointerInteractions() {
     const canvas = document.getElementById('waveformCanvas');
     if (!canvas) return;
-    let draggingVocal = false;
-    let startX = 0;
-    let startOffset = 0;
+    let draggingPlayhead = false;
+
+    const seekFromEvent = (e, commitAudio = false) => {
+      const rect = canvas.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / Math.max(1, rect.width)));
+      const seek = ratio * getTotalDuration();
+      state.pausePositionSec = seek;
+      const mixT = document.getElementById('transportTime');
+      if (mixT) mixT.textContent = `${fmtTime(seek)} / ${fmtTime(getTotalDuration())}`;
+      drawTimeline(seek);
+      if (commitAudio && state.isPlaying) {
+        try { hwAudio.currentTime = seek; } catch (_) {}
+      }
+    };
 
     canvas.addEventListener('pointerdown', (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const y = e.clientY - rect.top;
-      if (y > rect.height * 0.5) {
-        draggingVocal = true;
-        startX = e.clientX;
-        startOffset = state.params.vocalOffsetMs || 0;
-        canvas.setPointerCapture(e.pointerId);
-      } else {
-        const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        const seek = ratio * getTotalDuration();
-        state.pausePositionSec = seek;
-        if (state.isPlaying) {
-          try { hwAudio.currentTime = seek; } catch (_) {}
-          drawTimeline(seek);
-        } else {
-          drawTimeline(seek);
-        }
-      }
+      draggingPlayhead = true;
+      try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      seekFromEvent(e, false);
     });
 
     canvas.addEventListener('pointermove', (e) => {
-      if (!draggingVocal) return;
-      const rect = canvas.getBoundingClientRect();
-      const deltaSec = ((e.clientX - startX) / rect.width) * getTotalDuration();
-      const clamped = Math.max(-500, Math.min(500, Math.round(startOffset + deltaSec * 1000)));
-      setVocalOffset(clamped, false);
+      if (!draggingPlayhead) return;
+      seekFromEvent(e, false);
     });
 
-    canvas.addEventListener('pointerup', () => {
-      if (draggingVocal) {
-        draggingVocal = false;
-        if (state.isPlaying) scheduleHardwareRefresh(40);
-      }
-    });
+    const finishDrag = (e) => {
+      if (!draggingPlayhead) return;
+      draggingPlayhead = false;
+      seekFromEvent(e, true);
+    };
+
+    canvas.addEventListener('pointerup', finishDrag);
+    canvas.addEventListener('pointercancel', finishDrag);
   }
 
   function drawPitchGraph() {
@@ -1677,9 +1887,11 @@ const App = (() => {
     }),
     toggleHeroDemo, openMixWithRealDemo, loadRealSingerDemo, loadInstrumentalDemoForSing,
     togglePlayback, stopAndRewind, toggleBypassFx, toggleSoloVocal,
+    scrubPlayhead, updateCropSlider, markCropAtPlayhead, applyAudioCrop, undoAudioCrop,
     applyPreset, setClarityMacro, updateParam, setMasterProfile, setVocalOffset, autoAlignTracks, runSmartVoiceMatch,
     applyWorkerAutoTune, shiftBackingKey, applyKaraokeVocalCut,
     heroSearchSubmit, quickSingSong, searchOrLoadKaraoke, selectKaraokeVideo, nextKaraokeResult, seekToLyric,
+    toggleCustomLyricsEditor, saveCustomLyrics,
     onMicModeChange, handleBackingUpload, handleVocalUpload, toggleMicMonitor, toggleMicRecording, receiveNativeDualTracks,
     openAuthModal, closeAuthModal, setAuthMode, submitAuth, logout, toggleProDemo,
     saveProjectToD1, restoreProject, exportMasteredWav, shareMasterFile,

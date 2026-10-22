@@ -190,23 +190,124 @@ export default {
         return resp;
       }
 
-      // 2. Open-Source LRCLIB Time-Synced Karaoke Lyrics Search
+      // 2. Universal Multi-Source Global + Regional Lyrics Search (7-Day Edge Cached)
       if (url.pathname === '/api/lyrics' && request.method === 'GET') {
         const q = (url.searchParams.get('q') || '').trim();
         if (!q) return json({ track: null });
-        const cleanQ = q.replace(/\b(karaoke|instrumental|lyrics|version|official|acoustic)\b/gi, '').trim() || q;
-        try {
-          const lrcRes = await fetch(
-            `https://lrclib.net/api/search?q=${encodeURIComponent(cleanQ)}`,
-            { headers: { 'User-Agent': 'KaroMixAIStudio/3.0 (https://karomix-studio.pages.dev)' } }
-          );
-          if (lrcRes.ok) {
-            const list = (await lrcRes.json()) as any[];
-            const best = list.find((item) => item.syncedLyrics) || list.find((item) => item.plainLyrics) || null;
-            return json({ track: best });
-          }
-        } catch (_) {}
-        return json({ track: null });
+
+        const cleanQ = q
+          .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+          .replace(/\b(karaoke|instrumental|lyrics|lyric|with|on\s+screen|version|official|video|audio|hd|hq|original|key|cover|minus\s+one|track)\b/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .trim() || q;
+
+        const cacheKey = new Request(`https://karomix-cache.local/v7/lyrics?q=${encodeURIComponent(cleanQ.toLowerCase())}`);
+        const edgeCache = (globalThis as any).caches?.default;
+        if (edgeCache) {
+          const cachedHit = await edgeCache.match(cacheKey);
+          if (cachedHit) return cachedHit;
+        }
+
+        let foundTrack: any = null;
+
+        // Tier 1: LRCLIB (3M+ Global Songs — try full clean query, then main title part)
+        const candidates = [cleanQ];
+        if (cleanQ.includes('-')) {
+          candidates.push(...cleanQ.split('-').map((s) => s.trim()).filter((s) => s.length > 2));
+        }
+        for (const cand of candidates) {
+          if (foundTrack) break;
+          try {
+            const lrcRes = await fetch(
+              `https://lrclib.net/api/search?q=${encodeURIComponent(cand)}`,
+              { headers: { 'User-Agent': 'KaroMixAIStudio/7.0 (https://karomix-studio.pages.dev)' } }
+            );
+            if (lrcRes.ok) {
+              const list = (await lrcRes.json()) as any[];
+              foundTrack = list.find((item) => item.plainLyrics) || list.find((item) => item.syncedLyrics) || null;
+            }
+          } catch (_) {}
+        }
+
+        // Tier 2: Regional Romanized Slug Index (2,370+ Songs, Edge-Cached Sitemap)
+        if (!foundTrack) {
+          try {
+            const smCacheKey = new Request('https://karomix-cache.local/v7/lyrihub-sitemap');
+            let xml = '';
+            if (edgeCache) {
+              const smHit = await edgeCache.match(smCacheKey);
+              if (smHit) xml = await smHit.text();
+            }
+            if (!xml) {
+              const smRes = await fetch('https://www.lyrihub.lk/sitemap-0.xml');
+              if (smRes.ok) {
+                xml = await smRes.text();
+                if (edgeCache && xml.length > 1000) {
+                  await edgeCache.put(smCacheKey, new Response(xml, { headers: { 'Cache-Control': 'public, max-age=604800' } }));
+                }
+              }
+            }
+            if (xml) {
+              const norm = (s: string) =>
+                s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/aa/g, 'a').replace(/ee/g, 'i').replace(/oo/g, 'u').replace(/th/g, 't').replace(/dh/g, 'd').replace(/sh/g, 's');
+              const qTokens = norm(cleanQ).split(/\s+/).filter((t) => t.length >= 3);
+              if (qTokens.length > 0) {
+                let bestUrl = '';
+                let bestScore = 0;
+                const re = /<loc>(https:\/\/www\.lyrihub\.lk\/song\/([^/]+)\/)<\/loc>/g;
+                let m: RegExpExecArray | null;
+                while ((m = re.exec(xml)) !== null) {
+                  const slugNorm = norm(m[2]);
+                  let matched = 0;
+                  for (const tok of qTokens) {
+                    if (slugNorm.includes(tok)) matched++;
+                  }
+                  if (matched > 0) {
+                    const score = matched / Math.max(qTokens.length, slugNorm.split(/\s+/).length * 0.65);
+                    if (score > bestScore) {
+                      bestScore = score;
+                      bestUrl = m[1];
+                    }
+                  }
+                }
+                if (bestUrl && bestScore >= 0.45) {
+                  const pageRes = await fetch(bestUrl);
+                  if (pageRes.ok) {
+                    const pageHtml = await pageRes.text();
+                    const blockMatch = pageHtml.match(/class="lyri-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+                    if (blockMatch) {
+                      const plain = blockMatch[1]
+                        .replace(/<br\s*\/?>/gi, '\n')
+                        .replace(/<\/p>/gi, '\n\n')
+                        .replace(/<[^>]+>/g, '')
+                        .replace(/&nbsp;/g, ' ')
+                        .replace(/&#39;|&rsquo;/g, "'")
+                        .replace(/&quot;/g, '"')
+                        .replace(/&amp;/g, '&')
+                        .trim();
+                      if (plain.length > 20) {
+                        foundTrack = { plainLyrics: plain };
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } catch (_) {}
+        }
+
+        const outResp = new Response(JSON.stringify({ track: foundTrack }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': foundTrack ? 'public, max-age=604800, s-maxage=604800' : 'no-store',
+            ...CORS_HEADERS,
+          },
+        });
+        if (edgeCache && foundTrack) {
+          try { await edgeCache.put(cacheKey, outResp.clone()); } catch (_) {}
+        }
+        return outResp;
       }
 
       // 3. Auth Register

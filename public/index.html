@@ -43,7 +43,7 @@
   </script>
 
   <link rel="icon" type="image/png" href="/assets/logo.png" />
-  <link rel="stylesheet" href="/styles.css?v=6.3" />
+  <link rel="stylesheet" href="/styles.css?v=7.0" />
 </head>
 <body>
   <!-- 3-2-1 Studio Countdown -->
@@ -229,14 +229,14 @@
         <div id="karaokeResultsStrip" class="yt-strip" style="display:none;"></div>
       </div>
 
-      <!-- Block 2: Karaoke Video / Synced Lyrics Stage -->
+      <!-- Block 2: Karaoke Video + Clean Readable Lyrics Sheet Directly Below -->
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap;">
+          <span class="step-badge">KARAOKE STAGE & LYRICS</span>
           <div style="display:flex;gap:6px;">
-            <button class="btn btn-sm btn-cyan" id="btnStageVideo" onclick="App.setStageMode('video')">Video Stage</button>
-            <button class="btn btn-sm" id="btnStageLyrics" onclick="App.setStageMode('lyrics')">Full Lyrics</button>
+            <button class="btn btn-sm" id="btnNextKaraoke" style="display:none;" onclick="App.nextKaraokeResult()">Next Video ↻</button>
+            <button class="btn btn-sm" onclick="App.toggleCustomLyricsEditor()">Edit Lyrics</button>
           </div>
-          <button class="btn btn-sm" id="btnNextKaraoke" style="display:none;" onclick="App.nextKaraokeResult()">Next Video ↻</button>
         </div>
 
         <div id="stageVideoWrap" class="stage-screen">
@@ -246,9 +246,21 @@
           </div>
         </div>
 
-        <div id="stageLyricsWrap" style="display:none;">
+        <!-- Always-Visible Clean Song Lyrics Box Right Underneath the Video (No distracting auto-highlight!) -->
+        <div id="stageLyricsWrap" style="margin-top:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <span style="font-size:12px;font-weight:700;color:var(--cyan);letter-spacing:0.04em;">SONG LYRICS (SCROLL FREELY)</span>
+            <span style="font-size:11.5px;color:var(--text-muted);" id="lyricsStatusLabel">Auto-loads on search</span>
+          </div>
+          <div id="customLyricsEditorWrap" style="display:none;margin-bottom:8px;">
+            <textarea id="customLyricsTextarea" class="input" rows="4" style="width:100%;font-size:13.5px;line-height:1.5;" placeholder="Paste or edit song lyrics here..."></textarea>
+            <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:6px;">
+              <button class="btn btn-sm" onclick="App.toggleCustomLyricsEditor()">Cancel</button>
+              <button class="btn btn-sm btn-amber" onclick="App.saveCustomLyrics()">Apply Lyrics</button>
+            </div>
+          </div>
           <div id="lyricsStageBox" class="lyrics-box">
-            <div class="lyric-row">Search any song above to view full song lyrics here.</div>
+            <div class="lyric-row" style="color:var(--text-secondary);">Search any song above — full lyrics appear right here below the video so you can read ahead easily.</div>
           </div>
         </div>
       </div>
@@ -307,8 +319,10 @@
               <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               <span id="playBtnText">Play Mix</span>
             </button>
+            <button class="btn" id="btnStopRewind" onclick="App.stopAndRewind()" title="Stop & Return to Start" aria-label="Stop and return to start" style="padding:10px 13px;">
+              <svg class="icon" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor"/></svg>
+            </button>
             <button class="btn btn-cyan" id="btnBypassFx" onclick="App.toggleBypassFx()">Studio FX: ON</button>
-            <button class="btn" onclick="App.stopAndRewind()" title="Restart">↺</button>
           </div>
 
           <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;flex-wrap:wrap;">
@@ -330,9 +344,38 @@
 
         <canvas id="spectrumCanvas" style="width:100%;height:46px;border-radius:10px;background:#060810;border:1px solid var(--border);display:block;margin-bottom:8px;"></canvas>
         <canvas id="waveformCanvas"></canvas>
-        <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--text-muted);margin-top:7px;flex-wrap:wrap;gap:6px;">
-          <span>Top Blue = Music (Tap anywhere to jump)</span>
-          <span style="color:var(--amber-bright);">Bottom Gold = Voice (Drag left/right to align timing)</span>
+
+        <!-- Smooth Full-Width Playhead Scrubber Bar (Drag White Line Easily Anywhere!) -->
+        <div style="margin-top:8px;">
+          <input type="range" id="playheadSlider" min="0" max="1000" value="0" style="width:100%;" oninput="App.scrubPlayhead(this.value, false)" onchange="App.scrubPlayhead(this.value, true)" />
+        </div>
+
+        <!-- Easy Studio Crop / Trim Tool -->
+        <div style="margin-top:10px;padding:10px 12px;background:#060810;border:1px solid var(--border);border-radius:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+            <span style="font-size:12px;font-weight:800;color:var(--text);">✂️ CROP / TRIM AUDIO</span>
+            <span class="mono" style="font-size:11.5px;color:var(--amber-bright);" id="cropRangeLabel">00:00 → End</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--cyan);margin-bottom:3px;">
+                <span>Start Cut</span><span class="mono" id="cropStartText">00:00</span>
+              </div>
+              <input type="range" id="cropStartSlider" min="0" max="1000" value="0" style="width:100%;" oninput="App.updateCropSlider('start', this.value)" />
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--amber-bright);margin-bottom:3px;">
+                <span>End Cut</span><span class="mono" id="cropEndText">End</span>
+              </div>
+              <input type="range" id="cropEndSlider" min="0" max="1000" value="1000" style="width:100%;" oninput="App.updateCropSlider('end', this.value)" />
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="App.markCropAtPlayhead('start')">[ Set Start Here</button>
+            <button class="btn btn-sm" onclick="App.markCropAtPlayhead('end')">Set End Here ]</button>
+            <button class="btn btn-sm btn-amber" id="btnApplyCrop" onclick="App.applyAudioCrop()">✂️ Crop Audio</button>
+            <button class="btn btn-sm" id="btnUndoCrop" style="display:none;" onclick="App.undoAudioCrop()">↺ Undo Crop</button>
+          </div>
         </div>
       </div>
 
@@ -523,8 +566,8 @@
     </button>
   </nav>
 
-  <script src="/vendor/confetti.min.js?v=6.3"></script>
-  <script src="/dsp-engine.js?v=6.3"></script>
-  <script src="/app.js?v=6.3"></script>
+  <script src="/vendor/confetti.min.js?v=7.0"></script>
+  <script src="/dsp-engine.js?v=7.0"></script>
+  <script src="/app.js?v=7.0"></script>
 </body>
 </html>

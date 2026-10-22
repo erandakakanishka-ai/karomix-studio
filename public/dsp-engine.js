@@ -655,9 +655,31 @@ window.KaroDSP = (() => {
     return new Blob([arrayBuffer], { type: 'audio/wav' });
   }
 
+  // Click-free Studio Audio Crop / Trim Helper (12ms linear micro-fades on cut edges!)
+  function sliceAudioBuffer(ctx, srcBuffer, startSec, endSec) {
+    if (!srcBuffer) return null;
+    const sr = srcBuffer.sampleRate;
+    const s0 = Math.max(0, Math.min(srcBuffer.length - 1, Math.floor(Math.max(0, startSec) * sr)));
+    const s1 = Math.max(s0 + 1, Math.min(srcBuffer.length, Math.ceil(Math.max(startSec + 0.05, endSec) * sr)));
+    const newLen = s1 - s0;
+    const out = ctx.createBuffer(srcBuffer.numberOfChannels, newLen, sr);
+    const fadeLen = Math.min(Math.floor(sr * 0.012), Math.floor(newLen / 4));
+    for (let c = 0; c < srcBuffer.numberOfChannels; c++) {
+      const src = srcBuffer.getChannelData(c);
+      const dst = out.getChannelData(c);
+      dst.set(src.subarray(s0, s1));
+      for (let i = 0; i < fadeLen; i++) {
+        const g = i / fadeLen;
+        dst[i] *= g;
+        dst[newLen - 1 - i] *= g;
+      }
+    }
+    return out;
+  }
+
   return {
     NOTE_NAMES, MASTER_PROFILES, PRESETS,
-    setHallImpulseBuffer, computeWaveformPeaks,
+    setHallImpulseBuffer, computeWaveformPeaks, sliceAudioBuffer,
     processVocalAsync, transposeBufferAsync, detectPitchLive,
     centerCutKaraokeBuffer, analyzeVoiceQuick, estimateSyncOffsetMs,
     buildStudioGraph, applyLiveParamsToGraph, renderMasterWav,
