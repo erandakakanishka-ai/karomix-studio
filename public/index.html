@@ -247,18 +247,18 @@
 
         <div style="margin-bottom:10px;">
           <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-secondary);margin-bottom:5px;">
-            <span>Mic Level (<strong id="micCleanLabel">AI Noise Clean ON</strong>)</span>
+            <span>Mode: <strong id="micCleanLabel" style="color:var(--amber-bright);">Speaker + Voice (No Headphones)</strong></span>
             <span class="mono" style="color:var(--cyan);" id="livePitchText">Note: --</span>
           </div>
           <div class="meter-track"><div class="meter-bar-fill" id="micMeterFill"></div></div>
         </div>
 
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding-top:8px;">
-          <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" id="useCleanMic" checked /> Remove room fan & hiss
+          <label style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="useCleanMic" onchange="App.onMicModeChange()" /> Using Headphones (Voice Only)
           </label>
-          <label style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" id="useCountdown" checked /> 3-2-1 Countdown
+          <label style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" id="useCountdown" checked /> 3-2-1 Auto-Start Video
           </label>
           <button class="btn btn-amber btn-sm" id="btnGoToMix" onclick="App.switchView('mix')">Go to Mix Studio →</button>
         </div>

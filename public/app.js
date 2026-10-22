@@ -621,6 +621,19 @@ const App = (() => {
     document.head.appendChild(tag);
   }
 
+  // Send command via BOTH YT.Player object AND direct IFrame postMessage so it never misses a beat!
+  function ytSendCommand(func, args = []) {
+    const iframe = document.getElementById('ytKaraokeIframe');
+    if (iframe && iframe.contentWindow) {
+      try {
+        iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args }), '*');
+      } catch (_) {}
+    }
+    if (state.ytPlayer && typeof state.ytPlayer[func] === 'function') {
+      try { state.ytPlayer[func](...args); } catch (_) {}
+    }
+  }
+
   function renderYoutubeEmbed(videoId, title = '') {
     ensureYtApi();
     const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
@@ -628,20 +641,20 @@ const App = (() => {
     setStageMode('video');
     document.getElementById('stageVideoWrap').innerHTML = `
       <iframe id="ytKaraokeIframe"
-        src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&autoplay=1&playsinline=1&rel=0&modestbranding=1${originParam}"
+        src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&autoplay=0&playsinline=1&rel=0&modestbranding=1${originParam}"
         title="${title.replace(/"/g, '')}"
         referrerpolicy="strict-origin-when-cross-origin"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowfullscreen></iframe>`;
 
-    // Bind lightweight YT.Player polling for live synced lyrics & tap-to-jump chorus seek!
+    state.ytPlayer = null;
     clearInterval(state.ytSyncInterval);
     const tryAttachPlayer = (attempt = 0) => {
       if (window.YT && window.YT.Player) {
         try {
           state.ytPlayer = new window.YT.Player('ytKaraokeIframe', {});
         } catch (_) {}
-      } else if (attempt < 12) {
+      } else if (attempt < 15) {
         setTimeout(() => tryAttachPlayer(attempt + 1), 350);
       }
     };
@@ -849,15 +862,31 @@ const App = (() => {
     startPlayback(0);
   }
 
+  function onMicModeChange() {
+    const headphonesOnly = document.getElementById('useCleanMic').checked;
+    document.getElementById('micCleanLabel').textContent = headphonesOnly
+      ? 'Headphones (Voice Isolation ON)'
+      : 'Speaker + Voice (No Headphones)';
+    if (state.micStream && !state.isRecording) {
+      releaseMic();
+    }
+  }
+
   async function initMicStream() {
     if (state.micStream) return state.micStream;
-    const clean = document.getElementById('useCleanMic').checked;
-    document.getElementById('micCleanLabel').textContent = clean ? 'AI Noise Clean ON' : 'Raw Studio Direct';
+    const headphonesOnly = document.getElementById('useCleanMic').checked;
+    document.getElementById('micCleanLabel').textContent = headphonesOnly
+      ? 'Headphones (Voice Isolation ON)'
+      : 'Speaker + Voice (No Headphones)';
+
+    // CRITICAL FOR PHONE SPEAKER SINGING:
+    // Disable hardware noiseSuppression, echoCancellation & autoGainControl so phone speaker music + voice BOTH record richly without pumping!
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
-        noiseSuppression: clean,
+        noiseSuppression: headphonesOnly,
         echoCancellation: false,
-        autoGainControl: clean,
+        autoGainControl: headphonesOnly,
+        channelCount: 1,
       },
     });
     state.micStream = stream;
@@ -955,8 +984,40 @@ const App = (() => {
 
   async function toggleMicRecording() {
     unlockMobileAudioSync();
+
+    // Native Android App Bridge Hook (Android 10+ SDK >= 29 AudioPlaybackCapture support!)
+    if (window.AndroidNativeStudio && typeof window.AndroidNativeStudio.canCaptureInternalAudio === 'function') {
+      try {
+        if (window.AndroidNativeStudio.canCaptureInternalAudio()) {
+          if (state.isRecording) {
+            state.isRecording = false;
+            ytSendCommand('pauseVideo');
+            window.AndroidNativeStudio.stopDualRecording();
+            document.getElementById('btnRecordVocal').classList.remove('recording');
+            document.getElementById('recBtnLabel').textContent = 'Start Recording';
+            return;
+          }
+          ytSendCommand('mute');
+          ytSendCommand('seekTo', [0, true]);
+          ytSendCommand('playVideo');
+          await runCountdown();
+          ytSendCommand('seekTo', [0, true]);
+          ytSendCommand('unMute');
+          ytSendCommand('setVolume', [100]);
+          ytSendCommand('playVideo');
+          window.AndroidNativeStudio.startDualRecording();
+          state.isRecording = true;
+          state.recStartMs = Date.now();
+          document.getElementById('btnRecordVocal').classList.add('recording');
+          document.getElementById('recBtnLabel').textContent = 'Stop & Mix My Voice';
+          return;
+        }
+      } catch (_) {}
+    }
+
     if (state.isRecording) {
       state.isRecording = false;
+      ytSendCommand('pauseVideo');
       stopPlaybackInternal();
       if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
         state.mediaRecorder.stop();
@@ -966,10 +1027,19 @@ const App = (() => {
       return;
     }
 
+    // Unlock cross-origin YouTube player synchronously inside the direct user tap BEFORE any await!
+    const hasYtIframe = !!document.getElementById('ytKaraokeIframe');
+    if (hasYtIframe) {
+      ytSendCommand('mute');
+      ytSendCommand('seekTo', [0, true]);
+      ytSendCommand('playVideo');
+    }
+
     try {
       const stream = await initMicStream();
       await runCountdown();
 
+      const headphonesOnly = document.getElementById('useCleanMic').checked;
       state.recChunks = [];
       const bestMime = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm']
         .find((m) => window.MediaRecorder?.isTypeSupported?.(m)) || '';
@@ -982,7 +1052,6 @@ const App = (() => {
         const blob = new Blob(state.recChunks, { type: rec.mimeType || bestMime || 'audio/webm' });
         const ctx = ensureAudioCtx();
         const vocalBuf = await ctx.decodeAudioData(await blob.arrayBuffer());
-        // Never leave demo guitar/drums underneath a real user vocal recording unless explicitly requested!
         if (!state.userLoadedBacking) {
           state.backingBuffer = null;
           state.originalBackingBuffer = null;
@@ -995,7 +1064,14 @@ const App = (() => {
 
         switchView('mix');
         runSmartVoiceMatch();
-        applyWorkerAutoTune();
+        // When singing on Phone Speaker without headphones, keep full music bass (55Hz) & disable harsh gating so music + voice stay seamless!
+        if (!headphonesOnly) {
+          state.params.hpFreq = 55;
+          state.params.noiseGate = 0.04;
+          document.getElementById('gateSlider').value = 4;
+          document.getElementById('gateValText').textContent = '4%';
+        }
+        await applyWorkerAutoTune();
         startPlayback(0);
       };
 
@@ -1008,6 +1084,15 @@ const App = (() => {
         state.liveNodes = { sources: [bSrc] };
       }
 
+      // Auto-rewind & unmute YouTube Karaoke right from 00:00 at the exact millisecond recording starts!
+      if (hasYtIframe) {
+        ytSendCommand('seekTo', [0, true]);
+        ytSendCommand('unMute');
+        ytSendCommand('setVolume', [100]);
+        ytSendCommand('playVideo');
+        if (state.lrcLines.length) updateActiveLyricAtTime(0);
+      }
+
       rec.start();
       state.isRecording = true;
       state.recStartMs = Date.now();
@@ -1016,6 +1101,35 @@ const App = (() => {
     } catch (_) {
       showToast('Microphone access blocked — please allow mic access');
     }
+  }
+
+  // Native Android WebView Receiver (receives separate digital internal backing WAV + clean mic WAV on Android 10+)
+  async function receiveNativeDualTracks(backingBase64, vocalBase64) {
+    const ctx = ensureAudioCtx();
+    const toBuf = async (b64) => {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return ctx.decodeAudioData(bytes.buffer);
+    };
+    if (backingBase64) {
+      const bBuf = await toBuf(backingBase64);
+      state.originalBackingBuffer = bBuf;
+      state.backingBuffer = bBuf;
+      state.backingPeaks = KaroDSP.computeWaveformPeaks(bBuf, 220);
+      state.userLoadedBacking = true;
+    }
+    if (vocalBase64) {
+      const vBuf = await toBuf(vocalBase64);
+      state.rawVocalBuffer = vBuf;
+      state.tunedVocalBuffer = vBuf;
+      state.vocalPeaks = KaroDSP.computeWaveformPeaks(vBuf, 220);
+    }
+    state.isDemoSession = false;
+    switchView('mix');
+    runSmartVoiceMatch();
+    await applyWorkerAutoTune();
+    startPlayback(0);
   }
 
   // ==================== ULTRA-LIGHT 60FPS WAVEFORM & PITCH CANVAS ====================
@@ -1374,14 +1488,24 @@ const App = (() => {
 
   document.addEventListener('DOMContentLoaded', init);
 
+  // Also pause background YouTube stage if switching away from Sing view
+  function pauseYoutubeStage() {
+    ytSendCommand('pauseVideo');
+  }
+
   return {
-    switchView, setStageMode, getMasterSignalRms,
+    switchView: (v) => { if (v !== 'sing') pauseYoutubeStage(); switchView(v); },
+    setStageMode, getMasterSignalRms, ytStateDebug: () => ({
+      playerState: state.ytPlayer?.getPlayerState?.(),
+      currentTime: state.ytPlayer?.getCurrentTime?.(),
+      isMuted: state.ytPlayer?.isMuted?.(),
+    }),
     toggleHeroDemo, openMixWithRealDemo, loadRealSingerDemo, loadInstrumentalDemoForSing,
     togglePlayback, stopAndRewind, toggleBypassFx, toggleSoloVocal,
     applyPreset, updateParam, setMasterProfile, setVocalOffset, autoAlignTracks, runSmartVoiceMatch,
     applyWorkerAutoTune, shiftBackingKey, applyKaraokeVocalCut,
     heroSearchSubmit, quickSingSong, searchOrLoadKaraoke, selectKaraokeVideo, nextKaraokeResult, seekToLyric,
-    handleBackingUpload, handleVocalUpload, toggleMicMonitor, toggleMicRecording,
+    onMicModeChange, handleBackingUpload, handleVocalUpload, toggleMicMonitor, toggleMicRecording, receiveNativeDualTracks,
     openAuthModal, closeAuthModal, setAuthMode, submitAuth, logout, toggleProDemo,
     saveProjectToD1, restoreProject, exportMasteredWav, shareMasterFile,
   };

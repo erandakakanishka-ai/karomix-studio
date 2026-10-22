@@ -163,11 +163,31 @@ export default {
     }
 
     try {
-      // 1. Instant Song Name -> Karaoke Video Search
+      // 1. Instant Song Name -> Karaoke Video Search (with 7-Day Cloudflare Edge Cache for 100K/day traffic!)
       if (url.pathname === '/api/search-karaoke' && request.method === 'GET') {
-        const q = url.searchParams.get('q') || '';
+        const q = (url.searchParams.get('q') || '').trim();
+        if (!q) return json({ videos: [] });
+
+        const cacheKey = new Request(`https://karomix-edge-cache.local/karaoke-v4?q=${encodeURIComponent(q.toLowerCase())}`);
+        const edgeCache = (globalThis as any).caches?.default;
+        if (edgeCache) {
+          const hit = await edgeCache.match(cacheKey);
+          if (hit) return hit;
+        }
+
         const videos = await searchKaraokeVideos(q);
-        return json({ videos });
+        const resp = new Response(JSON.stringify({ videos }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'public, max-age=604800, s-maxage=604800',
+            ...CORS_HEADERS,
+          },
+        });
+        if (edgeCache && videos.length > 0) {
+          try { await edgeCache.put(cacheKey, resp.clone()); } catch (_) {}
+        }
+        return resp;
       }
 
       // 2. Open-Source LRCLIB Time-Synced Karaoke Lyrics Search
