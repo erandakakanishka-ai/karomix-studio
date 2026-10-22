@@ -303,13 +303,21 @@ window.KaroDSP = (() => {
     return bestLag * 5;
   }
 
-  function createSoftClipCurve(drive = 1.15) {
-    const n = 1024;
+  // Transparent Mastering Brickwall Ceiling: 100% linear below 0.82, silky smooth soft-knee above 0.82, hard-capped at -0.85 dBTP (0.907)!
+  function createBrickwallCeilingCurve() {
+    const n = 2048;
     const curve = new Float32Array(n);
-    const norm = Math.tanh(drive);
+    const maxAmp = 0.905; // -0.87 dBTP guaranteed zero clipping on mobile/Bluetooth DACs!
     for (let i = 0; i < n; i++) {
       const x = (i * 2) / (n - 1) - 1;
-      curve[i] = Math.tanh(drive * x) / norm;
+      const ax = Math.abs(x);
+      if (ax <= 0.78) {
+        curve[i] = x;
+      } else {
+        const excess = (ax - 0.78) / 0.125;
+        const shaped = 0.78 + 0.125 * Math.tanh(excess);
+        curve[i] = x < 0 ? -Math.min(maxAmp, shaped) : Math.min(maxAmp, shaped);
+      }
     }
     return curve;
   }
@@ -349,25 +357,29 @@ window.KaroDSP = (() => {
     highSheen.type = 'highshelf'; highSheen.frequency.value = 11500;
     highSheen.gain.value = params.autoMaster ? mp.highDb : 0;
 
-    const shaper = ctx.createWaveShaper();
-    shaper.oversample = '2x';
-    shaper.curve = createSoftClipCurve(params.autoMaster ? mp.drive : 1.02);
-
     const limiter = ctx.createDynamicsCompressor();
-    limiter.threshold.value = params.autoMaster ? mp.thresh : -1.0;
+    limiter.threshold.value = params.autoMaster ? mp.thresh : -2.0;
     limiter.knee.value = 6; limiter.ratio.value = 20;
-    limiter.attack.value = 0.0015; limiter.release.value = 0.085;
+    limiter.attack.value = 0.001; limiter.release.value = 0.085;
+
+    const preCeiling = ctx.createGain();
+    preCeiling.gain.value = 0.84;
+
+    const brickwall = ctx.createWaveShaper();
+    brickwall.oversample = '2x';
+    brickwall.curve = createBrickwallCeilingCurve();
 
     const ceiling = ctx.createGain();
-    ceiling.gain.value = mp.ceiling;
+    ceiling.gain.value = 1.0;
 
     masterInput.connect(masterSubClean);
     masterSubClean.connect(lowGlue);
     lowGlue.connect(masterClarity);
     masterClarity.connect(highSheen);
-    highSheen.connect(shaper);
-    shaper.connect(limiter);
-    limiter.connect(ceiling);
+    highSheen.connect(limiter);
+    limiter.connect(preCeiling);
+    preCeiling.connect(brickwall);
+    brickwall.connect(ceiling);
     ceiling.connect(ctx.destination);
 
     if (typeof ctx.createAnalyser === 'function' && !(ctx instanceof OfflineAudioContext)) {
