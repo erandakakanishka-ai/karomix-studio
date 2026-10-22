@@ -1,4 +1,4 @@
--- KaroMix AI Studio v4 - Cloudflare D1 Database Schema
+-- KaroMix AI Studio v9.0 - Cloudflare D1 Database Schema (Global Timezone Quota + 30-Day Free Pro Pass + Google Auth + Contact)
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT UNIQUE,
@@ -7,6 +7,10 @@ CREATE TABLE IF NOT EXISTS users (
   plan TEXT DEFAULT 'free',
   currency TEXT DEFAULT 'USD',
   exports_this_month INTEGER DEFAULT 0,
+  pro_until INTEGER DEFAULT 0,
+  daily_date TEXT DEFAULT '',
+  daily_exports INTEGER DEFAULT 0,
+  auth_provider TEXT DEFAULT 'email',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -42,5 +46,14 @@ CREATE TABLE IF NOT EXISTS custom_presets (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT OR IGNORE INTO users (id, email, password_hash, display_name, plan, currency, exports_this_month)
-VALUES ('demo-singer-global', 'artist@karomix.ai', '', 'Guest Artist', 'free', 'USD', 0);
+CREATE TABLE IF NOT EXISTS contact_messages (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  subject TEXT DEFAULT 'General Inquiry',
+  message TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT OR IGNORE INTO users (id, email, password_hash, display_name, plan, currency, exports_this_month, pro_until, daily_date, daily_exports, auth_provider)
+VALUES ('demo-singer-global', 'artist@karomix.ai', '', 'Guest Artist', 'free', 'USD', 0, 0, '', 0, 'guest');

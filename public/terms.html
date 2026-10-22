@@ -5,33 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#07090f" />
   <title>Terms of Service — KaroMix AI Studio</title>
+  <link rel="icon" type="image/png" href="/assets/logo.png" />
   <style>
-    body { margin:0; background:#07090f; color:#f8fafc; font-family:Inter,-apple-system,sans-serif; line-height:1.7; padding:32px 18px 60px; }
-    .wrap { max-width:780px; margin:0 auto; background:#101420; border:1px solid rgba(255,255,255,0.1); border-radius:18px; padding:28px 24px; }
-    h1 { font-size:26px; margin:0 0 6px; color:#fbbf24; }
-    h2 { font-size:18px; margin:24px 0 8px; color:#38bdf8; }
-    p, li { color:#cbd5e1; font-size:14.5px; }
-    a { color:#fbbf24; text-decoration:none; }
-    .back { display:inline-block; margin-bottom:18px; padding:8px 14px; border-radius:10px; background:#171d2e; border:1px solid rgba(255,255,255,0.14); color:#f8fafc; font-size:13px; font-weight:600; }
+    :root { --bg:#07090f; --surface:#111625; --border:rgba(148,163,184,0.16); --text:#f8fafc; --muted:#94a3b8; --amber:#fbbf24; --cyan:#38bdf8; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; line-height:1.72; padding:24px 16px 64px; }
+    .wrap { max-width:820px; margin:0 auto; }
+    .top { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:26px; padding-bottom:14px; border-bottom:1px solid var(--border); }
+    .brand { display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--text); font-weight:800; font-size:18px; }
+    .brand img { width:32px; height:32px; border-radius:8px; }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:24px; margin-bottom:18px; }
+    h1 { font-size:28px; margin-bottom:6px; }
+    h2 { font-size:18px; color:var(--amber); margin-bottom:8px; }
+    p { color:#cbd5e1; font-size:14.6px; margin-bottom:10px; }
+    a { color:var(--cyan); }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <a class="back" href="/">← Back to KaroMix AI Studio</a>
+    <div class="top">
+      <a class="brand" href="/"><img src="/assets/logo.png" alt="KaroMix AI" /><span>KAROMIX <span style="color:var(--amber);">AI</span></span></a>
+      <a href="/">← Back to Studio</a>
+    </div>
     <h1>Terms of Service</h1>
-    <p><strong>Effective Date:</strong> October 22, 2026</p>
+    <p style="color:var(--muted);margin-bottom:20px;">Effective Date: October 22, 2026</p>
 
-    <h2>1. Acceptance of Terms</h2>
-    <p>By accessing or using KaroMix AI Studio, you agree to these Terms of Service and applicable laws regarding digital audio recording and intellectual property.</p>
+    <div class="card">
+      <h2>1. Use of the Studio Platform</h2>
+      <p>KaroMix AI Studio provides browser-based vocal recording, audio mixing, pitch correction, and compact MP3/WAV mastering tools for personal vocal practice, educational use, and creator covers. You retain full ownership of your original vocal performances.</p>
+    </div>
 
-    <h2>2. Ownership of Your Vocal Performances</h2>
-    <p>You retain 100% ownership of your original vocal recordings created using KaroMix AI Studio. When recording covers over third-party musical compositions or backing tracks, you are responsible for ensuring appropriate rights or platform licenses before commercial distribution.</p>
+    <div class="card">
+      <h2>2. Backing Tracks & Music Copyright Compliance</h2>
+      <p>Users are solely responsible for ensuring they have appropriate rights or permissions before distributing or monetizing cover songs containing third-party musical compositions or backing instrumentals on external platforms.</p>
+    </div>
 
-    <h2>3. Service Availability & Acceptable Use</h2>
-    <p>Free users receive 3 complimentary mastered WAV exports per calendar month. Pro subscribers receive unlimited exports during an active billing cycle. Automated abuse, reverse engineering, or unlawful redistribution of third-party copyrighted audio is prohibited.</p>
+    <div class="card">
+      <h2>3. Complimentary 30-Day Welcome Pro Pass & Daily Free Quota</h2>
+      <p>New accounts receive a complimentary 30-day promotional Pro Studio Pass upon registration or Gmail sign-in, followed by 2 free daily master downloads resetting at 12:00 AM midnight in the user's detected local timezone. Creating automated or duplicate accounts to abuse system quotas is prohibited.</p>
+    </div>
 
-    <h2>4. Contact</h2>
-    <p>Questions about these Terms may be directed to <a href="mailto:support@karomix.ai">support@karomix.ai</a>.</p>
+    <div class="card">
+      <h2>4. Support & Contact</h2>
+      <p>For questions regarding these terms, visit our <a href="/contact">Contact Support</a> page.</p>
+    </div>
   </div>
 </body>
 </html>

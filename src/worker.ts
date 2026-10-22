@@ -1,13 +1,91 @@
 export interface Env {
   DB: D1Database;
   ASSETS?: Fetcher;
+  GOOGLE_CLIENT_ID?: string;
 }
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Timezone',
 };
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const DAILY_FREE_LIMIT = 2;
+
+let schemaChecked = false;
+
+async function ensureSchema(db?: D1Database) {
+  if (!db || schemaChecked) return;
+  const alterStatements = [
+    `ALTER TABLE users ADD COLUMN pro_until INTEGER DEFAULT 0`,
+    `ALTER TABLE users ADD COLUMN daily_date TEXT DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN daily_exports INTEGER DEFAULT 0`,
+    `ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'email'`,
+    `CREATE TABLE IF NOT EXISTS contact_messages (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      subject TEXT DEFAULT 'General Inquiry',
+      message TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+  ];
+  for (const sql of alterStatements) {
+    try { await db.prepare(sql).run(); } catch (_) {}
+  }
+  schemaChecked = true;
+}
+
+// Accurate Global Local-Day Calculator (Uses Cloudflare Edge IP Geo Timezone first + Browser IANA fallback)
+function getUserLocalDayInfo(request: Request) {
+  const cfTz = String((request as any).cf?.timezone || '').trim();
+  const headerTz = String(request.headers.get('X-Client-Timezone') || '').trim();
+  for (const candidate of [cfTz, headerTz, 'UTC']) {
+    if (!candidate) continue;
+    try {
+      const fmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: candidate,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      });
+      const parts: Record<string, string> = {};
+      for (const p of fmt.formatToParts(new Date())) {
+        if (p.type !== 'literal') parts[p.type] = p.value;
+      }
+      const localDate = `${parts.year}-${parts.month}-${parts.day}`;
+      const elapsedMin = Number(parts.hour || 0) * 60 + Number(parts.minute || 0);
+      const minutesToMidnight = Math.max(1, 1440 - elapsedMin);
+      return { tz: candidate, localDate, minutesToMidnight };
+    } catch (_) {}
+  }
+  return { tz: 'UTC', localDate: new Date().toISOString().slice(0, 10), minutesToMidnight: 720 };
+}
+
+function buildQuotaSummary(user: Record<string, any> | null, authenticated: boolean, tzInfo: { tz: string; localDate: string; minutesToMidnight: number }) {
+  const now = Date.now();
+  const proUntil = authenticated && user ? Number(user.pro_until || 0) : 0;
+  const manualPro = authenticated && user && user.plan && user.plan !== 'free';
+  const proActive = Boolean(manualPro || proUntil > now);
+  const proDaysLeft = proUntil > now ? Math.max(1, Math.ceil((proUntil - now) / 86400000)) : 0;
+  const dailyUsed = authenticated && user && user.daily_date === tzInfo.localDate
+    ? Number(user.daily_exports || 0)
+    : 0;
+  return {
+    proActive,
+    proDaysLeft,
+    proUntil,
+    dailyUsed,
+    dailyLimit: DAILY_FREE_LIMIT,
+    timezone: tzInfo.tz,
+    localDate: tzInfo.localDate,
+    minutesToMidnight: tzInfo.minutesToMidnight,
+  };
+}
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -25,13 +103,15 @@ async function sha256Hex(input: string): Promise<string> {
 }
 
 async function resolveUser(request: Request, env: Env) {
+  await ensureSchema(env.DB);
   const auth = request.headers.get('Authorization') || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
 
   if (env.DB && token) {
     try {
       const sess = await env.DB.prepare(
-        `SELECT u.id, u.email, u.display_name, u.plan, u.currency, u.exports_this_month
+        `SELECT u.id, u.email, u.display_name, u.plan, u.currency, u.exports_this_month,
+                u.pro_until, u.daily_date, u.daily_exports, u.auth_provider
          FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?`
       ).bind(token).first();
       if (sess) return { user: sess as Record<string, any>, authenticated: true };
@@ -44,13 +124,14 @@ async function resolveUser(request: Request, env: Env) {
       `INSERT OR IGNORE INTO users (id, email, password_hash, display_name, plan, currency, exports_this_month)
        VALUES (?, 'artist@karomix.ai', '', 'Guest Artist', 'free', 'USD', 0)`
     ).bind(fallbackId).run();
-    const u = await env.DB.prepare('SELECT id, email, display_name, plan, currency, exports_this_month FROM users WHERE id = ?')
-      .bind(fallbackId).first();
+    const u = await env.DB.prepare(
+      'SELECT id, email, display_name, plan, currency, exports_this_month, pro_until, daily_date, daily_exports FROM users WHERE id = ?'
+    ).bind(fallbackId).first();
     if (u) return { user: u as Record<string, any>, authenticated: false };
   }
 
   return {
-    user: { id: fallbackId, email: 'artist@karomix.ai', display_name: 'Guest Artist', plan: 'free', currency: 'USD', exports_this_month: 0 },
+    user: { id: fallbackId, email: 'artist@karomix.ai', display_name: 'Guest Artist', plan: 'free', currency: 'USD', exports_this_month: 0, pro_until: 0, daily_date: '', daily_exports: 0 },
     authenticated: false,
   };
 }
@@ -64,7 +145,6 @@ async function searchKaraokeVideos(rawQuery: string) {
     ? clean
     : `${clean} karaoke version`;
 
-  // Primary: Direct YouTube Search Results JSON Extraction
   try {
     const ytRes = await fetch(
       `https://www.youtube.com/results?search_query=${encodeURIComponent(fullQuery)}&hl=en`,
@@ -103,7 +183,6 @@ async function searchKaraokeVideos(rawQuery: string) {
           if (candidates.length >= 16) break;
         }
         if (candidates.length > 0) {
-          // Verify true iframe embeddability in parallel via YouTube oEmbed (200 = playable, 401/403 = blocked!)
           const verified = await Promise.all(
             candidates.map(async (c) => {
               try {
@@ -129,7 +208,6 @@ async function searchKaraokeVideos(rawQuery: string) {
     }
   } catch (_) {}
 
-  // Secondary Open-Source Fallback (Invidious / Piped Public Nodes)
   const mirrors = [
     `https://inv.nadeko.net/api/v1/search?q=${encodeURIComponent(fullQuery)}&type=video`,
     `https://invidious.nerdvpn.de/api/v1/search?q=${encodeURIComponent(fullQuery)}&type=video`,
@@ -163,7 +241,9 @@ export default {
     }
 
     try {
-      // 1. Instant Song Name -> Karaoke Video Search (with 7-Day Cloudflare Edge Cache for 100K/day traffic!)
+      const tzInfo = getUserLocalDayInfo(request);
+
+      // 1. Instant Song Name -> Karaoke Video Search (7-Day Cloudflare Edge Cache)
       if (url.pathname === '/api/search-karaoke' && request.method === 'GET') {
         const q = (url.searchParams.get('q') || '').trim();
         if (!q) return json({ videos: [] });
@@ -210,7 +290,6 @@ export default {
 
         let foundTrack: any = null;
 
-        // Tier 1: LRCLIB (3M+ Global Songs — try full clean query, then main title part)
         const candidates = [cleanQ];
         if (cleanQ.includes('-')) {
           candidates.push(...cleanQ.split('-').map((s) => s.trim()).filter((s) => s.length > 2));
@@ -220,7 +299,7 @@ export default {
           try {
             const lrcRes = await fetch(
               `https://lrclib.net/api/search?q=${encodeURIComponent(cand)}`,
-              { headers: { 'User-Agent': 'KaroMixAIStudio/7.0 (https://karomix-studio.pages.dev)' } }
+              { headers: { 'User-Agent': 'KaroMixAIStudio/9.0 (https://karomix-studio.pages.dev)' } }
             );
             if (lrcRes.ok) {
               const list = (await lrcRes.json()) as any[];
@@ -229,7 +308,6 @@ export default {
           } catch (_) {}
         }
 
-        // Tier 2: Regional Romanized Slug Index (2,370+ Songs, Edge-Cached Sitemap)
         if (!foundTrack) {
           try {
             const smCacheKey = new Request('https://karomix-cache.local/v7/lyrihub-sitemap');
@@ -310,43 +388,105 @@ export default {
         return outResp;
       }
 
-      // 3. Auth Register
+      // 3a. Official Google Sign-In (Gmail 1-Click OAuth Token Verification -> Instant 30-Day FREE Pro Pass!)
+      if (url.pathname === '/api/auth/google' && request.method === 'POST') {
+        await ensureSchema(env.DB);
+        const body: any = await request.json();
+        const credential = String(body.credential || '').trim();
+        if (!credential) return json({ error: 'Missing Google credential token.' }, 400);
+        if (!env.DB) return json({ error: 'Database unavailable' }, 500);
+
+        const verifyRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+        if (!verifyRes.ok) {
+          return json({ error: 'Invalid or expired Google sign-in token.' }, 401);
+        }
+        const gUser: any = await verifyRes.json();
+        if (env.GOOGLE_CLIENT_ID && gUser.aud !== env.GOOGLE_CLIENT_ID) {
+          return json({ error: 'Google Client ID mismatch.' }, 401);
+        }
+        const email = String(gUser.email || '').trim().toLowerCase();
+        if (!email || String(gUser.email_verified) !== 'true') {
+          return json({ error: 'Verified Gmail address required.' }, 401);
+        }
+        const displayName = String(gUser.name || gUser.given_name || email.split('@')[0] || 'Artist').trim();
+
+        let existing: any = await env.DB.prepare(
+          'SELECT id, email, display_name, plan, currency, exports_this_month, pro_until, daily_date, daily_exports FROM users WHERE email = ?'
+        ).bind(email).first();
+
+        let isNewUser = false;
+        if (!existing) {
+          isNewUser = true;
+          const userId = crypto.randomUUID();
+          const proUntil = Date.now() + THIRTY_DAYS_MS;
+          await env.DB.prepare(
+            `INSERT INTO users (id, email, password_hash, display_name, plan, currency, exports_this_month, pro_until, daily_date, daily_exports, auth_provider)
+             VALUES (?, ?, '', ?, 'free', 'USD', 0, ?, ?, 0, 'google')`
+          ).bind(userId, email, displayName, proUntil, tzInfo.localDate).run();
+          existing = {
+            id: userId, email, display_name: displayName, plan: 'free', currency: 'USD',
+            exports_this_month: 0, pro_until: proUntil, daily_date: tzInfo.localDate, daily_exports: 0,
+          };
+        } else if (!Number(existing.pro_until || 0)) {
+          // One-time 30-day Free Pro Welcome Gift if never granted before
+          const proUntil = Date.now() + THIRTY_DAYS_MS;
+          await env.DB.prepare('UPDATE users SET pro_until = ?, auth_provider = ? WHERE id = ?')
+            .bind(proUntil, 'google', existing.id).run();
+          existing.pro_until = proUntil;
+        }
+
+        const token = crypto.randomUUID() + crypto.randomUUID().replace(/-/g, '');
+        await env.DB.prepare('INSERT INTO sessions (token, user_id) VALUES (?, ?)').bind(token, existing.id).run();
+        const quota = buildQuotaSummary(existing, true, tzInfo);
+        return json({ ok: true, isNewUser, token, user: existing, quota });
+      }
+
+      // 3b. Auth Register (Automatically grants 30 Full Days FREE Pro Studio Pass!)
       if (url.pathname === '/api/auth/register' && request.method === 'POST') {
+        await ensureSchema(env.DB);
         const body: any = await request.json();
         const email = String(body.email || '').trim().toLowerCase();
         const password = String(body.password || '');
         const displayName = String(body.display_name || email.split('@')[0] || 'Artist').trim();
 
         if (!email || !email.includes('@') || password.length < 4) {
-          return json({ error: 'Enter a valid email and password (min 4 characters).' }, 400);
+          return json({ error: 'Enter a valid Gmail / email address and password (min 4 characters).' }, 400);
         }
         if (!env.DB) return json({ error: 'Database unavailable' }, 500);
 
         const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
         if (existing) {
-          return json({ error: 'This email is already registered. Please sign in.' }, 409);
+          return json({ error: 'This email is already registered. Please switch to Sign In.' }, 409);
         }
 
         const userId = crypto.randomUUID();
         const token = crypto.randomUUID() + crypto.randomUUID().replace(/-/g, '');
         const hash = await sha256Hex(password);
+        const proUntil = Date.now() + THIRTY_DAYS_MS;
 
         await env.DB.prepare(
-          `INSERT INTO users (id, email, password_hash, display_name, plan, currency, exports_this_month)
-           VALUES (?, ?, ?, ?, 'free', 'USD', 0)`
-        ).bind(userId, email, hash, displayName).run();
+          `INSERT INTO users (id, email, password_hash, display_name, plan, currency, exports_this_month, pro_until, daily_date, daily_exports, auth_provider)
+           VALUES (?, ?, ?, ?, 'free', 'USD', 0, ?, ?, 0, 'email')`
+        ).bind(userId, email, hash, displayName, proUntil, tzInfo.localDate).run();
 
         await env.DB.prepare('INSERT INTO sessions (token, user_id) VALUES (?, ?)').bind(token, userId).run();
 
+        const userObj = {
+          id: userId, email, display_name: displayName, plan: 'free', currency: 'USD',
+          exports_this_month: 0, pro_until: proUntil, daily_date: tzInfo.localDate, daily_exports: 0,
+        };
         return json({
           ok: true,
+          isNewUser: true,
           token,
-          user: { id: userId, email, display_name: displayName, plan: 'free', currency: 'USD', exports_this_month: 0 },
+          user: userObj,
+          quota: buildQuotaSummary(userObj, true, tzInfo),
         });
       }
 
       // 4. Auth Login
       if (url.pathname === '/api/auth/login' && request.method === 'POST') {
+        await ensureSchema(env.DB);
         const body: any = await request.json();
         const email = String(body.email || '').trim().toLowerCase();
         const password = String(body.password || '');
@@ -354,20 +494,26 @@ export default {
 
         const hash = await sha256Hex(password);
         const user: any = await env.DB.prepare(
-          'SELECT id, email, password_hash, display_name, plan, currency, exports_this_month FROM users WHERE email = ?'
+          'SELECT id, email, password_hash, display_name, plan, currency, exports_this_month, pro_until, daily_date, daily_exports FROM users WHERE email = ?'
         ).bind(email).first();
 
-        if (!user || user.password_hash !== hash) {
+        if (!user || !user.password_hash || user.password_hash !== hash) {
           return json({ error: 'Incorrect email or password.' }, 401);
+        }
+
+        if (!Number(user.pro_until || 0)) {
+          const proUntil = Date.now() + THIRTY_DAYS_MS;
+          await env.DB.prepare('UPDATE users SET pro_until = ? WHERE id = ?').bind(proUntil, user.id).run();
+          user.pro_until = proUntil;
         }
 
         const token = crypto.randomUUID() + crypto.randomUUID().replace(/-/g, '');
         await env.DB.prepare('INSERT INTO sessions (token, user_id) VALUES (?, ?)').bind(token, user.id).run();
         const { password_hash, ...safeUser } = user;
-        return json({ ok: true, token, user: safeUser });
+        return json({ ok: true, token, user: safeUser, quota: buildQuotaSummary(safeUser, true, tzInfo) });
       }
 
-      // 4b. Permanent Account & Data Deletion (GDPR + Google Play Store Data Safety Requirement)
+      // 4b. Permanent Account & Data Deletion (GDPR + Google Play Store Requirement)
       if (url.pathname === '/api/auth/account' && request.method === 'DELETE') {
         const { user: authUser, authenticated } = await resolveUser(request, env);
         if (!authenticated || !authUser || !env.DB) {
@@ -381,7 +527,7 @@ export default {
         return json({ ok: true, deleted: true });
       }
 
-      // 5. State
+      // 5. State + Global Timezone Daily Quota Status
       if (url.pathname === '/api/state' && request.method === 'GET') {
         if (!env.DB) {
           return json({
@@ -390,6 +536,8 @@ export default {
             presets: [],
             d1Connected: false,
             authenticated: false,
+            quota: buildQuotaSummary(null, false, tzInfo),
+            googleClientId: env.GOOGLE_CLIENT_ID || '',
           });
         }
         const { user, authenticated } = await resolveUser(request, env);
@@ -406,6 +554,8 @@ export default {
           presets: presets.results,
           d1Connected: true,
           authenticated,
+          quota: buildQuotaSummary(user, authenticated, tzInfo),
+          googleClientId: env.GOOGLE_CLIENT_ID || '',
         });
       }
 
@@ -459,14 +609,25 @@ export default {
         return json({ ok: true, id });
       }
 
+      // 7. Timezone-Aware Daily Export Counter (2/day local midnight reset + Unlimited during 30-day Free Pro Pass)
       if (url.pathname === '/api/track-export' && request.method === 'POST') {
         if (env.DB) {
           const { user, authenticated } = await resolveUser(request, env);
           if (authenticated) {
-            await env.DB.prepare('UPDATE users SET exports_this_month = exports_this_month + 1 WHERE id = ?').bind(user.id).run();
+            const currentQuota = buildQuotaSummary(user, true, tzInfo);
+            if (!currentQuota.proActive && currentQuota.dailyUsed >= DAILY_FREE_LIMIT) {
+              return json({ ok: false, allowed: false, quota: currentQuota }, 429);
+            }
+            const nextDaily = user.daily_date === tzInfo.localDate ? Number(user.daily_exports || 0) + 1 : 1;
+            await env.DB.prepare(
+              'UPDATE users SET exports_this_month = exports_this_month + 1, daily_date = ?, daily_exports = ? WHERE id = ?'
+            ).bind(tzInfo.localDate, nextDaily, user.id).run();
+            user.daily_date = tzInfo.localDate;
+            user.daily_exports = nextDaily;
+            return json({ ok: true, allowed: true, quota: buildQuotaSummary(user, true, tzInfo) });
           }
         }
-        return json({ ok: true });
+        return json({ ok: true, allowed: true, quota: buildQuotaSummary(null, false, tzInfo) });
       }
 
       if (url.pathname === '/api/upgrade-demo' && request.method === 'POST') {
@@ -477,6 +638,25 @@ export default {
           await env.DB.prepare('UPDATE users SET plan = ? WHERE id = ?').bind(plan, user.id).run();
         }
         return json({ ok: true, plan });
+      }
+
+      // 8. Support & Feedback Contact Form Endpoint (Stored directly in Cloudflare D1!)
+      if (url.pathname === '/api/contact' && request.method === 'POST') {
+        await ensureSchema(env.DB);
+        const body: any = await request.json();
+        const name = String(body.name || '').trim().slice(0, 120);
+        const email = String(body.email || '').trim().slice(0, 160);
+        const subject = String(body.subject || 'General Inquiry').trim().slice(0, 160);
+        const message = String(body.message || '').trim().slice(0, 3000);
+        if (!name || !email.includes('@') || message.length < 5) {
+          return json({ error: 'Please fill in your name, email address, and message.' }, 400);
+        }
+        if (env.DB) {
+          await env.DB.prepare(
+            'INSERT INTO contact_messages (id, name, email, subject, message) VALUES (?, ?, ?, ?, ?)'
+          ).bind(crypto.randomUUID(), name, email, subject, message).run();
+        }
+        return json({ ok: true, received: true });
       }
 
       if (env.ASSETS) return env.ASSETS.fetch(request);

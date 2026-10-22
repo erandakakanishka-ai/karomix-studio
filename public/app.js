@@ -20,15 +20,50 @@ const App = (() => {
   hwAudio.setAttribute('webkit-playsinline', '');
   hwAudio.style.display = 'none';
 
+  const clientTimezone = (() => {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (_) { return 'UTC'; }
+  })();
+
+  function getLocalDayKey() {
+    try {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: clientTimezone, year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date());
+    } catch (_) {
+      return new Date().toISOString().slice(0, 10);
+    }
+  }
+
+  function loadGuestDailyExports() {
+    const today = getLocalDayKey();
+    if (localStorage.getItem('karomix_daily_date') !== today) {
+      localStorage.setItem('karomix_daily_date', today);
+      localStorage.setItem('karomix_daily_used', '0');
+      return 0;
+    }
+    return Number(localStorage.getItem('karomix_daily_used') || '0');
+  }
+
   const state = {
     view: 'home',
     stageMode: 'video',
     user: null,
     projects: [],
     authToken: localStorage.getItem('karomix_token') || '',
-    authMode: 'login',
+    authMode: 'register',
     isProDemo: localStorage.getItem('karomix_pro_demo') === '1',
-    exportsUsed: Number(localStorage.getItem('karomix_guest_exports') || '0'),
+    exportsUsed: loadGuestDailyExports(),
+    dailyLimit: 2,
+    quota: {
+      proActive: false,
+      proDaysLeft: 0,
+      dailyUsed: loadGuestDailyExports(),
+      dailyLimit: 2,
+      timezone: clientTimezone,
+      localDate: getLocalDayKey(),
+      minutesToMidnight: 720,
+    },
+    googleClientId: '',
 
     audioCtx: null,
     audioUnlocked: false,
@@ -47,7 +82,8 @@ const App = (() => {
     renderSeq: 0,
     userLoadedBacking: false,
     lastMasterBlob: null,
-    lastMasterFilename: 'karomix-master.wav',
+    lastMasterMime: 'audio/mpeg',
+    lastMasterFilename: 'karomix-master.mp3',
     ytPlayer: null,
     ytSyncInterval: null,
     waitingForYtTap: false,
@@ -1629,46 +1665,188 @@ const App = (() => {
     plot('tunedMidi', '#38bdf8', 2.2);
   }
 
-  // ==================== CLOUD D1 STATE, AUTH, SAVE & WAV EXPORT ====================
+  // ==================== CLOUD D1 STATE, GOOGLE GMAIL AUTH, GLOBAL TIMEZONE QUOTA & MP3 EXPORT ====================
   async function apiFetch(url, opts = {}) {
-    const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+    const headers = {
+      'Content-Type': 'application/json',
+      'X-Client-Timezone': clientTimezone,
+      ...(opts.headers || {}),
+    };
     if (state.authToken) headers.Authorization = `Bearer ${state.authToken}`;
     const res = await fetch(url, { ...opts, headers });
     return res.json();
   }
 
+  function isProActive() {
+    if (state.isProDemo) return true;
+    if (state.quota && state.quota.proActive) return true;
+    if (state.user) {
+      if (state.user.plan && state.user.plan !== 'free') return true;
+      if (Number(state.user.pro_until || 0) > Date.now()) return true;
+    }
+    return false;
+  }
+
+  function getDailyUsedCount() {
+    if (state.user && state.quota) {
+      return Number(state.quota.dailyUsed || 0);
+    }
+    return loadGuestDailyExports();
+  }
+
+  function formatResetCountdown() {
+    const mins = Number(state.quota?.minutesToMidnight || 0);
+    const tz = state.quota?.timezone || clientTimezone || 'Local Time';
+    if (!mins) return `Resets daily at 12:00 AM (${tz})`;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `Resets in ${h}h ${m}m at 12:00 AM midnight (${tz})`;
+  }
+
   async function refreshServerState() {
     try {
       const data = await apiFetch('/api/state');
+      if (data.googleClientId) state.googleClientId = data.googleClientId;
+      if (data.quota) state.quota = data.quota;
       if (data.authenticated && data.user) {
         state.user = data.user;
       } else {
         state.user = null;
+        state.exportsUsed = loadGuestDailyExports();
       }
       state.projects = data.projects || [];
-      if (data.authenticated && data.user && typeof data.user.exports_this_month === 'number') {
-        state.exportsUsed = data.user.exports_this_month;
-      }
       updateAccountUI();
       renderSavedProjects();
-    } catch (_) {}
+    } catch (_) {
+      updateAccountUI();
+    }
   }
 
   function updateAccountUI() {
-    const isPro = state.isProDemo || (state.user && state.user.plan !== 'free');
-    document.getElementById('topPlanBadge').textContent = isPro ? 'PRO ∞' : `FREE • ${state.exportsUsed}/3`;
-    document.getElementById('authTriggerBtn').textContent = state.user ? state.user.display_name.slice(0, 10) : 'Sign In';
+    const pro = isProActive();
+    const daysLeft = state.quota?.proDaysLeft || (state.user?.pro_until > Date.now()
+      ? Math.max(1, Math.ceil((state.user.pro_until - Date.now()) / 86400000))
+      : 0);
+    const usedToday = getDailyUsedCount();
+    const limit = state.dailyLimit || 2;
+
+    const badge = document.getElementById('topPlanBadge');
+    if (badge) {
+      if (pro && daysLeft > 0) badge.textContent = `PRO FREE • ${daysLeft}d`;
+      else if (pro) badge.textContent = 'PRO ∞';
+      else badge.textContent = `FREE • ${Math.min(limit, usedToday)}/${limit} Today`;
+    }
+
+    const authBtn = document.getElementById('authTriggerBtn');
+    if (authBtn) {
+      authBtn.textContent = state.user ? state.user.display_name.slice(0, 10) : 'Sign In • Free Pro';
+    }
+
     const proBtn = document.getElementById('proActionBtn');
-    if (proBtn) proBtn.textContent = isPro ? 'Pro Pass Active ✓' : 'Activate Pro Pass';
+    if (proBtn) {
+      if (state.user && daysLeft > 0) {
+        proBtn.textContent = `30-Day Free Pro Active ✓ (${daysLeft}d left)`;
+      } else if (!state.user && !state.isProDemo) {
+        proBtn.textContent = 'Sign In with Gmail — Get 30 Days Free Pro';
+      } else {
+        proBtn.textContent = state.isProDemo ? 'Temporary Free Pro Active ✓' : 'Activate Free Promo Month';
+      }
+    }
+
+    const quotaLine = document.getElementById('quotaStatusLine');
+    if (quotaLine) {
+      if (pro && daysLeft > 0) {
+        quotaLine.textContent = `🎁 30-Day Welcome Pro Pass Active (${daysLeft} days remaining) • Unlimited MP3 & WAV downloads unlocked.`;
+      } else if (pro) {
+        quotaLine.textContent = `✓ Temporary Pro Studio Access Active • Unlimited MP3 & WAV downloads unlocked.`;
+      } else {
+        quotaLine.textContent = `Daily Free Trial: ${Math.min(limit, usedToday)}/${limit} downloads used today • ${formatResetCountdown()}`;
+      }
+    }
+
+    const userPlanPill = document.getElementById('authUserPlanInfo');
+    if (userPlanPill && state.user) {
+      userPlanPill.textContent = daysLeft > 0
+        ? `🎁 Free Pro Welcome Pass Active (${daysLeft} days left)`
+        : `Daily Free Quota: ${Math.min(limit, usedToday)}/${limit} today (${state.quota?.timezone || clientTimezone})`;
+    }
   }
 
-  function openAuthModal() {
+  let gsiInitialized = false;
+  function maybeMountGoogleButton() {
+    if (!state.googleClientId) return;
+    const mount = document.getElementById('googleGsiMount');
+    const fallbackBtn = document.getElementById('btnQuickGmailSignup');
+    const renderBtn = () => {
+      if (!window.google?.accounts?.id || !mount) return;
+      if (!gsiInitialized) {
+        window.google.accounts.id.initialize({
+          client_id: state.googleClientId,
+          callback: async (resp) => {
+            if (!resp?.credential) return;
+            const data = await apiFetch('/api/auth/google', {
+              method: 'POST',
+              body: JSON.stringify({ credential: resp.credential }),
+            });
+            if (data.error) { showToast(data.error); return; }
+            state.authToken = data.token;
+            state.user = data.user;
+            if (data.quota) state.quota = data.quota;
+            localStorage.setItem('karomix_token', data.token);
+            updateAccountUI();
+            closeAuthModal();
+            showToast(`Welcome ${data.user.display_name}! 30-Day Free Pro Pass activated!`);
+          },
+        });
+        gsiInitialized = true;
+      }
+      mount.innerHTML = '';
+      window.google.accounts.id.renderButton(mount, {
+        theme: 'filled_black',
+        size: 'large',
+        width: 340,
+        text: 'continue_with',
+        shape: 'pill',
+      });
+      if (fallbackBtn) fallbackBtn.style.display = 'none';
+    };
+
+    if (window.google?.accounts?.id) {
+      renderBtn();
+      return;
+    }
+    if (!document.getElementById('karomixGsiScript')) {
+      const s = document.createElement('script');
+      s.id = 'karomixGsiScript';
+      s.src = 'https://accounts.google.com/gsi/client';
+      s.async = true;
+      s.defer = true;
+      s.onload = renderBtn;
+      document.head.appendChild(s);
+    }
+  }
+
+  function startGmailQuickSignup() {
+    setAuthMode('register');
+    const emailEl = document.getElementById('authEmail');
+    if (emailEl) {
+      emailEl.placeholder = 'yourname@gmail.com';
+      emailEl.focus();
+    }
+    showToast('Enter your Gmail below to unlock 30 Days Free Pro instantly!');
+  }
+
+  function openAuthModal(defaultMode = null) {
+    if (defaultMode) setAuthMode(defaultMode);
     document.getElementById('authModal').classList.add('open');
     document.getElementById('authLoggedInBox').style.display = state.user ? 'block' : 'none';
     document.getElementById('authForm').style.display = state.user ? 'none' : 'block';
     if (state.user) {
       document.getElementById('authUserName').textContent = state.user.display_name;
       document.getElementById('authUserEmail').textContent = state.user.email;
+      updateAccountUI();
+    } else {
+      maybeMountGoogleButton();
     }
   }
 
@@ -1679,7 +1857,9 @@ const App = (() => {
     document.getElementById('authNameWrap').style.display = mode === 'register' ? 'block' : 'none';
     document.getElementById('tabLoginBtn').className = mode === 'login' ? 'btn btn-sm btn-amber' : 'btn btn-sm';
     document.getElementById('tabRegBtn').className = mode === 'register' ? 'btn btn-sm btn-amber' : 'btn btn-sm';
-    document.getElementById('authSubmitBtn').textContent = mode === 'login' ? 'Sign In' : 'Create Account';
+    document.getElementById('authSubmitBtn').textContent = mode === 'login'
+      ? 'Sign In'
+      : 'Sign Up Free — Unlock 30 Days Pro';
   }
 
   async function submitAuth(e) {
@@ -1694,15 +1874,19 @@ const App = (() => {
     if (data.error) { showToast(data.error); return; }
     state.authToken = data.token;
     state.user = data.user;
+    if (data.quota) state.quota = data.quota;
     localStorage.setItem('karomix_token', data.token);
     updateAccountUI();
     closeAuthModal();
-    showToast(`Signed in as ${data.user.display_name}`);
+    showToast(`Welcome ${data.user.display_name}! Your 30-Day Free Pro Pass is active!`);
   }
 
   function logout() {
     state.authToken = '';
     state.user = null;
+    state.quota.proActive = false;
+    state.quota.proDaysLeft = 0;
+    state.quota.dailyUsed = loadGuestDailyExports();
     localStorage.removeItem('karomix_token');
     updateAccountUI();
     closeAuthModal();
@@ -1720,6 +1904,8 @@ const App = (() => {
     state.authToken = '';
     state.user = null;
     state.projects = [];
+    state.quota.proActive = false;
+    state.quota.proDaysLeft = 0;
     localStorage.removeItem('karomix_token');
     updateAccountUI();
     renderSavedProjects();
@@ -1728,6 +1914,14 @@ const App = (() => {
   }
 
   async function toggleProDemo() {
+    if (!state.user && !state.isProDemo) {
+      openAuthModal('register');
+      return;
+    }
+    if (state.user && (state.quota?.proDaysLeft || 0) > 0) {
+      showToast(`Your 30-Day Free Pro Pass is already active (${state.quota.proDaysLeft} days remaining)!`);
+      return;
+    }
     state.isProDemo = !state.isProDemo;
     localStorage.setItem('karomix_pro_demo', state.isProDemo ? '1' : '0');
     apiFetch('/api/upgrade-demo', {
@@ -1735,7 +1929,7 @@ const App = (() => {
       body: JSON.stringify({ plan: state.isProDemo ? 'pro_global' : 'free' }),
     }).catch(() => {});
     updateAccountUI();
-    showToast(state.isProDemo ? 'Pro Unlimited Pass activated!' : 'Switched to Free Tier');
+    showToast(state.isProDemo ? 'Temporary Free Pro Month activated!' : 'Switched to 2/day Free Tier');
   }
 
   async function saveProjectToD1() {
@@ -1786,42 +1980,74 @@ const App = (() => {
     showToast(`Loaded "${p.title}"`);
   }
 
+  function onExportFormatChange() {
+    const fmt = document.getElementById('exportFormatSelect')?.value || 'mp3_compact';
+    const btn = document.getElementById('btnRenderMaster');
+    if (btn && !btn.disabled) {
+      btn.textContent = fmt.startsWith('mp3') ? 'Download MP3 Master' : 'Download WAV Master';
+    }
+  }
+
   async function exportMasteredWav() {
     unlockMobileAudioSync();
     if (!state.backingBuffer && !state.rawVocalBuffer) {
       await preloadRealDemoAssets();
     }
-    const isPro = state.isProDemo || (state.user && state.user.plan !== 'free');
-    if (!isPro && state.exportsUsed >= 3) {
-      switchView('library');
-      showToast('Free 3 exports used — tap Activate Pro Pass!');
+
+    const pro = isProActive();
+    const usedToday = getDailyUsedCount();
+    const limit = state.dailyLimit || 2;
+    if (!pro && usedToday >= limit) {
+      if (!state.user) {
+        openAuthModal('register');
+        showToast('Daily 2/2 free downloads used — Sign in with Gmail for 30 Days Unlimited Pro FREE!');
+      } else {
+        switchView('library');
+        showToast(`Today's 2/2 free downloads used • ${formatResetCountdown()}`);
+      }
       return;
     }
 
+    const fmt = document.getElementById('exportFormatSelect')?.value || 'mp3_compact';
     const btn = document.getElementById('btnRenderMaster');
     btn.disabled = true;
-    btn.textContent = 'Mastering...';
+    btn.textContent = fmt.startsWith('mp3') ? 'Encoding MP3...' : 'Mastering WAV...';
 
     try {
-      const compact = document.getElementById('exportFormatSelect').value === 'compact';
-      const wavBlob = await KaroDSP.renderMasterWav(
+      const result = await KaroDSP.renderMasterAudio(
         { backing: state.backingBuffer, rawVocal: state.rawVocalBuffer, tunedVocal: state.tunedVocalBuffer },
         state.params,
-        compact
+        fmt,
+        (pct) => { if (fmt.startsWith('mp3')) btn.textContent = `Encoding MP3 ${pct}%...`; }
       );
       suspendIdleWebAudio();
 
-      state.exportsUsed++;
-      if (!state.user) localStorage.setItem('karomix_guest_exports', String(state.exportsUsed));
+      if (!state.user) {
+        const nextGuest = loadGuestDailyExports() + 1;
+        localStorage.setItem('karomix_daily_date', getLocalDayKey());
+        localStorage.setItem('karomix_daily_used', String(nextGuest));
+        state.exportsUsed = nextGuest;
+        state.quota.dailyUsed = nextGuest;
+      } else {
+        try {
+          const trackRes = await apiFetch('/api/track-export', { method: 'POST' });
+          if (trackRes?.quota) state.quota = trackRes.quota;
+        } catch (_) {}
+      }
       updateAccountUI();
-      if (state.user) apiFetch('/api/track-export', { method: 'POST' }).catch(() => {});
 
-      const fname = `${(document.getElementById('projectTitleInput').value || 'karomix').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.wav`;
-      state.lastMasterBlob = wavBlob;
+      const fname = `${(document.getElementById('projectTitleInput').value || 'karomix').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.${result.ext}`;
+      const sizeMb = (result.blob.size / (1024 * 1024)).toFixed(2);
+      state.lastMasterBlob = result.blob;
+      state.lastMasterMime = result.mime;
       state.lastMasterFilename = fname;
 
-      const url = URL.createObjectURL(wavBlob);
+      const url = URL.createObjectURL(result.blob);
       document.getElementById('masterOutputArea').style.display = 'block';
+      const readyLabel = document.getElementById('masterReadyLabel');
+      if (readyLabel) {
+        readyLabel.textContent = `✓ Mastered ${result.ext.toUpperCase()} Ready (${sizeMb} MB)`;
+      }
       document.getElementById('renderedAudioPlayer').src = url;
 
       const a = document.createElement('a');
@@ -1832,12 +2058,12 @@ const App = (() => {
       if (window.confetti && !isLowEndDevice) {
         window.confetti({ particleCount: 60, spread: 60, origin: { y: 0.7 } });
       }
-      showToast('Mastered WAV downloaded!');
+      showToast(`Mastered ${result.ext.toUpperCase()} downloaded (${sizeMb} MB)!`);
     } catch (err) {
       showToast('Export error: ' + err.message);
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Download Master';
+      onExportFormatChange();
     }
   }
 
@@ -1847,7 +2073,9 @@ const App = (() => {
       return;
     }
     try {
-      const file = new File([state.lastMasterBlob], state.lastMasterFilename, { type: 'audio/wav' });
+      const file = new File([state.lastMasterBlob], state.lastMasterFilename, {
+        type: state.lastMasterMime || 'audio/mpeg',
+      });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           title: document.getElementById('projectTitleInput').value || 'My KaroMix Studio Cover',
@@ -1862,7 +2090,7 @@ const App = (() => {
     a.href = url;
     a.download = state.lastMasterFilename;
     a.click();
-    showToast('Saved master WAV to device!');
+    showToast(`Saved ${state.lastMasterFilename} to device!`);
   }
 
   // ==================== ULTRA-FAST ZERO-RAM BOOT ====================
@@ -1911,7 +2139,7 @@ const App = (() => {
     heroSearchSubmit, quickSingSong, searchOrLoadKaraoke, selectKaraokeVideo, nextKaraokeResult, seekToLyric,
     toggleCustomLyricsEditor, saveCustomLyrics,
     onMicModeChange, handleBackingUpload, handleVocalUpload, toggleMicMonitor, toggleMicRecording, receiveNativeDualTracks,
-    openAuthModal, closeAuthModal, setAuthMode, submitAuth, logout, deleteAccount, toggleProDemo,
-    saveProjectToD1, restoreProject, exportMasteredWav, shareMasterFile,
+    openAuthModal, closeAuthModal, setAuthMode, startGmailQuickSignup, submitAuth, logout, deleteAccount, toggleProDemo,
+    saveProjectToD1, restoreProject, onExportFormatChange, exportMasteredWav, shareMasterFile,
   };
 })();

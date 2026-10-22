@@ -706,25 +706,34 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
         <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;">
           <div style="font-weight:700;" id="authUserName">Artist</div>
           <div style="font-size:12px;color:var(--text-secondary);" id="authUserEmail"></div>
+          <div style="font-size:12px;color:var(--amber-bright);margin-top:6px;font-weight:600;" id="authUserPlanInfo"></div>
         </div>
         <button class="btn" style="width:100%;margin-bottom:8px;" onclick="App.logout()">Sign Out</button>
         <button class="btn btn-sm" style="width:100%;color:#f87171;border-color:rgba(248,113,113,0.28);" onclick="App.deleteAccount()">Delete Account & Cloud Data</button>
       </div>
       <form id="authForm" onsubmit="App.submitAuth(event)">
-        <div style="display:flex;gap:6px;margin-bottom:12px;">
-          <button type="button" class="btn btn-sm btn-amber" id="tabLoginBtn" style="flex:1;" onclick="App.setAuthMode('login')">Sign In</button>
-          <button type="button" class="btn btn-sm" id="tabRegBtn" style="flex:1;" onclick="App.setAuthMode('register')">Sign Up</button>
+        <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.38);border-radius:10px;padding:9px 11px;font-size:12px;color:var(--amber-bright);margin-bottom:12px;line-height:1.45;">
+          🎁 <strong>New Member Launch Gift:</strong> Sign in with your Gmail to unlock <strong>30 Days Unlimited Pro FREE</strong> (then 2 free downloads every day).
         </div>
-        <div id="authNameWrap" style="display:none;margin-bottom:10px;">
+        <div id="googleGsiMount" style="display:flex;justify-content:center;margin-bottom:8px;"></div>
+        <button type="button" class="btn" id="btnQuickGmailSignup" style="width:100%;margin-bottom:12px;border-color:rgba(56,189,248,0.4);" onclick="App.startGmailQuickSignup()">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          <span>Continue with Gmail — 30 Days Free Pro</span>
+        </button>
+        <div style="display:flex;gap:6px;margin-bottom:12px;">
+          <button type="button" class="btn btn-sm" id="tabLoginBtn" style="flex:1;" onclick="App.setAuthMode('login')">Sign In</button>
+          <button type="button" class="btn btn-sm btn-amber" id="tabRegBtn" style="flex:1;" onclick="App.setAuthMode('register')">Sign Up Free</button>
+        </div>
+        <div id="authNameWrap" style="display:block;margin-bottom:10px;">
           <input type="text" id="authName" class="input" style="width:100%;" placeholder="Artist Name" />
         </div>
         <div style="margin-bottom:10px;">
-          <input type="email" id="authEmail" class="input" style="width:100%;" placeholder="Email address" required />
+          <input type="email" id="authEmail" class="input" style="width:100%;" placeholder="Gmail address (e.g. singer@gmail.com)" required />
         </div>
         <div style="margin-bottom:14px;">
           <input type="password" id="authPassword" class="input" style="width:100%;" placeholder="Password (min 4 chars)" required />
         </div>
-        <button type="submit" class="btn btn-amber" style="width:100%;" id="authSubmitBtn">Sign In</button>
+        <button type="submit" class="btn btn-amber" style="width:100%;" id="authSubmitBtn">Sign Up Free — Unlock 30 Days Pro</button>
       </form>
     </div>
   </div>
@@ -741,11 +750,12 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
       <button class="nav-item" data-view="sing" onclick="App.switchView('sing')">1. Sing Karaoke</button>
       <button class="nav-item" data-view="mix" onclick="App.switchView('mix')">2. Mix Studio</button>
       <button class="nav-item" data-view="library" onclick="App.switchView('library')">My Library</button>
+      <a href="/guides" class="nav-item" style="text-decoration:none;display:inline-flex;align-items:center;">Vocal Guides</a>
     </nav>
 
     <div style="display:flex;align-items:center;gap:8px;">
-      <button class="btn btn-sm" id="topPlanBadge" onclick="App.switchView('library')">FREE • 0/3</button>
-      <button class="btn btn-sm btn-amber" id="authTriggerBtn" onclick="App.openAuthModal()">Sign In</button>
+      <button class="btn btn-sm" id="topPlanBadge" onclick="App.switchView('library')">FREE • 0/2 Today</button>
+      <button class="btn btn-sm btn-amber" id="authTriggerBtn" onclick="App.openAuthModal()">Sign In • Free Pro</button>
     </div>
   </header>
 
@@ -831,8 +841,33 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
           <img src="/assets/hero-singer.jpg" alt="Step 3 Mix & Master" style="object-position:center 25%;" />
           <div class="step-card-body">
             <div class="step-badge">STEP 03</div>
-            <h3 style="font-size:16.5px;margin-bottom:5px;">One-Tap Studio Mix & WAV</h3>
-            <p style="font-size:13px;color:var(--text-secondary);">Choose Concert Hall or Pop Air, align vocal timing in 1 tap, and download your mastered song.</p>
+            <h3 style="font-size:16.5px;margin-bottom:5px;">One-Tap Studio Mix & MP3</h3>
+            <p style="font-size:13px;color:var(--text-secondary);">Choose Concert Hall or Pop Air, align vocal timing in 1 tap, and download a compact stereo MP3 (~3 MB).</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Original Vocal Engineering & Home Recording Reference (Rich Publisher Guide Section) -->
+      <div class="card" style="margin-top:26px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+          <div>
+            <span class="step-badge">VOCAL RECORDING & MASTERING GUIDE</span>
+            <h2 style="font-size:19px;">How Studio Vocal Mastering Works in Your Browser</h2>
+          </div>
+          <a href="/guides" class="btn btn-sm" style="text-decoration:none;">Read All 6 Vocal Guides →</a>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;font-size:13.5px;color:var(--text-secondary);line-height:1.68;">
+          <div>
+            <h3 style="font-size:15px;color:var(--text);margin-bottom:6px;">1. Private Local DSP Signal Chain</h3>
+            <p>Raw smartphone microphones pick up boxy low-mid room reflections between 220 Hz and 320 Hz alongside background fan hum. KaroMix AI processes audio locally inside your browser using a multi-stage vocal chain: an adaptive noise gate, subtractive mud-cut EQ, dual-stage optical compression, de-essing, true-stereo concert hall pre-delay reverb, and peak limiting.</p>
+          </div>
+          <div>
+            <h3 style="font-size:15px;color:var(--text);margin-bottom:6px;">2. Phone Placement & Sync Alignment</h3>
+            <p>Hold your phone 15–20 cm (6–8 inches) away at a slight 30-degree angle across your mouth so plosive "P" and "B" air bursts pass beside the capsule instead of clipping it. Because mobile operating systems add 45–160 ms of audio buffer delay during recording, tap <strong>Auto-Fix Sync</strong> in Mix Studio to lock your vocal phrasing tightly onto the beat.</p>
+          </div>
+          <div>
+            <h3 style="font-size:15px;color:var(--text);margin-bottom:6px;">3. Compact 128 kbps MP3 vs Studio WAV</h3>
+            <p>Uncompressed stereo WAV files consume roughly 10 MB per minute (~35 MB per song). KaroMix AI includes a built-in client-side LAME stereo MP3 encoder that masters clean 128 kbps stereo tracks at ~0.95 MB per minute (~3.2 MB per full song)—ideal for instant WhatsApp sharing and mobile storage without server uploads.</p>
           </div>
         </div>
       </div>
@@ -1135,18 +1170,19 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
           </div>
         </div>
 
-        <select id="exportFormatSelect" style="width:100%;margin-bottom:10px;">
-          <option value="hq" selected>Studio HD Stereo Master (44.1 kHz True Stereo WAV — Recommended)</option>
-          <option value="compact">Compact Stereo Share WAV (32 kHz Stereo — Faster WhatsApp Upload)</option>
+        <select id="exportFormatSelect" onchange="App.onExportFormatChange()" style="width:100%;margin-bottom:10px;">
+          <option value="mp3_compact" selected>Compact Studio Stereo MP3 — 128 kbps (~1 MB/min, Small MB — Recommended)</option>
+          <option value="mp3_ultra">Ultra-Light Mobile MP3 — 96 kbps (~0.7 MB/min, Data Saver)</option>
+          <option value="wav_hq">Studio Archive Lossless WAV — 44.1 kHz Stereo</option>
         </select>
         <div style="display:grid;grid-template-columns:1fr 1.35fr;gap:8px;">
           <button class="btn" onclick="App.saveProjectToD1()">Save Cloud</button>
-          <button class="btn btn-amber" id="btnRenderMaster" onclick="App.exportMasteredWav()">Download Master</button>
+          <button class="btn btn-amber" id="btnRenderMaster" onclick="App.exportMasteredWav()">Download MP3 Master</button>
         </div>
 
         <div id="masterOutputArea" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
-            <span style="font-size:12.5px;color:var(--emerald);font-weight:700;">✓ Mastered Song Ready</span>
+            <span style="font-size:12.5px;color:var(--emerald);font-weight:700;" id="masterReadyLabel">✓ Mastered MP3 Ready</span>
             <button class="btn btn-sm btn-cyan" onclick="App.shareMasterFile()">Share to WhatsApp / Phone</button>
           </div>
           <audio id="renderedAudioPlayer" controls style="width:100%;height:38px;"></audio>
@@ -1170,43 +1206,45 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
       </div>
 
       <div class="card" style="border-color:rgba(245,158,11,0.4);">
-        <span class="step-badge">SIMPLE, TRANSPARENT PLANS</span>
-        <h3 style="font-size:19px;margin-bottom:12px;">Choose Your Studio Plan</h3>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-bottom:14px;">
+        <span class="step-badge">FREE STUDIO ACCESS & WELCOME PRO PASS</span>
+        <h3 style="font-size:19px;margin-bottom:12px;">Your Studio Access Plan</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:14px;">
           <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;">
-            <div style="font-size:12px;font-weight:700;color:var(--text-secondary);">FREE STARTER</div>
-            <div style="font-size:22px;font-weight:800;margin:4px 0 8px;">$0 <span style="font-size:12px;font-weight:500;color:var(--text-muted);">/ forever</span></div>
+            <div style="font-size:12px;font-weight:700;color:var(--text-secondary);">DAILY FREE TRIAL (ALL COUNTRIES)</div>
+            <div style="font-size:22px;font-weight:800;margin:4px 0 8px;">2 / Day <span style="font-size:12px;font-weight:500;color:var(--text-muted);">• Free Forever</span></div>
             <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.7;">
               ✓ Unlimited karaoke singing & lyrics<br />
-              ✓ All 6 studio reverb & clarity chains<br />
-              ✓ 3 full stereo WAV exports / month
+              ✓ All 6 studio reverb, clarity & pitch chains<br />
+              ✓ 2 Mastered MP3 / WAV downloads daily (resets automatically at 12:00 AM local midnight in your timezone)
             </div>
           </div>
           <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.45);border-radius:12px;padding:14px;">
-            <div style="font-size:12px;font-weight:700;color:var(--amber-bright);">PRO STUDIO PASS</div>
-            <div style="font-size:22px;font-weight:800;margin:4px 0 8px;">$4.99 <span style="font-size:12px;font-weight:500;color:var(--text-muted);">/ month</span></div>
+            <div style="font-size:12px;font-weight:700;color:var(--amber-bright);">NEW MEMBER LAUNCH GIFT</div>
+            <div style="font-size:22px;font-weight:800;margin:4px 0 8px;">30 Days FREE <span style="font-size:12px;font-weight:500;color:var(--text-muted);">• Pro Pass</span></div>
             <div style="font-size:12.5px;color:var(--text);line-height:1.7;">
-              ✓ <strong>Unlimited</strong> lossless 44.1kHz WAV downloads<br />
-              ✓ Cloud preset backup across devices<br />
-              ✓ Priority AI Voice Match & Auto-Tune HD
+              ✓ Instant <strong>1 Month Unlimited Pro</strong> when you sign in with Gmail<br />
+              ✓ Unlimited Compact MP3 & Lossless WAV downloads<br />
+              ✓ Cloud mix & preset sync across all devices
             </div>
           </div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-          <span style="font-size:12px;color:var(--text-muted);">Cancel anytime in 1 click • 14-day refund guarantee</span>
-          <button class="btn btn-amber" id="proActionBtn" onclick="App.toggleProDemo()">Activate Pro Pass</button>
+          <span style="font-size:12px;color:var(--cyan);" id="quotaStatusLine">Daily Free Trial: 0/2 downloads used today • Resets at 12:00 AM local midnight</span>
+          <button class="btn btn-amber" id="proActionBtn" onclick="App.toggleProDemo()">Sign In with Gmail — Get 30 Days Free Pro</button>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Commercial Trust, Privacy & Compliance Footer -->
+  <!-- Commercial Trust, Editorial Guides & Compliance Footer -->
   <footer style="max-width:960px;margin:28px auto 12px;padding:18px 16px;border-top:1px solid var(--border);text-align:center;font-size:12px;color:var(--text-muted);">
     <div style="display:flex;justify-content:center;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
+      <a href="/guides" style="color:var(--text-secondary);text-decoration:none;">Vocal Guides</a>
+      <a href="/about" style="color:var(--text-secondary);text-decoration:none;">About Us</a>
+      <a href="/contact" style="color:var(--text-secondary);text-decoration:none;">Contact Support</a>
       <a href="/privacy" style="color:var(--text-secondary);text-decoration:none;">Privacy Policy</a>
       <a href="/terms" style="color:var(--text-secondary);text-decoration:none;">Terms of Service</a>
-      <a href="/refunds" style="color:var(--text-secondary);text-decoration:none;">Refund Policy</a>
-      <a href="mailto:support@karomix.ai" style="color:var(--text-secondary);text-decoration:none;">Contact Support</a>
+      <a href="/refunds" style="color:var(--text-secondary);text-decoration:none;">Trial & Access Policy</a>
     </div>
     <div>© 2026 KaroMix AI Studio • 100% Private Local Browser Vocal Processing</div>
   </footer>
@@ -1231,8 +1269,8 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     </button>
   </nav>
 
-  <script src="/vendor/confetti.min.js?v=8.0"></script>
-  <script src="/dsp-engine.js?v=8.0"></script>
-  <script src="/app.js?v=8.0"></script>
+  <script src="/vendor/confetti.min.js?v=9.0"></script>
+  <script src="/dsp-engine.js?v=9.0"></script>
+  <script src="/app.js?v=9.0"></script>
 </body>
 </html>

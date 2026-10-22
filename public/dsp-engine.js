@@ -611,6 +611,79 @@ window.KaroDSP = (() => {
     if (nodes.limiter) nodes.limiter.threshold.value = params.autoMaster ? mp.thresh : -1.0;
   }
 
+  let mp3LoaderPromise = null;
+  function ensureMp3Encoder() {
+    if (window.lamejs && window.lamejs.Mp3Encoder) return Promise.resolve(window.lamejs);
+    if (!mp3LoaderPromise) {
+      mp3LoaderPromise = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = '/vendor/lame.min.js?v=9.0';
+        s.async = true;
+        s.onload = () => (window.lamejs ? resolve(window.lamejs) : reject(new Error('MP3 encoder unavailable')));
+        s.onerror = () => { mp3LoaderPromise = null; reject(new Error('Failed to load MP3 encoder')); };
+        document.head.appendChild(s);
+      });
+    }
+    return mp3LoaderPromise;
+  }
+
+  async function audioBufferToMp3Blob(buffer, kbps = 128, onProgress = null) {
+    const lame = await ensureMp3Encoder();
+    const numCh = buffer.numberOfChannels > 1 ? 2 : 1;
+    const enc = new lame.Mp3Encoder(numCh, buffer.sampleRate, kbps);
+    const chL = buffer.getChannelData(0);
+    const chR = numCh > 1 ? buffer.getChannelData(1) : chL;
+    const total = buffer.length;
+    const block = 1152;
+    const batch = block * 64;
+    const bufL = new Int16Array(batch);
+    const bufR = new Int16Array(batch);
+    const chunks = [];
+
+    for (let pos = 0; pos < total; pos += batch) {
+      const end = Math.min(total, pos + batch);
+      const count = end - pos;
+      for (let i = 0; i < count; i++) {
+        const sl = Math.max(-1, Math.min(1, chL[pos + i]));
+        const sr = Math.max(-1, Math.min(1, chR[pos + i]));
+        bufL[i] = sl < 0 ? sl * 0x8000 : sl * 0x7fff;
+        bufR[i] = sr < 0 ? sr * 0x8000 : sr * 0x7fff;
+      }
+      for (let j = 0; j < count; j += block) {
+        const subEnd = Math.min(count, j + block);
+        const mp3buf = numCh > 1
+          ? enc.encodeBuffer(bufL.subarray(j, subEnd), bufR.subarray(j, subEnd))
+          : enc.encodeBuffer(bufL.subarray(j, subEnd));
+        if (mp3buf && mp3buf.length > 0) chunks.push(mp3buf);
+      }
+      if (onProgress) onProgress(Math.min(99, Math.round((end / total) * 100)));
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    const tail = enc.flush();
+    if (tail && tail.length > 0) chunks.push(tail);
+    return new Blob(chunks, { type: 'audio/mpeg' });
+  }
+
+  async function renderMasterAudio(buffers, params, format = 'mp3_compact', onProgress = null) {
+    const isUltraCompact = format === 'mp3_ultra' || format === 'compact';
+    const sampleRate = isUltraCompact ? 32000 : 44100;
+    const offsetSec = (params.vocalOffsetMs || 0) / 1000;
+    const bDur = buffers.backing ? buffers.backing.duration : 0;
+    const vDur = buffers.rawVocal ? buffers.rawVocal.duration + Math.max(0, offsetSec) + 1.8 : 0;
+    const totalDur = Math.max(bDur, vDur, 1);
+    const offline = new OfflineAudioContext(2, Math.ceil(totalDur * sampleRate), sampleRate);
+    buildStudioGraph(offline, buffers, params, 0);
+    const rendered = await offline.startRendering();
+    if (format === 'mp3_compact') {
+      return { blob: await audioBufferToMp3Blob(rendered, 128, onProgress), ext: 'mp3', mime: 'audio/mpeg' };
+    }
+    if (format === 'mp3_ultra') {
+      return { blob: await audioBufferToMp3Blob(rendered, 96, onProgress), ext: 'mp3', mime: 'audio/mpeg' };
+    }
+    return { blob: audioBufferToWavBlob(rendered, 2), ext: 'wav', mime: 'audio/wav' };
+  }
+
   async function renderMasterWav(buffers, params, compact = false) {
     const sampleRate = compact ? 32000 : 44100;
     const offsetSec = (params.vocalOffsetMs || 0) / 1000;
@@ -682,6 +755,6 @@ window.KaroDSP = (() => {
     setHallImpulseBuffer, computeWaveformPeaks, sliceAudioBuffer,
     processVocalAsync, transposeBufferAsync, detectPitchLive,
     centerCutKaraokeBuffer, analyzeVoiceQuick, estimateSyncOffsetMs,
-    buildStudioGraph, applyLiveParamsToGraph, renderMasterWav,
+    buildStudioGraph, applyLiveParamsToGraph, renderMasterWav, renderMasterAudio,
   };
 })();
