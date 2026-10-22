@@ -182,7 +182,8 @@ const App = (() => {
     state.stageMode = mode;
     document.getElementById('btnStageVideo').className = mode === 'video' ? 'btn btn-sm btn-cyan' : 'btn btn-sm';
     document.getElementById('btnStageLyrics').className = mode === 'lyrics' ? 'btn btn-sm btn-cyan' : 'btn btn-sm';
-    document.getElementById('stageVideoWrap').style.display = 'flex';
+    const vw = document.getElementById('stageVideoWrap');
+    vw.classList.toggle('collapsed-audio-only', mode === 'lyrics');
     document.getElementById('stageLyricsWrap').style.display = mode === 'lyrics' ? 'block' : 'none';
   }
 

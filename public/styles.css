@@ -408,13 +408,26 @@ input[type="range"]::-moz-range-thumb {
 .yt-item.active { border-color: var(--amber); }
 .yt-item img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; }
 .yt-item-title {
-  padding: 7px 8px;
+  margin: 7px 8px;
+  padding: 0;
   font-size: 11.5px;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.32;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.stage-screen.collapsed-audio-only {
+  height: 1px !important;
+  min-height: 0 !important;
+  aspect-ratio: auto !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  opacity: 0.001;
+  pointer-events: none;
   overflow: hidden;
 }
 
