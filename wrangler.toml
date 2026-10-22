@@ -1,0 +1,18 @@
+name = "karomix-vocal-studio"
+main = "src/worker.ts"
+compatibility_date = "2026-10-01"
+
+# Cloudflare Workers + Static Assets (Unlimited FREE Bandwidth + Auto GitHub Deploy!)
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# Cloudflare D1 Database Binding:
+# Option A (Zero code): In Cloudflare Dashboard -> Workers & Pages -> karomix-vocal-studio -> Settings -> Bindings -> Add -> D1 Database -> Variable name: DB
+# Option B (Via Git): Uncomment the 4 lines below and replace database_id with your real D1 UUID!
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "karomix-db"
+# database_id = "YOUR_REAL_D1_UUID_HERE"

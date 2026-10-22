@@ -1,0 +1,17 @@
+{
+  "name": "karomix-vocal-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Zero-Server-Audio-Cost Karaoke & Vocal Mastering SaaS on Cloudflare Pages + Workers + D1",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 execute karomix-db --local --file=./schema.sql",
+    "db:remote": "wrangler d1 execute karomix-db --remote --file=./schema.sql"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260901.0",
+    "typescript": "^5.6.3",
+    "wrangler": "^4.4.0"
+  }
+}

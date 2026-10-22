@@ -1,0 +1,30 @@
+====================================================================
+පියවර A: මේ Folder එක Download කරගත් පසු Cursor / Windsurf Agent ට දෙන Prompt එක
+(මෙය Copy කර Agent ට දෙන්න - Agent විසින්ම සියලු දේ Cloudflare වෙත Upload කරයි!)
+====================================================================
+
+Please deploy this entire KaroMix Studio project inside this folder to my Cloudflare Free account automatically:
+1. Run `npm install`.
+2. Run `npx wrangler login` so I can click Allow in my browser.
+3. Create the D1 database named `karomix-db` using `npx wrangler d1 create karomix-db`, automatically copy the generated `database_id` into `wrangler.toml`, and run `schema.sql` remotely on `karomix-db`.
+4. Deploy everything using `npx wrangler deploy` and give me my live public URL.
+Do all terminal steps yourself and tell me in simple Sinhala when I need to click anything.
+
+
+====================================================================
+පියවර B: වෙනත් ඕනෑම AI Agent එකකට මුල සිටම මේ මුළු Karaoke App එකම හදන්න කියන Master Prompt එක
+====================================================================
+
+Build a complete, mobile-friendly Karaoke Recording, Auto-Tune & Vocal Mastering Micro-SaaS web app for Cloudflare Workers Static Assets + Cloudflare D1 (SQLite) so server audio CPU cost is $0:
+
+1. Architecture:
+   - Single Cloudflare Worker project (`wrangler.toml` with `[assets] directory = "./public"`, `run_worker_first = ["/api/*"]`, and D1 binding `DB`).
+   - 100% of audio recording, pitch detection, pitch correction (Auto-Tune), vocal mixing (EQ, Compressor, De-Esser, Stereo Delay, Convolution Reverb), Track Key Transpose (-6 to +6 semitones), and final song mastering + export (WAV & small MP3) MUST run client-side in the browser using Web Audio API & OfflineAudioContext.
+   - D1 SQLite database stores only users, subscription plans (Free = 3 song exports/month, Pro = Unlimited), saved project settings JSON, and custom voice presets, with proper SQL indexes on all foreign keys.
+
+2. Features to build cleanly with simple Sinhala + English UI labels:
+   - Paste YouTube Karaoke URL (embedded lyric video player + simultaneous Tab Audio & Mic capture on desktop + synced vocal playback on mobile) OR upload MP3/WAV/M4A/MP4 karaoke files.
+   - Vocal Recording Booth with 3-2-1 countdown, Headphone vs Speaker mode, live VU meter, and live pitch note display.
+   - Interactive dual-track waveform canvas where the user can drag the vocal track left/right with mouse or finger (or click Auto Sync Fix) to align voice timing with the karaoke beat.
+   - "Smart Voice Match" button that analyzes the recorded voice's pitch range, muddiness, and dynamics and automatically applies the best vocal mixing template + key.
+   - 8 studio vocal presets (Sinhala Ballad, Smule Hall, Pop Radio, Hard Auto-Tune, Phone Mic Rescue, Unplugged Acoustic, Baila Stage, Clean Studio), real-time Original vs Mixed toggle, and 1-click Auto-Master & Download.
