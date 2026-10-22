@@ -1,476 +1,712 @@
 <!DOCTYPE html>
-<html lang="si">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KaroMix AI Studio — Karaoke Recorder, Auto-Tune & Auto-Master</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>KaroMix Studio — AI Vocal & Karaoke Mastering Suite</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <!-- Countdown Overlay -->
-  <div id="countdownOverlay" class="countdown-overlay">
-    <div style="color:#94a3b8;font-size:16px;margin-bottom:6px;">ගායනා කිරීමට සූදානම් වන්න...</div>
-    <div id="countdownNum" class="countdown-num">3</div>
+  <div id="countdownOverlay" class="countdown-mask">
+    <div style="color:#94a3b8;font-size:14px;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;">Get Ready to Sing</div>
+    <div id="countdownNum" class="countdown-digit mono">3</div>
   </div>
 
-  <!-- Toast Notification -->
-  <div id="toast" class="status-toast"></div>
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
 
-  <!-- Top Studio Header -->
-  <header class="topbar">
-    <div class="brand">
-      <div class="brand-logo">🎙️</div>
-      <div>
-        <h1>KaroMix Studio <span style="display:inline;color:#fb923c;font-size:12px;">PRO MVP</span></h1>
-        <span>YouTube / Track Karaoke • Auto-Tune • Voice Match Templates • Auto-Master</span>
+  <!-- Auth Modal (Real D1 Cloud Accounts) -->
+  <div id="authModal" class="modal-backdrop" onclick="if(event.target===this)App.closeAuthModal()">
+    <div class="modal-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <h3 style="font-size:17px;">KaroMix Cloud Account</h3>
+        <button class="btn btn-sm" onclick="App.closeAuthModal()">✕</button>
+      </div>
+      <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:14px;">
+        Save unlimited custom vocal chains and project mixes across devices on Cloudflare D1.
+      </p>
+      <div id="authLoggedInBox" style="display:none;">
+        <div style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;">
+          <div style="font-weight:700;" id="authUserName">Singer</div>
+          <div style="font-size:12px;color:var(--text-secondary);" id="authUserEmail"></div>
+        </div>
+        <button class="btn" style="width:100%;" onclick="App.logout()">Sign Out</button>
+      </div>
+      <form id="authForm" onsubmit="App.submitAuth(event)">
+        <div style="display:flex;gap:6px;margin-bottom:12px;">
+          <button type="button" class="btn btn-sm btn-amber" id="tabLoginBtn" style="flex:1;" onclick="App.setAuthMode('login')">Sign In</button>
+          <button type="button" class="btn btn-sm" id="tabRegBtn" style="flex:1;" onclick="App.setAuthMode('register')">Create Account</button>
+        </div>
+        <div id="authNameWrap" style="display:none;margin-bottom:10px;">
+          <input type="text" id="authName" class="input" style="width:100%;" placeholder="Artist / Display Name" />
+        </div>
+        <div style="margin-bottom:10px;">
+          <input type="email" id="authEmail" class="input" style="width:100%;" placeholder="Email address" required />
+        </div>
+        <div style="margin-bottom:14px;">
+          <input type="password" id="authPassword" class="input" style="width:100%;" placeholder="Password (min 4 chars)" required />
+        </div>
+        <button type="submit" class="btn btn-amber" style="width:100%;padding:10px;" id="authSubmitBtn">Sign In to Studio</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Top Navigation Header -->
+  <header class="navbar">
+    <div class="brand" onclick="App.switchView('home')">
+      <div class="brand-mark">
+        <svg class="icon" viewBox="0 0 24 24" style="width:19px;height:19px;stroke:#090b10;stroke-width:2.3;">
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <span>KAROMIX</span>
+        <span class="pro-tag">STUDIO</span>
       </div>
     </div>
 
-    <div class="top-actions">
-      <button class="btn btn-cyan" onclick="App.loadFullDemo(true)">
-        ⚡ Demo ගීතය + Voice දමා පරීක්ෂා කරන්න
+    <nav class="desktop-nav">
+      <button class="nav-item active" data-view="home" onclick="App.switchView('home')">
+        <span data-i18n="navHome">Overview</span>
       </button>
-      <div class="pill-badge" id="d1QuotaBadge">
-        D1 Plan: <strong id="planLabel">FREE</strong> • Exports: <strong id="exportCount">1</strong>
-      </div>
-      <button class="btn btn-sm" id="upgradeBtn" onclick="App.toggleProDemo()">
-        💎 Pro Test
+      <button class="nav-item" data-view="studio" onclick="App.switchView('studio')">
+        <span data-i18n="navStudio">Studio</span>
+      </button>
+      <button class="nav-item" data-view="library" onclick="App.switchView('library')">
+        <span data-i18n="navLibrary">Cloud Library</span>
+      </button>
+      <button class="nav-item" data-view="pricing" onclick="App.switchView('pricing')">
+        <span data-i18n="navPricing">Plans</span>
+      </button>
+    </nav>
+
+    <div class="nav-right">
+      <button class="lang-switch" id="langBtn" onclick="App.toggleLanguage()">සිංහල</button>
+      <button class="btn btn-sm" id="topPlanBadge" onclick="App.switchView('pricing')">FREE • 0/3</button>
+      <button class="btn btn-sm btn-amber" id="authTriggerBtn" onclick="App.openAuthModal()">
+        <span data-i18n="signIn">Sign In</span>
       </button>
     </div>
   </header>
 
-  <main class="workspace">
-    <!-- LEFT COLUMN: SOURCE + RECORDER + TIMELINE + TEMPLATES -->
-    <div>
-      <!-- STEP 1: TRACK OR YOUTUBE LINK -->
-      <section class="card">
-        <div class="card-header">
-          <div class="card-title">
-            <span class="step-num">1</span>
-            <span>Karaoke Track එක හෝ YouTube ලින්ක් එක ඇතුළත් කරන්න</span>
+  <!-- ==================== VIEW 1: LANDING / OVERVIEW ==================== -->
+  <section id="view-home" class="app-view active">
+    <div class="container">
+      <div class="hero-section">
+        <div>
+          <div class="eyebrow">
+            <svg class="icon" viewBox="0 0 24 24" style="width:13px;height:13px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span data-i18n="heroBadge">AI VOCAL & KARAOKE MASTERING STUDIO</span>
           </div>
-          <span id="backingStatusBadge" style="font-size:12px;color:#94a3b8;">Track එකක් තෝරා නැත</span>
-        </div>
+          <h1 class="hero-title" data-i18n="heroTitle">Turn any phone vocal into a studio record.</h1>
+          <p class="hero-sub" data-i18n="heroSub">
+            Paste a YouTube karaoke link or drop any track. Record vocals, match your voice with AI presets, fix beat sync in milliseconds, auto-tune in key, and master instantly in your browser.
+          </p>
 
-        <div class="source-tabs">
-          <button class="src-tab active" onclick="App.switchSourceTab('yt', this)">🔴 YouTube Karaoke Link</button>
-          <button class="src-tab" onclick="App.switchSourceTab('file', this)">📂 MP3 / WAV / MP4 Upload</button>
-          <button class="src-tab" onclick="App.switchSourceTab('demo', this)">🎹 Built-in Studio Track</button>
-        </div>
-
-        <!-- Pane 1: YouTube Karaoke Link -->
-        <div id="pane-yt" class="src-pane active">
-          <div class="yt-row">
-            <input
-              type="text"
-              id="ytUrlInput"
-              class="text-input"
-              style="flex:1;min-width:240px;"
-              placeholder="ඕනෑම YouTube Karaoke ලින්ක් එකක් මෙතැන Paste කරන්න (https://www.youtube.com/watch?v=...)"
-            />
-            <button class="btn btn-primary" onclick="App.loadYouTubeLink()">🎬 Load YouTube Player</button>
+          <div class="hero-cta-row">
+            <button class="btn btn-amber btn-lg" onclick="App.switchView('studio')">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+              <span data-i18n="ctaOpenStudio">Open Studio</span>
+            </button>
+            <button class="btn btn-lg" onclick="App.launchInstantShowcase()">
+              <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span data-i18n="ctaTryDemo">Hear Instant Demo</span>
+            </button>
           </div>
 
-          <div class="yt-stage">
-            <div class="yt-video-box" id="ytPlayerContainer">
-              <div>YouTube Karaoke ලින්ක් එකක් Paste කර <strong>Load YouTube Player</strong> ඔබන්න.<br/><span style="font-size:11px;opacity:0.75;">(Lyrics බලාගෙනම ගායනා කළ හැක!)</span></div>
-            </div>
-
+          <div class="metrics-strip">
             <div>
-              <div style="font-size:13.5px;font-weight:700;margin-bottom:6px;color:#38bdf8;">
-                YouTube සමඟ Record කරන ලේසිම ක්‍රම 2:
-              </div>
-              <p style="font-size:12.5px;color:#cbd5e1;margin-bottom:10px;">
-                <strong>ක්‍රමය A (PC Chrome/Edge සුපිරිම ක්‍රමය):</strong> පහත බොත්තම ඔබා <em>"This Tab + Share tab audio"</em> තෝරන්න. එවිට YouTube සංගීතය <strong>Track 1</strong> එකටත්, ඔබේ කටහඬ පමණක් <strong>Track 2</strong> එකටත් වෙන වෙනම record වී Full Song එකම Master වේ!
-              </p>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <button class="btn btn-rec" id="btnRecTabAndMic" onclick="App.startTabPlusMicRecord()">
-                  🔴 YouTube Music + Mic එකවර Record කරන්න
-                </button>
-                <button class="btn" onclick="App.switchSourceTabById('file')">
-                  📂 හෝ Track File එකක් Upload කරන්න
-                </button>
-              </div>
+              <div class="metric-val mono">0.0 ms</div>
+              <div class="metric-lbl" data-i18n="statZeroLatency">In-Browser DSP</div>
             </div>
-          </div>
-        </div>
-
-        <!-- Pane 2: File Upload -->
-        <div id="pane-file" class="src-pane">
-          <label class="upload-drop" for="backingFileInput">
-            <div style="font-size:28px;margin-bottom:6px;">🎵</div>
-            <div style="font-weight:700;font-size:14px;">Karaoke Audio / Video ගොනුව තෝරන්න (Click කරන්න)</div>
-            <div style="font-size:12px;color:#94a3b8;margin-top:4px;">
-              MP3, WAV, M4A, OGG හෝ Download කරගත් YouTube MP4 වීඩියෝවක් වුවද කෙලින්ම දැමිය හැක!
-            </div>
-            <input type="file" id="backingFileInput" accept="audio/*,video/mp4,video/webm" hidden onchange="App.handleBackingUpload(event)" />
-          </label>
-        </div>
-
-        <!-- Pane 3: Instant Demo -->
-        <div id="pane-demo" class="src-pane">
-          <div style="background:var(--panel-2);border:1px solid var(--border);border-radius:11px;padding:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
             <div>
-              <div style="font-weight:700;font-size:14px;">🎹 Sinhala Pop Ballad Instrumental (A Minor • 92 BPM)</div>
-              <div style="font-size:12.5px;color:#94a3b8;">Track එක පමණක් දමා ඔබේ Mic එකෙන් ගයන්න, නැතහොත් Demo Voice එකත් සමඟම Mix කර බලන්න.</div>
+              <div class="metric-val mono">8 Chains</div>
+              <div class="metric-lbl" data-i18n="statPresets">8 Producer Chains</div>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="btn" onclick="App.loadFullDemo(false)">🎵 Backing Track පමණක් දමන්න</button>
-              <button class="btn btn-primary" onclick="App.loadFullDemo(true)">⚡ Backing + Demo Voice දෙකම දමන්න</button>
+            <div>
+              <div class="metric-val mono">YIN 32f</div>
+              <div class="metric-lbl" data-i18n="statAutoTune">Scale-Locked Pitch</div>
+            </div>
+            <div>
+              <div class="metric-val mono">WAV HQ</div>
+              <div class="metric-lbl" data-i18n="statExport">24-Bit / WAV Master</div>
             </div>
           </div>
         </div>
-      </section>
 
-      <!-- STEP 2: RECORD OR UPLOAD VOCAL -->
-      <section class="card">
-        <div class="card-header">
-          <div class="card-title">
-            <span class="step-num">2</span>
-            <span>ඔබේ කටහඬ Record කරන්න (Vocal Booth)</span>
+        <!-- Interactive Hero Studio Preview Card -->
+        <div class="hero-console">
+          <div class="console-top">
+            <div class="window-dots"><span></span><span></span><span></span></div>
+            <span class="mono" style="font-size:11px;color:var(--emerald);">● LIVE DSP ENGINE READY</span>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <select id="micModeSelect" title="Mic Processing Mode">
-              <option value="studio">🎧 Headphones Mode (පිරිසිදුම Studio හඬ)</option>
-              <option value="speaker">📱 Speaker Mode (Echo Cancel ON)</option>
-            </select>
-            <label style="font-size:12px;color:#cbd5e1;display:flex;align-items:center;gap:5px;cursor:pointer;">
-              <input type="checkbox" id="useCountdown" checked /> 3-2-1 ගණන් කිරීම
-            </label>
-          </div>
-        </div>
 
-        <div class="rec-bar">
-          <button class="btn btn-rec" id="btnRecordVocal" onclick="App.toggleMicRecording()">
-            🎙️ Record Voice
+          <div class="eq-bars">
+            <div class="eq-bar" style="height:42%;animation-delay:0.0s"></div>
+            <div class="eq-bar" style="height:78%;animation-delay:0.2s"></div>
+            <div class="eq-bar" style="height:95%;animation-delay:0.4s"></div>
+            <div class="eq-bar" style="height:60%;animation-delay:0.1s"></div>
+            <div class="eq-bar" style="height:85%;animation-delay:0.5s"></div>
+            <div class="eq-bar" style="height:50%;animation-delay:0.3s"></div>
+            <div class="eq-bar" style="height:92%;animation-delay:0.15s"></div>
+            <div class="eq-bar" style="height:72%;animation-delay:0.35s"></div>
+            <div class="eq-bar" style="height:44%;animation-delay:0.25s"></div>
+            <div class="eq-bar" style="height:88%;animation-delay:0.45s"></div>
+            <div class="eq-bar" style="height:66%;animation-delay:0.05s"></div>
+            <div class="eq-bar" style="height:80%;animation-delay:0.3s"></div>
+            <div class="eq-bar" style="height:54%;animation-delay:0.2s"></div>
+            <div class="eq-bar" style="height:90%;animation-delay:0.4s"></div>
+            <div class="eq-bar" style="height:62%;animation-delay:0.1s"></div>
+            <div class="eq-bar" style="height:38%;animation-delay:0.5s"></div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+            <div style="background:#090b12;border:1px solid var(--border);border-radius:9px;padding:10px;">
+              <div style="font-size:10.5px;color:var(--text-muted);">PITCH ENGINE</div>
+              <div class="mono" style="font-size:13px;font-weight:700;color:var(--cyan);margin-top:2px;">A Minor • 65% Snap</div>
+            </div>
+            <div style="background:#090b12;border:1px solid var(--border);border-radius:9px;padding:10px;">
+              <div style="font-size:10.5px;color:var(--text-muted);">VOCAL CHAIN</div>
+              <div class="mono" style="font-size:13px;font-weight:700;color:var(--amber-bright);margin-top:2px;">Velvet Plate + Air</div>
+            </div>
+          </div>
+
+          <button class="btn btn-amber" style="width:100%;padding:11px;" onclick="App.launchInstantShowcase()">
+            <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span data-i18n="heroPlayBtn">Load Demo Track & Play Mixed Vocal</span>
           </button>
-
-          <button class="btn" onclick="App.toggleMicMonitor()" id="btnMicCheck">
-            🎚️ Test Mic
-          </button>
-
-          <label class="btn" for="vocalFileInput" style="margin:0;">
-            📤 Voice Note Upload
-            <input type="file" id="vocalFileInput" accept="audio/*,video/*" hidden onchange="App.handleVocalUpload(event)" />
-          </label>
-
-          <div class="meter-wrap">
-            <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#94a3b8;margin-bottom:3px;">
-              <span>Mic Input Level</span>
-              <span id="recTimerText">00:00</span>
-            </div>
-            <div class="meter-track">
-              <div class="meter-fill" id="micMeterFill"></div>
-            </div>
-          </div>
-
-          <div class="tuner-pill">
-            <div style="font-size:10.5px;color:#94a3b8;">Live Pitch</div>
-            <div class="tuner-note" id="livePitchText">--</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- STEP 3: MULTI-TRACK WAVEFORM & MANUAL SYNC EDITOR -->
-      <section class="card">
-        <div class="card-header">
-          <div class="card-title">
-            <span class="step-num">3</span>
-            <span>Multi-Track Timeline සහ Manual Sync ගැලපීම</span>
-          </div>
-          <div style="font-size:12px;color:#fb923c;">
-            💡 Vocal Track එක Mouse/ඇඟිල්ලෙන් වමට-දකුණට ඇද (Drag) තාලයටම සකසා ගත හැක!
-          </div>
-        </div>
-
-        <div class="transport-bar">
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn btn-green" id="btnPlayPause" onclick="App.togglePlayback()">▶️ Play Mix</button>
-            <button class="btn" onclick="App.stopAndRewind()">⏮️ 0:00</button>
-            <button class="btn" id="btnBypassFx" onclick="App.toggleBypassFx()">
-              👂 Original vs Mixed (FX ON)
-            </button>
-            <button class="btn btn-sm" id="btnSoloVocal" onclick="App.toggleSoloVocal()">🎤 Solo Voice</button>
-          </div>
-          <div class="time-readout" id="transportTime">00:00.0 / 00:00.0</div>
-        </div>
-
-        <div class="timeline-wrap">
-          <canvas id="waveformCanvas" width="900" height="176"></canvas>
-        </div>
-
-        <!-- Precision Manual Track Sync Bar -->
-        <div class="sync-bar">
-          <div style="min-width:210px;flex:1;">
-            <div class="ctrl-label">
-              <span><strong>⏱️ Vocal Track Sync Offset:</strong> (Beat එකට කටහඬ ගැලපීම)</span>
-              <span class="ctrl-val" id="syncOffsetLabel">0 ms</span>
-            </div>
-            <input
-              type="range"
-              id="syncOffsetSlider"
-              min="-800"
-              max="800"
-              step="5"
-              value="0"
-              oninput="App.setVocalOffset(this.value, true)"
-            />
-          </div>
-
-          <div style="display:flex;gap:5px;flex-wrap:wrap;">
-            <button class="btn btn-sm" onclick="App.nudgeOffset(-50)">-50ms</button>
-            <button class="btn btn-sm" onclick="App.nudgeOffset(-10)">-10ms</button>
-            <button class="btn btn-sm" onclick="App.setVocalOffset(0, true)">0ms</button>
-            <button class="btn btn-sm" onclick="App.nudgeOffset(10)">+10ms</button>
-            <button class="btn btn-sm" onclick="App.nudgeOffset(50)">+50ms</button>
-            <button class="btn btn-sm btn-cyan" onclick="App.autoAlignTracks()" title="Bluetooth / Mic recording delay එක ස්වයංක්‍රීයව හඳුනාගෙන සකසයි">
-              🎯 Auto Sync Fix
-            </button>
-          </div>
-        </div>
-
-        <!-- Independent Volume Faders & Track Key Transpose -->
-        <div class="track-mix-row">
-          <div class="track-strip">
-            <div class="ctrl-label">
-              <span>🎵 Karaoke Music හඬ මට්ටම</span>
-              <span class="ctrl-val" id="backingVolVal">85%</span>
-            </div>
-            <input type="range" id="backingVolSlider" min="0" max="150" value="85" oninput="App.updateParam('backingGain', this.value / 100)" />
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:7px;border-top:1px solid var(--border);font-size:12px;">
-              <span>🎼 Music Pitch / Key වෙනස් කිරීම: <strong id="transposeLabel" style="color:#22d3ee;">0 st</strong></span>
-              <div style="display:flex;gap:4px;">
-                <button class="btn btn-sm" onclick="App.shiftBackingKey(-1)">-1</button>
-                <button class="btn btn-sm" onclick="App.resetBackingKey()">0</button>
-                <button class="btn btn-sm" onclick="App.shiftBackingKey(1)">+1</button>
-              </div>
-            </div>
-          </div>
-          <div class="track-strip">
-            <div class="ctrl-label">
-              <span>🎤 ඔබේ කටහඬේ මට්ටම (Vocal Gain)</span>
-              <span class="ctrl-val" id="vocalVolVal">115%</span>
-            </div>
-            <input type="range" id="vocalVolSlider" min="0" max="180" value="115" oninput="App.updateParam('vocalGain', this.value / 100)" />
-          </div>
-        </div>
-      </section>
-
-      <!-- STEP 4: SMART VOICE MATCH & MIXING TEMPLATES -->
-      <section class="card">
-        <div class="card-header">
-          <div class="card-title">
-            <span class="step-num">4</span>
-            <span>කටහඬට ගැලපෙන Vocal Mixing Templates</span>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn btn-primary" onclick="App.runSmartVoiceMatch()">
-              ✨ මගේ කටහඬ පරීක්ෂා කර හොඳම Mixing එක තෝරන්න
-            </button>
-            <button class="btn btn-sm" onclick="App.saveCustomPresetToD1()">
-              💾 Preset Save (D1)
-            </button>
-          </div>
-        </div>
-
-        <div id="voiceReportBanner" class="voice-report"></div>
-
-        <div id="presetGrid" class="preset-grid"></div>
-      </section>
-    </div>
-
-    <!-- RIGHT COLUMN: VOCAL FX RACK (AUTO-TUNE, REVERB, DELAY, COMP, MASTER & EXPORT) -->
-    <div>
-      <!-- AUTO-TUNE RACK -->
-      <div class="rack-group">
-        <div class="rack-header">
-          <span>🎹 Auto-Tune & Pitch Correction</span>
-          <span class="ctrl-val" id="autotunePctVal">55%</span>
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
-          <div>
-            <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Song Key (ස්වරය)</label>
-            <select id="keySelect" style="width:100%;" onchange="App.reprocessAutoTune()">
-              <option value="0">C</option>
-              <option value="1">C# / Db</option>
-              <option value="2">D</option>
-              <option value="3">D# / Eb</option>
-              <option value="4">E</option>
-              <option value="5">F</option>
-              <option value="6">F# / Gb</option>
-              <option value="7">G</option>
-              <option value="8">G# / Ab</option>
-              <option value="9" selected>A (Am Pop)</option>
-              <option value="10">A# / Bb</option>
-              <option value="11">B</option>
-            </select>
-          </div>
-          <div>
-            <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:3px;">Scale (පරිමාණය)</label>
-            <select id="scaleSelect" style="width:100%;" onchange="App.reprocessAutoTune()">
-              <option value="minor" selected>Minor (දුක්බර/මිහිරි)</option>
-              <option value="major">Major (ප්‍රීතිමත්)</option>
-              <option value="pentatonic">Pentatonic</option>
-              <option value="chromatic">Chromatic (ඕනෑම ගීතයකට)</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="ctrl-row">
-          <div class="ctrl-label">
-            <span>Auto-Tune ප්‍රමාණය (Strength)</span>
-            <span class="ctrl-val" id="atStrengthText">55%</span>
-          </div>
-          <input type="range" id="atStrength" min="0" max="100" value="55" onchange="App.reprocessAutoTune()" oninput="document.getElementById('atStrengthText').innerText=this.value+'%';document.getElementById('autotunePctVal').innerText=this.value+'%';" />
-        </div>
-
-        <div class="ctrl-row">
-          <div class="ctrl-label">
-            <span>Retune Speed (ස්වභාවික -> T-Pain Fast)</span>
-            <span class="ctrl-val" id="atSpeedText">35%</span>
-          </div>
-          <input type="range" id="atSpeed" min="5" max="100" value="35" onchange="App.reprocessAutoTune()" oninput="document.getElementById('atSpeedText').innerText=this.value+'%';" />
-        </div>
-
-        <canvas id="pitchCanvas" width="340" height="92" title="තැඹිලි රේඛාව: ඔබ ගැයූ ස්වරය | නිල් රේඛාව: Auto-Tune මගින් නිවැරදි කළ ස්වරය"></canvas>
-        <div style="display:flex;justify-content:space-between;font-size:10.5px;color:#94a3b8;margin-top:4px;">
-          <span>🟠 මුල් ගායනය (Raw Pitch)</span>
-          <span>🔵 Auto-Tuned Pitch</span>
         </div>
       </div>
 
-      <!-- COMPRESSOR & EQ RACK -->
-      <div class="rack-group">
-        <div class="rack-header">
-          <span>🎚️ Compressor & Tone Polish</span>
-        </div>
-
-        <div class="ctrl-row">
-          <div class="ctrl-label">
-            <span>Compressor (හඬ එක මට්ටමකට ගැනීම)</span>
-            <span class="ctrl-val" id="compValText">-24 dB (3.8:1)</span>
+      <!-- 3 Core Pillars -->
+      <div class="feature-grid">
+        <div class="feat-card">
+          <div class="feat-icon">
+            <svg class="icon" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
           </div>
-          <input type="range" id="compSlider" min="10" max="36" value="24" oninput="App.onCompChange(this.value)" />
+          <h3 style="font-size:16px;margin-bottom:6px;" data-i18n="feat1Title">YouTube & Any Track Input</h3>
+          <p style="font-size:13px;color:var(--text-secondary);" data-i18n="feat1Desc">
+            Sing along to synced YouTube lyric videos, strip vocals from regular MP3s, or transpose any beat by ±6 semitones.
+          </p>
         </div>
 
-        <div class="ctrl-row">
-          <div class="ctrl-label">
-            <span>Warmth / Mud Cut (280 Hz උණුසුම)</span>
-            <span class="ctrl-val" id="warmthValText">+1.5 dB</span>
+        <div class="feat-card">
+          <div class="feat-icon" style="background:var(--cyan-soft);color:var(--cyan);border-color:rgba(56,189,248,0.28);">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M4 11v2"/><path d="M20 11v2"/></svg>
           </div>
-          <input type="range" id="warmthSlider" min="-6" max="6" step="0.5" value="1.5" oninput="App.updateParam('warmthDb', Number(this.value))" />
+          <h3 style="font-size:16px;margin-bottom:6px;" data-i18n="feat2Title">AI Voice Profile Match</h3>
+          <p style="font-size:13px;color:var(--text-secondary);" data-i18n="feat2Desc">
+            Analyzes your vocal pitch range, mic muddiness, and dynamics in 50ms to dial in custom EQ, compression & reverb.
+          </p>
         </div>
 
-        <div class="ctrl-row">
-          <div class="ctrl-label">
-            <span>Vocal Clarity / Presence (3.6 kHz)</span>
-            <span class="ctrl-val" id="presenceValText">+3.2 dB</span>
+        <div class="feat-card">
+          <div class="feat-icon" style="background:var(--emerald-soft);color:var(--emerald);border-color:rgba(16,185,129,0.28);">
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </div>
-          <input type="range" id="presenceSlider" min="-3" max="8" step="0.5" value="3.2" oninput="App.updateParam('presenceDb', Number(this.value))" />
+          <h3 style="font-size:16px;margin-bottom:6px;" data-i18n="feat3Title">Precision Sync & Auto-Master</h3>
+          <p style="font-size:13px;color:var(--text-secondary);" data-i18n="feat3Desc">
+            Drag waveforms directly with your finger or auto-align mic lag, then render radio-ready masters with one tap.
+          </p>
         </div>
-
-        <div class="ctrl-row">
-          <div class="ctrl-label">
-            <span>Studio Air Shine (10.5 kHz දීප්තිය)</span>
-            <span class="ctrl-val" id="airValText">+3.8 dB</span>
-          </div>
-          <input type="range" id="airSlider" min="0" max="8" step="0.5" value="3.8" oninput="App.updateParam('airDb', Number(this.value))" />
-        </div>
-      </div>
-
-      <!-- REVERB & DELAY RACK -->
-      <div class="rack-group">
-        <div class="rack-header">
-          <span>🌌 Studio Reverb & Echo Delay</span>
-        </div>
-
-        <div class="ctrl-row">
-          <div class="ctrl-label">
-            <span>Reverb ප්‍රමාණය (ශාලා දෝංකාරය)</span>
-            <span class="ctrl-val" id="reverbMixText">30%</span>
-          </div>
-          <input type="range" id="reverbMixSlider" min="0" max="75" value="30" oninput="App.updateParam('reverbMix', this.value / 100)" />
-        </div>
-
-        <div class="ctrl-row">
-          <div class="ctrl-label">
-            <span>Reverb Room Size (තත්පර)</span>
-            <span class="ctrl-val" id="reverbDecayText">2.6s</span>
-          </div>
-          <input type="range" id="reverbDecaySlider" min="0.6" max="4.2" step="0.2" value="2.6" onchange="App.updateParam('reverbDecay', Number(this.value), true)" oninput="document.getElementById('reverbDecayText').innerText=this.value+'s';" />
-        </div>
-
-        <div class="ctrl-row">
-          <div class="ctrl-label">
-            <span>Stereo Delay / Echo ප්‍රමාණය</span>
-            <span class="ctrl-val" id="delayMixText">20%</span>
-          </div>
-          <input type="range" id="delayMixSlider" min="0" max="60" value="20" oninput="App.updateParam('delayMix', this.value / 100)" />
-        </div>
-
-        <div class="ctrl-row">
-          <div class="ctrl-label">
-            <span>Delay Time (Echo පරතරය)</span>
-            <span class="ctrl-val" id="delayTimeText">340 ms</span>
-          </div>
-          <input type="range" id="delayTimeSlider" min="100" max="650" step="10" value="340" oninput="App.updateParam('delayTimeSec', this.value / 1000)" />
-        </div>
-      </div>
-
-      <!-- AUTO MASTERING & RENDER -->
-      <div class="rack-group" style="border-color:rgba(249,115,22,0.5);">
-        <div class="rack-header">
-          <span>🚀 Auto-Master & Render Export</span>
-        </div>
-
-        <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;margin-bottom:7px;cursor:pointer;">
-          <input type="checkbox" id="chkVocalPocket" checked onchange="App.updateParam('vocalPocket', this.checked)" />
-          <span><strong>Smart Vocal Pocket</strong> (Music මැදින් හඬට ඉඩ හදයි)</span>
-        </label>
-
-        <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;margin-bottom:12px;cursor:pointer;">
-          <input type="checkbox" id="chkAutoMaster" checked onchange="App.updateParam('autoMaster', this.checked, true)" />
-          <span><strong>Auto-Master Warmth & Limiter</strong> (Loud & Clear)</span>
-        </label>
-
-        <input
-          type="text"
-          id="projectTitleInput"
-          class="text-input"
-          style="width:100%;margin-bottom:10px;"
-          value="My Sinhala Karaoke Cover"
-          placeholder="ගීතයේ නම..."
-        />
-
-        <div style="display:grid;grid-template-columns:1fr auto;gap:8px;">
-          <button class="btn btn-primary" style="justify-content:center;padding:11px;" id="btnRenderMaster" onclick="App.exportMasteredWav()">
-            💿 Auto-Master & WAV Download
-          </button>
-          <button class="btn" onclick="App.saveProjectToD1()" title="Cloudflare D1 Database එකට Save කරන්න">
-            💾 Save
-          </button>
-        </div>
-
-        <div id="masterOutputArea" style="display:none;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
-          <div style="font-size:12px;color:#34d399;font-weight:700;margin-bottom:6px;">
-            ✅ Mastered Stereo Song සූදානම්!
-          </div>
-          <audio id="renderedAudioPlayer" controls style="width:100%;height:36px;"></audio>
-        </div>
-      </div>
-
-      <!-- SAVED CLOUDFLARE D1 PROJECTS -->
-      <div class="rack-group">
-        <div class="rack-header">
-          <span>🗄️ Saved D1 Mix Projects</span>
-          <span style="font-size:11px;color:#94a3b8;">SQLite Edge DB</span>
-        </div>
-        <div id="savedProjectsList" style="font-size:12px;color:#94a3b8;">Loading from D1...</div>
       </div>
     </div>
-  </main>
+  </section>
 
+  <!-- ==================== VIEW 2: PRO KARAOKE & VOCAL STUDIO ==================== -->
+  <section id="view-studio" class="app-view">
+    <div class="container">
+      <!-- Sticky DAW Transport Bar -->
+      <div class="transport-dock">
+        <div class="transport-left">
+          <button class="btn btn-sm" onclick="App.stopAndRewind()" title="Rewind to 0:00">
+            <svg class="icon" viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
+          </button>
+
+          <button class="btn btn-amber" id="btnPlayPause" onclick="App.togglePlayback()">
+            <svg class="icon" viewBox="0 0 24 24" id="playIconSvg"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span id="playBtnText" data-i18n="btnPlay">Play</span>
+          </button>
+
+          <button class="btn btn-ruby" id="btnTopRecord" onclick="App.toggleMicRecording()">
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="currentColor"/></svg>
+            <span id="topRecText" data-i18n="btnRecord">Record</span>
+          </button>
+
+          <button class="btn btn-cyan btn-sm" id="btnBypassFx" onclick="App.toggleBypassFx()" title="Compare Raw Mic vs Studio FX">
+            FX ON
+          </button>
+        </div>
+
+        <div class="transport-center">
+          <div class="time-pill mono" id="transportTime">00:00.0 / 00:00.0</div>
+          <canvas id="spectrumCanvas" width="128" height="30"></canvas>
+        </div>
+
+        <div class="transport-right">
+          <button class="btn btn-sm" onclick="App.loadFullDemo(true)" title="Load Demo Instrumental + Raw Voice">
+            Demo
+          </button>
+          <button class="btn btn-sm" onclick="App.saveProjectToD1()" title="Save Mix to Cloud D1">
+            Save
+          </button>
+          <button class="btn btn-amber btn-sm" onclick="App.openInspectorTab('master')">
+            <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span data-i18n="btnExport">Master & Download</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="studio-shell">
+        <!-- Multi-Track Waveform Stage -->
+        <div class="panel-card">
+          <div class="timeline-meta-bar">
+            <input type="text" id="projectTitleInput" class="project-name-input" value="Untitled Studio Cover" />
+            <div class="status-pills">
+              <span class="chip">KEY <strong id="chipKey">Am</strong></span>
+              <span class="chip">SYNC <strong id="chipSync" class="mono">0 ms</strong></span>
+              <span class="chip">CHAIN <strong id="chipPreset">Velvet Ballad</strong></span>
+            </div>
+          </div>
+
+          <div class="canvas-frame">
+            <canvas id="waveformCanvas"></canvas>
+          </div>
+
+          <!-- Dual Channel Strips -->
+          <div class="channel-strips">
+            <!-- Track 1: Instrumental -->
+            <div class="strip-box strip-cyan">
+              <div class="strip-head">
+                <span class="strip-title" style="color:var(--cyan);">01 • Instrumental</span>
+                <div style="display:flex;gap:5px;align-items:center;">
+                  <button class="btn btn-sm" id="btnKaraokeCut" onclick="App.applyKaraokeVocalCut()" title="Remove lead vocals from regular stereo songs">
+                    Vocal Cut
+                  </button>
+                  <button class="btn btn-sm" onclick="App.shiftBackingKey(-1)">-1</button>
+                  <span class="mono" style="font-size:11.5px;min-width:34px;text-align:center;" id="transposeLabel">0 st</span>
+                  <button class="btn btn-sm" onclick="App.shiftBackingKey(1)">+1</button>
+                </div>
+              </div>
+              <div class="knob-lbl">
+                <span id="backingStatusBadge" style="color:var(--text-muted);font-size:11.5px;">No track loaded</span>
+                <span class="mono" id="backingVolVal">85%</span>
+              </div>
+              <input type="range" id="backingVolSlider" min="0" max="150" value="85" oninput="App.updateParam('backingGain', this.value / 100)" />
+            </div>
+
+            <!-- Track 2: Lead Vocal + Precision Sync -->
+            <div class="strip-box strip-amber">
+              <div class="strip-head">
+                <span class="strip-title" style="color:var(--amber-bright);">02 • Lead Vocal</span>
+                <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+                  <button class="btn btn-sm" id="btnSoloVocal" onclick="App.toggleSoloVocal()">Solo</button>
+                  <button class="btn btn-sm" onclick="App.nudgeOffset(-25)">-25ms</button>
+                  <button class="btn btn-sm" onclick="App.nudgeOffset(25)">+25ms</button>
+                  <button class="btn btn-sm btn-cyan" onclick="App.autoAlignTracks()" data-i18n="btnAutoSync">Auto-Align</button>
+                </div>
+              </div>
+              <div class="knob-lbl">
+                <span>Level <strong class="mono" id="vocalVolVal">115%</strong></span>
+                <span>Sync <strong class="mono" style="color:var(--amber-bright);" id="syncOffsetLabel">0 ms</strong></span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <input type="range" id="vocalVolSlider" min="0" max="180" value="115" oninput="App.updateParam('vocalGain', this.value / 100)" title="Vocal Volume" />
+                <input type="range" id="syncOffsetSlider" min="-800" max="800" step="5" value="0" oninput="App.setVocalOffset(this.value, true)" title="Drag to align vocal timing (-800ms to +800ms)" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5-Tab Studio Inspector -->
+        <div class="panel-card">
+          <div class="inspector-tabs">
+            <button class="insp-tab active" data-itab="source" onclick="App.openInspectorTab('source')">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+              <span data-i18n="tabSource">Track & Mic</span>
+            </button>
+            <button class="insp-tab" data-itab="presets" onclick="App.openInspectorTab('presets')">
+              <svg class="icon" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <span data-i18n="tabPresets">Voice AI</span>
+            </button>
+            <button class="insp-tab" data-itab="autotune" onclick="App.openInspectorTab('autotune')">
+              <svg class="icon" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              <span data-i18n="tabAutotune">Auto-Tune</span>
+            </button>
+            <button class="insp-tab" data-itab="effects" onclick="App.openInspectorTab('effects')">
+              <svg class="icon" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/></svg>
+              <span data-i18n="tabEffects">Mix Rack</span>
+            </button>
+            <button class="insp-tab" data-itab="master" onclick="App.openInspectorTab('master')">
+              <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+              <span data-i18n="tabMaster">Master</span>
+            </button>
+          </div>
+
+          <!-- PANE 1: TRACK & MIC -->
+          <div id="itab-source" class="insp-pane active">
+            <div class="two-col">
+              <!-- Left: Backing Input -->
+              <div class="module-box">
+                <div class="source-seg">
+                  <button class="seg-btn active" onclick="App.switchSourceSub('yt', this)">YouTube Link</button>
+                  <button class="seg-btn" onclick="App.switchSourceSub('upload', this)">Upload File</button>
+                  <button class="seg-btn" onclick="App.switchSourceSub('synth', this)">Demo Song</button>
+                </div>
+
+                <div id="sub-yt">
+                  <div style="display:flex;gap:7px;margin-bottom:10px;">
+                    <input type="text" id="ytUrlInput" class="input" style="flex:1;min-width:0;" placeholder="Paste YouTube Karaoke link (https://youtu.be/...)" />
+                    <button class="btn btn-amber" onclick="App.loadYouTubeLink()">Load</button>
+                  </div>
+                  <div class="yt-box" id="ytPlayerContainer">
+                    Paste any YouTube karaoke link to display synced scrolling lyrics right here.
+                  </div>
+                  <div class="desktop-only-row" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+                    <button class="btn btn-ruby btn-sm" id="btnRecTabAndMic" onclick="App.startTabPlusMicRecord()">
+                      Capture Tab Audio + Mic (Desktop)
+                    </button>
+                  </div>
+                </div>
+
+                <div id="sub-upload" style="display:none;">
+                  <label class="dropzone" for="backingFileInput">
+                    <svg class="icon" viewBox="0 0 24 24" style="width:28px;height:28px;color:var(--cyan);margin-bottom:8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <div style="font-weight:700;margin-bottom:4px;">Drop MP3, WAV, M4A, or MP4 Video</div>
+                    <div style="font-size:12px;color:var(--text-muted);">Audio is extracted automatically right on your device</div>
+                    <input type="file" id="backingFileInput" accept="audio/*,video/mp4,video/webm" hidden onchange="App.handleBackingUpload(event)" />
+                  </label>
+                </div>
+
+                <div id="sub-synth" style="display:none;">
+                  <div style="padding:14px;background:var(--surface);border-radius:10px;border:1px solid var(--border);">
+                    <div style="font-weight:700;margin-bottom:4px;">Pop Ballad Instrumental (A Minor • 92 BPM)</div>
+                    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">
+                      Load clean stereo keys, acoustic guitar arpeggio, bass & drums — with or without a sample vocal take.
+                    </p>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                      <button class="btn" onclick="App.loadFullDemo(false)">Instrumental Only</button>
+                      <button class="btn btn-amber" onclick="App.loadFullDemo(true)">Track + Sample Vocal</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right: Vocal Booth -->
+              <div class="module-box">
+                <div class="module-head">
+                  <span>Vocal Recording Booth</span>
+                  <span class="mono" id="recTimerText" style="color:var(--amber-bright);">00:00</span>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:12px;align-items:center;">
+                  <select id="micModeSelect" style="width:100%;">
+                    <option value="studio">Headphones Mode (Pure Raw Studio)</option>
+                    <option value="speaker">Phone Speaker Mode (Echo Cancel)</option>
+                  </select>
+                  <label style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:5px;cursor:pointer;">
+                    <input type="checkbox" id="useCountdown" checked /> 3-2-1
+                  </label>
+                </div>
+
+                <div class="booth-actions">
+                  <button class="btn btn-ruby" id="btnRecordVocal" onclick="App.toggleMicRecording()">
+                    <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="currentColor"/></svg>
+                    <span>Start Recording</span>
+                  </button>
+                  <button class="btn" id="btnMicCheck" onclick="App.toggleMicMonitor()">Mic Check</button>
+                  <label class="btn" for="vocalFileInput" title="Import recorded Voice Memo (.m4a/.mp3/.wav)">
+                    Import
+                    <input type="file" id="vocalFileInput" accept="audio/*,video/*" hidden onchange="App.handleVocalUpload(event)" />
+                  </label>
+                </div>
+
+                <div style="margin-bottom:12px;">
+                  <div class="knob-lbl">
+                    <span>Input Gain Meter</span>
+                    <span class="mono" id="livePitchText" style="color:var(--cyan);">Tuner: --</span>
+                  </div>
+                  <div class="meter-bar"><div class="meter-fill" id="micMeterFill"></div></div>
+                </div>
+
+                <p style="font-size:11.5px;color:var(--text-muted);line-height:1.45;">
+                  Tip: Plug in wired earphones so only your clean voice enters the mic. Bluetooth lag is fixed in one tap with <strong>Auto-Align</strong>.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANE 2: VOICE AI & PRESETS -->
+          <div id="itab-presets" class="insp-pane">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+              <div>
+                <div style="font-weight:700;font-size:14.5px;">AI Voice Profile & Producer Chains</div>
+                <div style="font-size:12px;color:var(--text-secondary);">Automatically matches EQ, dynamics, key & reverb to your vocal tone</div>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <button class="btn btn-amber" onclick="App.runSmartVoiceMatch()">
+                  <svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  <span data-i18n="btnVoiceMatch">Analyze My Voice</span>
+                </button>
+                <button class="btn" onclick="App.saveCustomPresetToD1()">+ Save Chain</button>
+              </div>
+            </div>
+
+            <div id="voiceReportBanner" class="ai-banner"></div>
+            <div id="presetGrid" class="presets-grid"></div>
+          </div>
+
+          <!-- PANE 3: AUTO-TUNE PRO -->
+          <div id="itab-autotune" class="insp-pane">
+            <div class="two-col">
+              <div class="module-box">
+                <div class="module-head">
+                  <span>Scale & Retune Engine</span>
+                  <span class="mono" id="autotunePctVal" style="color:var(--cyan);">55%</span>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">ROOT KEY</label>
+                    <select id="keySelect" style="width:100%;" onchange="App.reprocessAutoTune()">
+                      <option value="0">C</option><option value="1">C# / Db</option><option value="2">D</option>
+                      <option value="3">D# / Eb</option><option value="4">E</option><option value="5">F</option>
+                      <option value="6">F# / Gb</option><option value="7">G</option><option value="8">G# / Ab</option>
+                      <option value="9" selected>A</option><option value="10">A# / Bb</option><option value="11">B</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px;">SCALE MODE</label>
+                    <select id="scaleSelect" style="width:100%;" onchange="App.reprocessAutoTune()">
+                      <option value="minor" selected>Minor</option>
+                      <option value="major">Major</option>
+                      <option value="pentatonic">Pentatonic</option>
+                      <option value="chromatic">Chromatic (12-Note)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="knob-row">
+                  <div class="knob-lbl">
+                    <span>Correction Strength</span>
+                    <span class="mono" id="atStrengthText">55%</span>
+                  </div>
+                  <input type="range" id="atStrength" min="0" max="100" value="55" onchange="App.reprocessAutoTune()" oninput="document.getElementById('atStrengthText').innerText=this.value+'%';document.getElementById('autotunePctVal').innerText=this.value+'%';" />
+                </div>
+
+                <div class="knob-row">
+                  <div class="knob-lbl">
+                    <span>Retune Speed (Natural → Hard Robotic)</span>
+                    <span class="mono" id="atSpeedText">35%</span>
+                  </div>
+                  <input type="range" id="atSpeed" min="5" max="100" value="35" onchange="App.reprocessAutoTune()" oninput="document.getElementById('atSpeedText').innerText=this.value+'%';" />
+                </div>
+              </div>
+
+              <div class="module-box">
+                <div class="module-head">
+                  <span>Pitch Contour Monitor</span>
+                  <span style="font-size:11px;text-transform:none;color:var(--cyan);">Cyan = Tuned • Amber = Raw</span>
+                </div>
+                <canvas id="pitchCanvas"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANE 4: STUDIO MIX RACK -->
+          <div id="itab-effects" class="insp-pane">
+            <div class="rack-grid">
+              <div class="module-box">
+                <div class="module-head"><span>Dynamics & Tone EQ</span></div>
+                <div class="knob-row">
+                  <div class="knob-lbl"><span>Studio Compressor</span><span class="mono" id="compValText">-24 dB (3.8:1)</span></div>
+                  <input type="range" id="compSlider" min="10" max="36" value="24" oninput="App.onCompChange(this.value)" />
+                </div>
+                <div class="knob-row">
+                  <div class="knob-lbl"><span>Low-Mid Body (280 Hz)</span><span class="mono" id="warmthValText">+1.5 dB</span></div>
+                  <input type="range" id="warmthSlider" min="-6" max="6" step="0.5" value="1.5" oninput="App.updateParam('warmthDb', Number(this.value))" />
+                </div>
+                <div class="knob-row">
+                  <div class="knob-lbl"><span>Vocal Presence (3.6 kHz)</span><span class="mono" id="presenceValText">+3.2 dB</span></div>
+                  <input type="range" id="presenceSlider" min="-3" max="8" step="0.5" value="3.2" oninput="App.updateParam('presenceDb', Number(this.value))" />
+                </div>
+                <div class="knob-row">
+                  <div class="knob-lbl"><span>Condenser Air (10.5 kHz)</span><span class="mono" id="airValText">+3.8 dB</span></div>
+                  <input type="range" id="airSlider" min="0" max="8" step="0.5" value="3.8" oninput="App.updateParam('airDb', Number(this.value))" />
+                </div>
+              </div>
+
+              <div class="module-box">
+                <div class="module-head"><span>Space: Reverb & Delay</span></div>
+                <div class="knob-row">
+                  <div class="knob-lbl"><span>Plate / Hall Reverb Mix</span><span class="mono" id="reverbMixText">30%</span></div>
+                  <input type="range" id="reverbMixSlider" min="0" max="75" value="30" oninput="App.updateParam('reverbMix', this.value / 100)" />
+                </div>
+                <div class="knob-row">
+                  <div class="knob-lbl"><span>Decay Tail Size</span><span class="mono" id="reverbDecayText">2.6s</span></div>
+                  <input type="range" id="reverbDecaySlider" min="0.6" max="4.2" step="0.2" value="2.6" onchange="App.updateParam('reverbDecay', Number(this.value), true)" oninput="document.getElementById('reverbDecayText').innerText=Number(this.value).toFixed(1)+'s';" />
+                </div>
+                <div class="knob-row">
+                  <div class="knob-lbl"><span>Stereo Echo Delay Mix</span><span class="mono" id="delayMixText">20%</span></div>
+                  <input type="range" id="delayMixSlider" min="0" max="60" value="20" oninput="App.updateParam('delayMix', this.value / 100)" />
+                </div>
+                <div class="knob-row">
+                  <div class="knob-lbl"><span>Echo Time</span><span class="mono" id="delayTimeText">340 ms</span></div>
+                  <input type="range" id="delayTimeSlider" min="100" max="650" step="10" value="340" oninput="App.updateParam('delayTimeSec', this.value / 1000)" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANE 5: AI MASTERING & RENDER -->
+          <div id="itab-master" class="insp-pane">
+            <div class="two-col">
+              <div class="module-box">
+                <div class="module-head"><span>AI Mastering Profile</span></div>
+                <div class="master-profiles-grid">
+                  <div class="preset-tile" id="mp-warm" onclick="App.setMasterProfile('warm')">
+                    <div class="preset-tag">ANALOG</div>
+                    <div class="preset-title">Warm Tape</div>
+                    <div class="preset-sub">Rich low body & smooth silk top</div>
+                  </div>
+                  <div class="preset-tile active" id="mp-balanced" onclick="App.setMasterProfile('balanced')">
+                    <div class="preset-tag">STREAMING</div>
+                    <div class="preset-title">Balanced</div>
+                    <div class="preset-sub">Natural clarity for YouTube</div>
+                  </div>
+                  <div class="preset-tile" id="mp-loud" onclick="App.setMasterProfile('loud')">
+                    <div class="preset-tag">HIGH IMPACT</div>
+                    <div class="preset-title">Punch & Air</div>
+                    <div class="preset-sub">Loud upfront TikTok / Reels cut</div>
+                  </div>
+                </div>
+
+                <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;margin-bottom:8px;cursor:pointer;">
+                  <input type="checkbox" id="chkVocalPocket" checked onchange="App.updateParam('vocalPocket', this.checked)" />
+                  <span><strong>Smart Vocal Pocket</strong> — carves -2.4dB @ 2.5kHz in music so vocals sit inside the beat</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;">
+                  <input type="checkbox" id="chkAutoMaster" checked onchange="App.updateParam('autoMaster', this.checked, true)" />
+                  <span><strong>Brickwall True-Peak Limiter</strong> — loud studio level with zero clipping</span>
+                </label>
+              </div>
+
+              <div class="module-box" style="display:flex;flex-direction:column;justify-content:space-between;">
+                <div>
+                  <div class="module-head"><span>Render & Download</span></div>
+                  <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:5px;">EXPORT FORMAT</label>
+                  <select id="exportFormatSelect" style="width:100%;margin-bottom:14px;">
+                    <option value="hq">Studio Lossless Master (44.1 kHz Stereo WAV)</option>
+                    <option value="compact">WhatsApp / Mobile Fast Share (~3.5x Smaller)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <button class="btn btn-amber" style="width:100%;padding:12px;font-size:13.5px;" id="btnRenderMaster" onclick="App.exportMasteredWav()">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>Render Master & Download</span>
+                  </button>
+
+                  <div id="masterOutputArea" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+                    <div style="font-size:11.5px;color:var(--emerald);font-weight:700;margin-bottom:6px;">Mastered Song Preview</div>
+                    <audio id="renderedAudioPlayer" controls style="width:100%;height:36px;"></audio>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VIEW 3: CLOUD D1 LIBRARY ==================== -->
+  <section id="view-library" class="app-view">
+    <div class="container">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+        <div>
+          <h2 style="font-size:22px;">Cloud Mix Library</h2>
+          <p style="font-size:13px;color:var(--text-secondary);">Synced via Cloudflare Edge D1 Database</p>
+        </div>
+        <button class="btn btn-amber" onclick="App.switchView('studio')">+ New Studio Mix</button>
+      </div>
+
+      <div class="panel-card" id="savedProjectsList">
+        Loading projects...
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== VIEW 4: PLANS / MONETIZATION ==================== -->
+  <section id="view-pricing" class="app-view">
+    <div class="container">
+      <div style="text-align:center;max-width:560px;margin:10px auto 18px;">
+        <h2 style="font-size:28px;margin-bottom:8px;">Simple Creator Pricing</h2>
+        <p style="color:var(--text-secondary);font-size:14px;margin-bottom:14px;">
+          Record, tune, and preview unlimited takes free forever. Upgrade for unlimited full-song masters.
+        </p>
+        <div class="source-seg">
+          <button class="seg-btn active" id="curLkrBtn" onclick="App.setPricingCurrency('LKR')">Sri Lanka (LKR)</button>
+          <button class="seg-btn" id="curUsdBtn" onclick="App.setPricingCurrency('USD')">Global (USD)</button>
+        </div>
+      </div>
+
+      <div class="pricing-grid">
+        <div class="plan-card">
+          <div style="font-size:12px;font-weight:700;color:var(--text-muted);">STARTER</div>
+          <div class="plan-price" id="freePriceDisplay">Rs. 0 <span style="font-size:14px;font-weight:500;color:var(--text-muted);">/ forever</span></div>
+          <ul class="plan-list">
+            <li>✓ Unlimited vocal recording & live FX preview</li>
+            <li>✓ All 8 producer vocal mixing chains</li>
+            <li>✓ Real-time Auto-Tune & waveform sync</li>
+            <li>✓ 3 Mastered full-song downloads / month</li>
+          </ul>
+          <button class="btn" style="width:100%;padding:11px;" onclick="App.switchView('studio')">Continue Free</button>
+        </div>
+
+        <div class="plan-card featured">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:12px;font-weight:800;color:var(--amber-bright);">PRO VOCALIST</span>
+            <span class="pro-tag">MOST POPULAR</span>
+          </div>
+          <div class="plan-price" id="proPriceDisplay">Rs. 1,290 <span style="font-size:14px;font-weight:500;color:var(--text-muted);">/ month</span></div>
+          <ul class="plan-list">
+            <li>✓ <strong>Unlimited</strong> lossless WAV & WhatsApp share exports</li>
+            <li>✓ AI Voice Profile auto-matching engine</li>
+            <li>✓ Stereo Song Vocal Remover (Karaoke Cut)</li>
+            <li>✓ Unlimited Cloud D1 presets & saved projects</li>
+          </ul>
+          <button class="btn btn-amber" style="width:100%;padding:11px;" id="proActionBtn" onclick="App.toggleProDemo()">
+            Activate Pro Pass (Instant Demo)
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Native Mobile Bottom Tab Bar -->
+  <nav class="mobile-bottom-nav">
+    <button class="mob-tab active" data-view="home" onclick="App.switchView('home')">
+      <svg class="icon" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      <span data-i18n="navHome">Overview</span>
+    </button>
+    <button class="mob-tab" data-view="studio" onclick="App.switchView('studio')">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+      <span data-i18n="navStudio">Studio</span>
+    </button>
+    <button class="mob-tab" data-view="library" onclick="App.switchView('library')">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      <span data-i18n="navLibrary">Library</span>
+    </button>
+    <button class="mob-tab" data-view="pricing" onclick="App.switchView('pricing')">
+      <svg class="icon" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      <span data-i18n="navPricing">Plans</span>
+    </button>
+  </nav>
+
+  <script src="/i18n.js"></script>
   <script src="/dsp-engine.js"></script>
   <script src="/app.js"></script>
 </body>

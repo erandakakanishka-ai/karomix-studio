@@ -1,6 +1,6 @@
 -- ============================================================================
--- KaroMix Studio - Cloudflare D1 (Serverless SQLite) Production Schema
--- Optimized with composite indexes to stay well inside D1 Free Tier (5M reads/day)
+-- KaroMix Studio Pro - Cloudflare D1 (Serverless SQLite) Schema
+-- Indexed for ultra-low row reads on Cloudflare D1 Free Tier
 -- ============================================================================
 
 PRAGMA foreign_keys = ON;
@@ -9,10 +9,19 @@ CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   display_name TEXT NOT NULL,
+  password_hash TEXT DEFAULT '',
   plan TEXT NOT NULL DEFAULT 'free', -- 'free' | 'pro_lk' | 'pro_global'
   currency TEXT NOT NULL DEFAULT 'LKR',
   exports_this_month INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  token TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS projects (
@@ -21,7 +30,7 @@ CREATE TABLE IF NOT EXISTS projects (
   title TEXT NOT NULL,
   youtube_url TEXT DEFAULT '',
   preset_key TEXT NOT NULL DEFAULT 'sinhala_ballad',
-  musical_key TEXT NOT NULL DEFAULT 'A',
+  musical_key TEXT NOT NULL DEFAULT '9',
   musical_scale TEXT NOT NULL DEFAULT 'minor',
   vocal_offset_ms INTEGER NOT NULL DEFAULT 0,
   settings_json TEXT NOT NULL,
@@ -41,11 +50,10 @@ CREATE TABLE IF NOT EXISTS custom_presets (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Critical D1 Indexes (Zero Full-Table Scans!)
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_projects_user_created ON projects(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_presets_user_created ON custom_presets(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_presets_public ON custom_presets(is_public, created_at DESC);
 
--- Seed default demo user
 INSERT OR IGNORE INTO users (id, email, display_name, plan, currency, exports_this_month)
-VALUES ('demo-singer-lk', 'singer@karomix.lk', 'Demo Singer (Sri Lanka)', 'free', 'LKR', 1);
+VALUES ('demo-singer-lk', 'guest@karomix.studio', 'Guest Studio Session', 'free', 'LKR', 0);
