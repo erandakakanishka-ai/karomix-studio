@@ -1709,6 +1709,24 @@ const App = (() => {
     showToast('Signed out');
   }
 
+  async function deleteAccount() {
+    if (!state.user) return;
+    if (!window.confirm('Permanently delete your KaroMix AI account and saved mixes? This cannot be undone.')) {
+      return;
+    }
+    try {
+      await apiFetch('/api/auth/account', { method: 'DELETE' });
+    } catch (_) {}
+    state.authToken = '';
+    state.user = null;
+    state.projects = [];
+    localStorage.removeItem('karomix_token');
+    updateAccountUI();
+    renderSavedProjects();
+    closeAuthModal();
+    showToast('Your account and cloud data have been permanently deleted.');
+  }
+
   async function toggleProDemo() {
     state.isProDemo = !state.isProDemo;
     localStorage.setItem('karomix_pro_demo', state.isProDemo ? '1' : '0');
@@ -1893,7 +1911,7 @@ const App = (() => {
     heroSearchSubmit, quickSingSong, searchOrLoadKaraoke, selectKaraokeVideo, nextKaraokeResult, seekToLyric,
     toggleCustomLyricsEditor, saveCustomLyrics,
     onMicModeChange, handleBackingUpload, handleVocalUpload, toggleMicMonitor, toggleMicRecording, receiveNativeDualTracks,
-    openAuthModal, closeAuthModal, setAuthMode, submitAuth, logout, toggleProDemo,
+    openAuthModal, closeAuthModal, setAuthMode, submitAuth, logout, deleteAccount, toggleProDemo,
     saveProjectToD1, restoreProject, exportMasteredWav, shareMasterFile,
   };
 })();

@@ -45,6 +45,8 @@
   <meta name="color-scheme" content="dark" />
   <meta name="theme-color" content="#07090f" />
   <link rel="icon" type="image/png" href="/assets/logo.png" />
+  <link rel="apple-touch-icon" href="/assets/logo.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" media="print" onload="this.media='all'" />
@@ -705,7 +707,8 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
           <div style="font-weight:700;" id="authUserName">Artist</div>
           <div style="font-size:12px;color:var(--text-secondary);" id="authUserEmail"></div>
         </div>
-        <button class="btn" style="width:100%;" onclick="App.logout()">Sign Out</button>
+        <button class="btn" style="width:100%;margin-bottom:8px;" onclick="App.logout()">Sign Out</button>
+        <button class="btn btn-sm" style="width:100%;color:#f87171;border-color:rgba(248,113,113,0.28);" onclick="App.deleteAccount()">Delete Account & Cloud Data</button>
       </div>
       <form id="authForm" onsubmit="App.submitAuth(event)">
         <div style="display:flex;gap:6px;margin-bottom:12px;">
@@ -1167,19 +1170,46 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
       </div>
 
       <div class="card" style="border-color:rgba(245,158,11,0.4);">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-          <div>
-            <span class="step-badge">CREATOR & PRO ACCESS</span>
-            <h3 style="font-size:19px;">Unlimited Studio Masters — $6.99 / mo</h3>
-            <p style="font-size:13px;color:var(--text-secondary);margin-top:3px;">
-              Free tier includes 3 full song exports/month. Activate Pro Pass for unlimited lossless downloads.
-            </p>
+        <span class="step-badge">SIMPLE, TRANSPARENT PLANS</span>
+        <h3 style="font-size:19px;margin-bottom:12px;">Choose Your Studio Plan</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-bottom:14px;">
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;">
+            <div style="font-size:12px;font-weight:700;color:var(--text-secondary);">FREE STARTER</div>
+            <div style="font-size:22px;font-weight:800;margin:4px 0 8px;">$0 <span style="font-size:12px;font-weight:500;color:var(--text-muted);">/ forever</span></div>
+            <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.7;">
+              ✓ Unlimited karaoke singing & lyrics<br />
+              ✓ All 6 studio reverb & clarity chains<br />
+              ✓ 3 full stereo WAV exports / month
+            </div>
           </div>
+          <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.45);border-radius:12px;padding:14px;">
+            <div style="font-size:12px;font-weight:700;color:var(--amber-bright);">PRO STUDIO PASS</div>
+            <div style="font-size:22px;font-weight:800;margin:4px 0 8px;">$4.99 <span style="font-size:12px;font-weight:500;color:var(--text-muted);">/ month</span></div>
+            <div style="font-size:12.5px;color:var(--text);line-height:1.7;">
+              ✓ <strong>Unlimited</strong> lossless 44.1kHz WAV downloads<br />
+              ✓ Cloud preset backup across devices<br />
+              ✓ Priority AI Voice Match & Auto-Tune HD
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+          <span style="font-size:12px;color:var(--text-muted);">Cancel anytime in 1 click • 14-day refund guarantee</span>
           <button class="btn btn-amber" id="proActionBtn" onclick="App.toggleProDemo()">Activate Pro Pass</button>
         </div>
       </div>
     </div>
   </section>
+
+  <!-- Commercial Trust, Privacy & Compliance Footer -->
+  <footer style="max-width:960px;margin:28px auto 12px;padding:18px 16px;border-top:1px solid var(--border);text-align:center;font-size:12px;color:var(--text-muted);">
+    <div style="display:flex;justify-content:center;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
+      <a href="/privacy.html" style="color:var(--text-secondary);text-decoration:none;">Privacy Policy</a>
+      <a href="/terms.html" style="color:var(--text-secondary);text-decoration:none;">Terms of Service</a>
+      <a href="/refunds.html" style="color:var(--text-secondary);text-decoration:none;">Refund Policy</a>
+      <a href="mailto:support@karomix.ai" style="color:var(--text-secondary);text-decoration:none;">Contact Support</a>
+    </div>
+    <div>© 2026 KaroMix AI Studio • 100% Private Local Browser Vocal Processing</div>
+  </footer>
 
   <!-- Simple, Unmistakable 4-Tab Mobile Bottom Bar -->
   <nav class="mobile-bottom-nav">
@@ -1201,8 +1231,8 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     </button>
   </nav>
 
-  <script src="/vendor/confetti.min.js?v=7.1"></script>
-  <script src="/dsp-engine.js?v=7.1"></script>
-  <script src="/app.js?v=7.1"></script>
+  <script src="/vendor/confetti.min.js?v=8.0"></script>
+  <script src="/dsp-engine.js?v=8.0"></script>
+  <script src="/app.js?v=8.0"></script>
 </body>
 </html>

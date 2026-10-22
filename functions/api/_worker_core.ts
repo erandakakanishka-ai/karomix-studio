@@ -367,6 +367,20 @@ export default {
         return json({ ok: true, token, user: safeUser });
       }
 
+      // 4b. Permanent Account & Data Deletion (GDPR + Google Play Store Data Safety Requirement)
+      if (url.pathname === '/api/auth/account' && request.method === 'DELETE') {
+        const authUser: any = await getAuthenticatedUser(request, env);
+        if (!authUser || !env.DB) {
+          return json({ error: 'Not signed in' }, 401);
+        }
+        await env.DB.batch([
+          env.DB.prepare('DELETE FROM projects WHERE user_id = ?').bind(authUser.id),
+          env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(authUser.id),
+          env.DB.prepare('DELETE FROM users WHERE id = ?').bind(authUser.id),
+        ]);
+        return json({ ok: true, deleted: true });
+      }
+
       // 5. State
       if (url.pathname === '/api/state' && request.method === 'GET') {
         if (!env.DB) {
