@@ -346,8 +346,10 @@ export default {
 
       if (url.pathname === '/api/track-export' && request.method === 'POST') {
         if (env.DB) {
-          const { user } = await resolveUser(request, env);
-          await env.DB.prepare('UPDATE users SET exports_this_month = exports_this_month + 1 WHERE id = ?').bind(user.id).run();
+          const { user, authenticated } = await resolveUser(request, env);
+          if (authenticated) {
+            await env.DB.prepare('UPDATE users SET exports_this_month = exports_this_month + 1 WHERE id = ?').bind(user.id).run();
+          }
         }
         return json({ ok: true });
       }

@@ -14,7 +14,7 @@ const App = (() => {
     authToken: localStorage.getItem('karomix_token') || '',
     authMode: 'login',
     isProDemo: localStorage.getItem('karomix_pro_demo') === '1',
-    exportsUsed: 0,
+    exportsUsed: Number(localStorage.getItem('karomix_guest_exports') || '0'),
 
     audioCtx: null,
     audioUnlocked: false,
@@ -1316,8 +1316,8 @@ const App = (() => {
         state.user = null;
       }
       state.projects = data.projects || [];
-      if (data.user && typeof data.user.exports_this_month === 'number') {
-        state.exportsUsed = Math.max(state.exportsUsed, data.user.exports_this_month);
+      if (data.authenticated && data.user && typeof data.user.exports_this_month === 'number') {
+        state.exportsUsed = data.user.exports_this_month;
       }
       updateAccountUI();
       renderSavedProjects();
@@ -1461,8 +1461,9 @@ const App = (() => {
         compact
       );
       state.exportsUsed++;
+      if (!state.user) localStorage.setItem('karomix_guest_exports', String(state.exportsUsed));
       updateAccountUI();
-      apiFetch('/api/track-export', { method: 'POST' }).catch(() => {});
+      if (state.user) apiFetch('/api/track-export', { method: 'POST' }).catch(() => {});
 
       const fname = `${(document.getElementById('projectTitleInput').value || 'karomix').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.wav`;
       state.lastMasterBlob = wavBlob;
