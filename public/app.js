@@ -831,7 +831,6 @@ const App = (() => {
         allowfullscreen></iframe>`;
 
     state.ytPlayer = null;
-    clearInterval(state.ytSyncInterval);
     const tryAttachPlayer = (attempt = 0) => {
       if (window.YT && window.YT.Player) {
         try {
@@ -851,54 +850,9 @@ const App = (() => {
       }
     };
     setTimeout(() => tryAttachPlayer(0), 250);
-
-    state.ytSyncInterval = setInterval(() => {
-      if (!state.lrcLines.length) return;
-      let curSec = -1;
-      if (state.ytPlayer && typeof state.ytPlayer.getCurrentTime === 'function') {
-        try { curSec = state.ytPlayer.getCurrentTime(); } catch (_) {}
-      } else if (state.isRecording) {
-        curSec = (Date.now() - state.recStartMs) / 1000;
-      }
-      if (curSec >= 0) updateActiveLyricAtTime(curSec);
-    }, 320);
   }
 
-  function updateActiveLyricAtTime(sec) {
-    let idx = 0;
-    for (let i = 0; i < state.lrcLines.length; i++) {
-      if (sec >= state.lrcLines[i].sec) idx = i;
-      else break;
-    }
-    const cur = state.lrcLines[idx];
-    const nxt = state.lrcLines[idx + 1];
-    const bar = document.getElementById('liveTeleprompterBar');
-    if (bar && cur) {
-      bar.style.display = 'block';
-      document.getElementById('teleLineCurrent').textContent = `♪ ${cur.text}`;
-      document.getElementById('teleLineNext').textContent = nxt ? nxt.text : '';
-    }
-    const row = document.getElementById(`lr-${idx}`);
-    if (row && !row.classList.contains('active')) {
-      document.querySelectorAll('.lyric-row.active').forEach((r) => r.classList.remove('active'));
-      row.classList.add('active');
-      if (state.stageMode === 'lyrics') row.scrollIntoView({ block: 'center', behavior: 'auto' });
-    }
-  }
-
-  function seekToLyric(sec) {
-    const target = Math.max(0, Number(sec) || 0);
-    if (state.ytPlayer && typeof state.ytPlayer.seekTo === 'function') {
-      try {
-        state.ytPlayer.seekTo(target, true);
-        state.ytPlayer.playVideo();
-        updateActiveLyricAtTime(target);
-        showToast(`Jumped to ${fmtTime(target)}`);
-        return;
-      } catch (_) {}
-    }
-    updateActiveLyricAtTime(target);
-  }
+  function seekToLyric() {}
 
   async function searchOrLoadKaraoke(overrideInput) {
     const raw = (overrideInput || document.getElementById('ytUrlInput').value || '').trim();
@@ -987,23 +941,21 @@ const App = (() => {
       }
       if (!hit) return;
 
-      const lines = [];
-      String(hit.syncedLyrics || hit.plainLyrics || '').split('\n').forEach((line) => {
-        const m = line.match(/\[(\d+):(\d+(?:\.\d+)?)\](.*)/);
-        if (m) {
-          const text = m[3].trim();
-          if (text) lines.push({ sec: Number(m[1]) * 60 + Number(m[2]), text });
-        } else if (line.trim()) {
-          lines.push({ sec: lines.length * 4, text: line.trim() });
+      const rawText = String(hit.plainLyrics || hit.syncedLyrics || '');
+      const htmlRows = [];
+      rawText.split('\n').forEach((line) => {
+        const cleaned = line.replace(/\[\d+:\d+(?:\.\d+)?\]/g, '').trim();
+        if (cleaned) {
+          htmlRows.push(`<div class="lyric-row">${cleaned}</div>`);
+        } else if (htmlRows.length && !htmlRows[htmlRows.length - 1].includes('lyric-spacer')) {
+          htmlRows.push('<div class="lyric-spacer"></div>');
         }
       });
-      state.lrcLines = lines;
+      state.lrcLines = htmlRows;
       const box = document.getElementById('lyricsStageBox');
-      if (lines.length) {
-        box.innerHTML = lines.map((l, i) =>
-          `<div class="lyric-row ${i === 0 ? 'active' : ''}" id="lr-${i}" onclick="App.seekToLyric(${l.sec})">${l.text}</div>`
-        ).join('');
-        updateActiveLyricAtTime(0);
+      if (box && htmlRows.length) {
+        box.innerHTML = htmlRows.join('');
+        box.scrollTop = 0;
       }
     } catch (_) {}
   }
@@ -1221,7 +1173,6 @@ const App = (() => {
         }).catch(() => {});
     }
 
-    if (state.lrcLines.length) updateActiveLyricAtTime(0);
     rec.start();
     state.isRecording = true;
     state.recStartMs = Date.now();

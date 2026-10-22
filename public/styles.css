@@ -438,23 +438,23 @@ input[type="range"]::-moz-range-thumb {
 .lyrics-box {
   height: 290px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background: #060810;
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 22px 16px;
+  padding: 18px 16px;
   text-align: center;
 }
 .lyric-row {
   font-family: 'Plus Jakarta Sans', sans-serif;
-  font-size: 15.5px;
-  font-weight: 700;
-  color: rgba(148, 163, 184, 0.45);
-  padding: 7px 6px;
-  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.65;
+  color: #f1f5f9;
+  padding: 5px 6px;
 }
-.lyric-row.active {
-  color: #ffffff;
-  font-size: 19px;
+.lyric-spacer {
+  height: 14px;
 }
 
 .meter-track {

@@ -43,7 +43,7 @@
   </script>
 
   <link rel="icon" type="image/png" href="/assets/logo.png" />
-  <link rel="stylesheet" href="/styles.css?v=6.1" />
+  <link rel="stylesheet" href="/styles.css?v=6.2" />
 </head>
 <body>
   <!-- 3-2-1 Studio Countdown -->
@@ -234,7 +234,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap;">
           <div style="display:flex;gap:6px;">
             <button class="btn btn-sm btn-cyan" id="btnStageVideo" onclick="App.setStageMode('video')">Video Stage</button>
-            <button class="btn btn-sm" id="btnStageLyrics" onclick="App.setStageMode('lyrics')">Scrolling Lyrics</button>
+            <button class="btn btn-sm" id="btnStageLyrics" onclick="App.setStageMode('lyrics')">Full Lyrics</button>
           </div>
           <button class="btn btn-sm" id="btnNextKaraoke" style="display:none;" onclick="App.nextKaraokeResult()">Next Video ↻</button>
         </div>
@@ -246,16 +246,9 @@
           </div>
         </div>
 
-        <!-- Live Synced Mini Teleprompter right below Video (or tap to jump to any Chorus!) -->
-        <div id="liveTeleprompterBar" style="display:none;margin-top:10px;padding:10px 12px;background:#060810;border:1px solid var(--border);border-radius:11px;text-align:center;">
-          <div style="font-size:14.5px;font-weight:800;color:#ffffff;" id="teleLineCurrent">♪ Instrumental Intro ♪</div>
-          <div style="font-size:12px;color:var(--text-secondary);margin-top:3px;" id="teleLineNext"></div>
-        </div>
-
-        <div id="stageLyricsWrap" style="display:none;">
-          <div style="font-size:11.5px;color:var(--cyan);margin-bottom:6px;text-align:center;">Tip: Tap any lyric line below to jump the karaoke video straight to that section!</div>
+        <div id="stageLyricsWrap" style="display:none;margin-top:10px;">
           <div id="lyricsStageBox" class="lyrics-box">
-            <div class="lyric-row active">Search any song above to load scrolling lyrics</div>
+            <div class="lyric-row">Search any song above to view full song lyrics here.</div>
           </div>
         </div>
       </div>
@@ -530,8 +523,8 @@
     </button>
   </nav>
 
-  <script src="/vendor/confetti.min.js?v=6.0"></script>
-  <script src="/dsp-engine.js?v=6.0"></script>
-  <script src="/app.js?v=6.0"></script>
+  <script src="/vendor/confetti.min.js?v=6.2"></script>
+  <script src="/dsp-engine.js?v=6.2"></script>
+  <script src="/app.js?v=6.2"></script>
 </body>
 </html>
