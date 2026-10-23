@@ -101,7 +101,7 @@ window.SingVazaDSP = (() => {
   function runWorkerJob(job, audioBuffer, opts) {
     return new Promise((resolve, reject) => {
       if (!dspWorker) {
-        dspWorker = new Worker('/dsp-worker.js?v=6.0');
+        dspWorker = new Worker('/dsp-worker.js?v=19.0');
         dspWorker.onmessage = (ev) => {
           const item = pendingJobs.get(ev.data.id);
           if (!item) return;
@@ -114,13 +114,63 @@ window.SingVazaDSP = (() => {
       pendingJobs.set(id, { resolve, reject });
       const copied = [];
       const transfer = [];
-      for (let c = 0; c < audioBuffer.numberOfChannels; c++) {
+      const maxCh = job === 'tune' ? 1 : audioBuffer.numberOfChannels;
+      for (let c = 0; c < maxCh; c++) {
         const arr = new Float32Array(audioBuffer.getChannelData(c));
         copied.push(arr);
         transfer.push(arr.buffer);
       }
       dspWorker.postMessage({ id, job, channels: copied, sr: audioBuffer.sampleRate, opts }, transfer);
     });
+  }
+
+  // Featherweight Studio Mono Downmix + DC Offset Removal (cuts multi-minute recording RAM by 75–85% with crystal-clear sound!)
+  function compactVocalBuffer(ctx, srcBuffer) {
+    if (!srcBuffer) return null;
+    const inSr = srcBuffer.sampleRate;
+    const inLen = srcBuffer.length;
+    const dur = srcBuffer.duration || (inLen / Math.max(8000, inSr));
+    const targetSr = dur > 150 ? 24000 : 32000;
+
+    if (srcBuffer.numberOfChannels === 1 && inSr <= targetSr + 1000) {
+      return srcBuffer;
+    }
+
+    const ratio = inSr / targetSr;
+    const outLen = Math.max(1, Math.floor(inLen / ratio));
+    const out = ctx.createBuffer(1, outLen, targetSr);
+    const dst = out.getChannelData(0);
+    const ch0 = srcBuffer.getChannelData(0);
+    const ch1 = srcBuffer.numberOfChannels > 1 ? srcBuffer.getChannelData(1) : null;
+
+    let dcSum = 0;
+    let peak = 0;
+    for (let i = 0; i < outLen; i++) {
+      const srcPos = i * ratio;
+      const i0 = Math.min(inLen - 1, Math.floor(srcPos));
+      const i1 = Math.min(inLen - 1, i0 + 1);
+      const frac = srcPos - i0;
+      let v0 = ch1 ? (ch0[i0] + ch1[i0]) * 0.5 : ch0[i0];
+      let v1 = ch1 ? (ch0[i1] + ch1[i1]) * 0.5 : ch0[i1];
+      const s = v0 + (v1 - v0) * frac;
+      dst[i] = s;
+      dcSum += s;
+      const a = Math.abs(s);
+      if (a > peak) peak = a;
+    }
+
+    const dcMean = dcSum / outLen;
+    // Clean headroom protection: lift super-quiet phone mics gently OR tame hot clipping without pumping!
+    let cleanGain = 1.0;
+    if (peak > 0.94) cleanGain = 0.90 / peak;
+    else if (peak > 0.015 && peak < 0.25) cleanGain = Math.min(2.2, 0.55 / peak);
+
+    if (Math.abs(dcMean) > 1e-4 || Math.abs(cleanGain - 1.0) > 0.02) {
+      for (let i = 0; i < outLen; i++) {
+        dst[i] = Math.max(-0.98, Math.min(0.98, (dst[i] - dcMean) * cleanGain));
+      }
+    }
+    return out;
   }
 
   async function processVocalAsync(ctx, rawBuffer, opts) {
@@ -582,7 +632,8 @@ window.SingVazaDSP = (() => {
       }
       nodes.sources.push(vSrc);
       Object.assign(nodes, {
-        dryBypassGain, wetChainGate, hp, bodyEq, mudCut, compFast,
+        ctxSampleRate: ctx.sampleRate,
+        dryBypassGain, wetChainGate, hp, lp, bodyEq, mudCut, compFast,
         presence, deEss, air, excGain, dblWet, delayL, delayR, dFeedback, dWet, revPreDelay, rWet, vocalGain: vOut,
       });
     }
@@ -597,7 +648,11 @@ window.SingVazaDSP = (() => {
     if (nodes.dryBypassGain) nodes.dryBypassGain.gain.value = params.bypassFx ? (params.vocalGain ?? 1.0) : 0;
     if (nodes.wetChainGate) nodes.wetChainGate.gain.value = params.bypassFx ? 0 : 1;
     if (nodes.vocalGain) nodes.vocalGain.gain.value = params.vocalGain ?? 1.35;
-    if (nodes.hp) nodes.hp.frequency.value = params.hpFreq ?? 95;
+    if (nodes.hp) nodes.hp.frequency.value = Math.max(20, Math.min(500, params.hpFreq ?? 95));
+    if (nodes.lp) {
+      const maxSafeLp = Math.max(2500, (nodes.ctxSampleRate || 44100) * 0.47);
+      nodes.lp.frequency.value = Math.min(maxSafeLp, Math.max(2500, params.lpFreq ?? 16000));
+    }
     if (nodes.bodyEq) nodes.bodyEq.gain.value = params.bodyDb ?? 1.4;
     if (nodes.mudCut) nodes.mudCut.gain.value = params.mudCutDb ?? -3.0;
     if (nodes.compFast) {
@@ -678,12 +733,16 @@ window.SingVazaDSP = (() => {
   }
 
   async function renderMasterAudio(buffers, params, format = 'mp3_compact', onProgress = null) {
-    const isUltraCompact = format === 'mp3_ultra' || format === 'compact';
-    const sampleRate = isUltraCompact ? 32000 : 44100;
     const offsetSec = (params.vocalOffsetMs || 0) / 1000;
     const bDur = buffers.backing ? buffers.backing.duration : 0;
-    const vDur = buffers.rawVocal ? buffers.rawVocal.duration + Math.max(0, offsetSec) + 1.8 : 0;
+    const vDur = buffers.rawVocal ? buffers.rawVocal.duration + Math.max(0, offsetSec) + 1.4 : 0;
     const totalDur = Math.max(bDur, vDur, 1);
+    const isUltraCompact = format === 'mp3_ultra' || format === 'compact';
+    let sampleRate = isUltraCompact ? 32000 : 44100;
+    if (totalDur > 210) sampleRate = 22050;
+    else if (totalDur > 95) sampleRate = 24000;
+    else if (totalDur > 60 && format !== 'wav') sampleRate = 32000;
+
     const offline = new OfflineAudioContext(2, Math.ceil(totalDur * sampleRate), sampleRate);
     buildStudioGraph(offline, buffers, params, 0);
     const rendered = await offline.startRendering();
@@ -764,7 +823,7 @@ window.SingVazaDSP = (() => {
 
   return {
     NOTE_NAMES, MASTER_PROFILES, PRESETS,
-    setHallImpulseBuffer, computeWaveformPeaks, sliceAudioBuffer,
+    setHallImpulseBuffer, computeWaveformPeaks, sliceAudioBuffer, compactVocalBuffer,
     processVocalAsync, transposeBufferAsync, detectPitchLive,
     centerCutKaraokeBuffer, analyzeVoiceQuick, estimateSyncOffsetMs,
     buildStudioGraph, applyLiveParamsToGraph, renderMasterWav, renderMasterAudio,

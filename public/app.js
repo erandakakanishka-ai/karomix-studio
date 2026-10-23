@@ -154,9 +154,20 @@ const App = (() => {
     return state.audioCtx;
   }
 
-  // Suspend idle WebAudio context when not actively monitoring mic so Android 8.1 OpenSL ES uses 0.0% CPU!
+  function stopLiveGraphNodes() {
+    if (state.liveNodes && Array.isArray(state.liveNodes.sources)) {
+      for (const src of state.liveNodes.sources) {
+        try { src.stop(0); } catch (_) {}
+        try { src.disconnect(); } catch (_) {}
+      }
+    }
+    state.liveNodes = null;
+    state.livePlaying = false;
+  }
+
+  // Suspend idle WebAudio context when not actively playing/monitoring so Android 8.1 OpenSL ES uses 0.0% CPU!
   function suspendIdleWebAudio() {
-    if (state.audioCtx && !state.isRecording && !state.isMonitoring && state.audioCtx.state === 'running') {
+    if (state.audioCtx && !state.isRecording && !state.isMonitoring && !state.livePlaying && state.audioCtx.state === 'running') {
       state.audioCtx.suspend().catch(() => {});
     }
   }
@@ -341,7 +352,7 @@ const App = (() => {
   }
 
   function getTotalDuration() {
-    if ((state.backingBuffer || state.rawVocalBuffer || state.isDemoSession) && hwAudio.duration && Number.isFinite(hwAudio.duration) && hwAudio.duration > 0.5) {
+    if (state.hwPlaying && hwAudio.duration && Number.isFinite(hwAudio.duration) && hwAudio.duration > 0.5) {
       return hwAudio.duration;
     }
     const off = (state.params.vocalOffsetMs || 0) / 1000;
@@ -352,7 +363,11 @@ const App = (() => {
   }
 
   function getCurrentPlayhead() {
-    if (state.isPlaying && Number.isFinite(hwAudio.currentTime)) {
+    if (state.isPlaying && state.livePlaying && state.audioCtx) {
+      const elapsed = Math.max(0, state.audioCtx.currentTime - (state.liveStartCtxTime || 0));
+      return Math.min(getTotalDuration(), Math.max(0, (state.liveStartOffsetSec || 0) + elapsed));
+    }
+    if (state.isPlaying && state.hwPlaying && Number.isFinite(hwAudio.currentTime)) {
       return hwAudio.currentTime;
     }
     return state.pausePositionSec;
@@ -386,7 +401,7 @@ const App = (() => {
     g.fillStyle = '#060810';
     g.fillRect(0, 0, w, h);
 
-    const active = state.isPlaying && !hwAudio.paused;
+    const active = state.isPlaying && (state.livePlaying || !hwAudio.paused);
     const pos = getCurrentPlayhead();
     const dur = getTotalDuration();
     const pIdx = Math.min(219, Math.max(0, Math.floor((pos / Math.max(dur, 0.1)) * 220)));
@@ -424,112 +439,110 @@ const App = (() => {
       clearInterval(state.uiTimerId);
       state.uiTimerId = null;
     }
+    stopLiveGraphNodes();
+    state.hwPlaying = false;
     try { hwAudio.pause(); } catch (_) {}
     state.isPlaying = false;
     updatePlayButtonsUI(false);
+    suspendIdleWebAudio();
     if (state.view === 'mix') drawSpectrum();
   }
 
-  // Renders custom mix offline once at 32kHz Stereo (~90–160ms) into pure native OS Hardware <audio>!
-  async function ensureHardwareStreamUrl() {
-    // Fast-path 1: Unedited real studio demo plays instant pre-mastered hardware MP3 (0ms render, 0 MB RAM!)
-    if (state.isDemoSession && !state.demoEdited && !state.params.soloVocal && state.transposeSemitones === 0 && !state.karaokeCutActive) {
-      return state.params.bypassFx ? '/assets/demo-raw-dry.mp3' : '/assets/demo-studio-fx.mp3';
-    }
-
-    // Fast-path 2: Custom mix already rendered and clean!
-    if (!state.mixDirty && state.cachedMixUrl) {
-      return state.cachedMixUrl;
-    }
-
-    // Ensure stems exist if editing Demo in Mix Studio
-    if (state.isDemoSession && (!state.rawVocalBuffer || !state.backingBuffer)) {
-      await preloadRealDemoAssets();
-    }
-
-    if (!state.backingBuffer && !state.rawVocalBuffer) {
-      if (state.isDemoSession) {
-        return '/assets/demo-studio-fx.mp3';
-      }
-      return '';
-    }
-
-    const seq = ++state.renderSeq;
-    const mixBtn = document.getElementById('playBtnText');
-    if (mixBtn) mixBtn.textContent = 'Smoothing...';
-
-    // Non-realtime OfflineAudioContext render -> 100% crackle-free native hardware WAV stream!
-    const wavBlob = await SingVazaDSP.renderMasterWav(
-      { backing: state.backingBuffer, rawVocal: state.rawVocalBuffer, tunedVocal: state.tunedVocalBuffer },
-      state.params,
-      true // 32kHz Stereo = super-fast render + zero Android 8.1 RAM pressure + silky smooth highs!
-    );
-    suspendIdleWebAudio();
-
-    if (seq !== state.renderSeq) return state.cachedMixUrl;
-
-    if (state.cachedMixUrl && state.cachedMixUrl.startsWith('blob:')) {
-      try { URL.revokeObjectURL(state.cachedMixUrl); } catch (_) {}
-    }
-    state.cachedMixUrl = URL.createObjectURL(wavBlob);
-    state.lastMasterBlob = wavBlob;
-    state.mixDirty = false;
-    return state.cachedMixUrl;
-  }
-
+  // Instant Zero-Wait Dual Playback Engine:
+  // 1) Unedited Landing Demo -> direct pre-mastered hardware MP3 (0ms)
+  // 2) Recordings / Uploads / Mix Edits (any length: 5s to 10+ min!) -> instant real-time WebAudio console graph (2ms start, 0 MB WAV allocation, 0 "Smoothing..." freeze!)
   async function startPlayback(fromSec = 0) {
     unlockMobileAudioSync();
     if (state.uiTimerId) {
       clearInterval(state.uiTimerId);
       state.uiTimerId = null;
     }
+    stopLiveGraphNodes();
+    state.hwPlaying = false;
+    try { hwAudio.pause(); } catch (_) {}
 
-    let targetUrl = '';
-    try {
-      targetUrl = await ensureHardwareStreamUrl();
-    } catch (err) {
-      showToast('Audio load warning: ' + err.message);
-      updatePlayButtonsUI(false);
-      return;
-    }
-    if (!targetUrl) {
-      updatePlayButtonsUI(false);
-      showToast(state.isProcessingTake ? 'Still preparing your vocal recording...' : 'No audio in mixer — record your voice or tap Demo first.');
-      return;
-    }
+    const useDirectDemoMp3 = state.isDemoSession
+      && !state.demoEdited
+      && !state.params.soloVocal
+      && state.transposeSemitones === 0
+      && !state.karaokeCutActive;
 
-    const fullTarget = targetUrl.startsWith('blob:') ? targetUrl : new URL(targetUrl, window.location.origin).href;
-    if (hwAudio.src !== fullTarget) {
-      hwAudio.src = targetUrl;
-    }
+    if (useDirectDemoMp3) {
+      const targetUrl = state.params.bypassFx ? '/assets/demo-raw-dry.mp3' : '/assets/demo-studio-fx.mp3';
+      const fullTarget = new URL(targetUrl, window.location.origin).href;
+      if (hwAudio.src !== fullTarget) hwAudio.src = targetUrl;
 
-    const applySeek = () => {
-      const dur = hwAudio.duration;
-      const safeSec = Number.isFinite(dur) && fromSec >= dur - 0.15 ? 0 : Math.max(0, fromSec);
-      try { hwAudio.currentTime = safeSec; } catch (_) {}
-    };
+      const applySeek = () => {
+        const dur = hwAudio.duration;
+        const safeSec = Number.isFinite(dur) && fromSec >= dur - 0.15 ? 0 : Math.max(0, fromSec);
+        try { hwAudio.currentTime = safeSec; } catch (_) {}
+      };
+      if (hwAudio.readyState >= 1) applySeek();
+      else hwAudio.addEventListener('loadedmetadata', applySeek, { once: true });
 
-    if (hwAudio.readyState >= 1) {
-      applySeek();
+      try {
+        await hwAudio.play();
+        state.hwPlaying = true;
+        state.isPlaying = true;
+        updatePlayButtonsUI(true);
+      } catch (_) {
+        state.hwPlaying = false;
+        state.isPlaying = false;
+        updatePlayButtonsUI(false);
+        return;
+      }
     } else {
-      hwAudio.addEventListener('loadedmetadata', applySeek, { once: true });
+      if (state.isDemoSession && (!state.rawVocalBuffer || !state.backingBuffer)) {
+        try { await preloadRealDemoAssets(); } catch (_) {}
+      }
+
+      if (!state.backingBuffer && !state.rawVocalBuffer) {
+        updatePlayButtonsUI(false);
+        showToast(state.isProcessingTake ? 'Still preparing your vocal recording...' : 'No audio in mixer — record your voice or tap Demo first.');
+        return;
+      }
+
+      try {
+        const ctx = ensureAudioCtx();
+        if (ctx.state === 'suspended') {
+          await ctx.resume();
+        }
+        const totalDur = getTotalDuration();
+        const safeSec = totalDur > 0.25 && fromSec >= totalDur - 0.15 ? 0 : Math.max(0, fromSec);
+        state.liveNodes = SingVazaDSP.buildStudioGraph(
+          ctx,
+          { backing: state.backingBuffer, rawVocal: state.rawVocalBuffer, tunedVocal: state.tunedVocalBuffer },
+          state.params,
+          safeSec
+        );
+        state.liveStartOffsetSec = safeSec;
+        state.liveStartCtxTime = ctx.currentTime;
+        state.livePlaying = true;
+        state.isPlaying = true;
+        updatePlayButtonsUI(true);
+      } catch (err) {
+        stopLiveGraphNodes();
+        state.isPlaying = false;
+        updatePlayButtonsUI(false);
+        showToast('Playback warning: ' + (err?.message || 'tap Play Mix again'));
+        return;
+      }
     }
 
-    try {
-      await hwAudio.play();
-      state.isPlaying = true;
-      updatePlayButtonsUI(true);
-    } catch (_) {
-      state.isPlaying = false;
-      updatePlayButtonsUI(false);
-      return;
-    }
-
-    // Calm 10 FPS (100ms) UI update timer instead of 60 FPS rAF — saves 85% main-thread CPU on Android 8.1!
+    // Calm 10 FPS (100ms) UI update timer — saves 85% main-thread CPU on Android!
     state.uiTimerId = setInterval(() => {
-      if (!state.isPlaying || hwAudio.paused) return;
+      if (!state.isPlaying) return;
+      if (state.hwPlaying && hwAudio.paused) return;
       const pos = getCurrentPlayhead();
       const dur = getTotalDuration();
+      if (state.livePlaying && dur > 0.2 && pos >= dur - 0.04) {
+        stopPlaybackInternal();
+        state.pausePositionSec = 0;
+        const mixEnd = document.getElementById('transportTime');
+        if (mixEnd) mixEnd.textContent = `00:00 / ${fmtTime(dur)}`;
+        if (state.view === 'mix') drawTimeline(0);
+        return;
+      }
       const tStr = `${fmtTime(pos)} / ${fmtTime(dur)}`;
       const mixT = document.getElementById('transportTime');
       const heroT = document.getElementById('heroDemoTime');
@@ -549,16 +562,20 @@ const App = (() => {
     if (state.view === 'mix') drawTimeline(0);
   });
 
-  // Smooth debounced hot-swap when user moves a slider or taps a preset while playing
-  function scheduleHardwareRefresh(delayMs = 160) {
+  // Zero-latency live console parameter update (0ms live AudioParam tweak; zero "Smoothing..." re-render!)
+  function scheduleHardwareRefresh(delayMs = 80, forceRestart = false) {
     clearTimeout(state.refreshTimerId);
     if (!state.isPlaying) return;
+    if (state.livePlaying && state.liveNodes && !forceRestart) {
+      SingVazaDSP.applyLiveParamsToGraph(state.liveNodes, state.params);
+      return;
+    }
     state.refreshTimerId = setTimeout(() => {
       if (state.isPlaying) {
         const cur = getCurrentPlayhead();
         startPlayback(cur);
       }
-    }, delayMs);
+    }, Math.min(delayMs, 80));
   }
 
   function pausePlayback() {
@@ -742,7 +759,7 @@ const App = (() => {
     document.getElementById('syncOffsetSlider').value = val;
     document.getElementById('syncOffsetLabel').textContent = `${val > 0 ? '+' : ''}${val} ms`;
     drawTimeline();
-    if (restartAudio && state.isPlaying) scheduleHardwareRefresh(60);
+    if (restartAudio && state.isPlaying) scheduleHardwareRefresh(60, true);
   }
 
   async function autoAlignTracks() {
@@ -1256,11 +1273,89 @@ const App = (() => {
     const file = e.target.files?.[0];
     if (e.target) e.target.value = '';
     if (!file) return;
+    await loadVocalFile(file);
+  }
+
+  // Applies clean, natural, zero-warble studio polish immediately after recording/upload (no auto pitch-warbling or chorus smear!)
+  function applyCleanPostRecordStudioProfile(headphonesOnly) {
+    state.activePreset = headphonesOnly ? 'crystal_hd' : 'velvet_ballad';
+    if (headphonesOnly) {
+      Object.assign(state.params, {
+        bypassFx: false,
+        vocalGain: 1.24,
+        hpFreq: 80,
+        lpFreq: 17500,
+        bodyDb: 1.4,
+        mudCutDb: -2.4,
+        compThreshold: -21,
+        compRatio: 3.0,
+        presenceDb: 3.0,
+        deEssDb: -3.2,
+        airDb: 3.8,
+        exciterMix: 0.16,
+        doublerMix: 0.12,
+        delayMix: 0.08,
+        delayFeedback: 0.20,
+        delayTimeSec: 0.34,
+        preDelayMs: 36,
+        reverbMix: 0.24,
+        autotuneAmount: 0,
+        noiseGate: 0,
+      });
+    } else {
+      // Speaker + Voice mode: preserve 100% warm bass, crisp highs & natural performance with ZERO chorus warble or slapback clutter!
+      Object.assign(state.params, {
+        bypassFx: false,
+        vocalGain: 1.10,
+        hpFreq: 45,
+        lpFreq: 17500,
+        bodyDb: 0.8,
+        mudCutDb: -1.4,
+        compThreshold: -18,
+        compRatio: 2.2,
+        presenceDb: 1.8,
+        deEssDb: -2.5,
+        airDb: 2.0,
+        exciterMix: 0.08,
+        doublerMix: 0.0,
+        delayMix: 0.03,
+        delayFeedback: 0.16,
+        delayTimeSec: 0.32,
+        preDelayMs: 32,
+        reverbMix: 0.12,
+        autotuneAmount: 0,
+        noiseGate: 0,
+      });
+    }
+    const atEl = document.getElementById('atStrength');
+    const atVal = document.getElementById('atStrengthVal');
+    const gateEl = document.getElementById('gateSlider');
+    const gateVal = document.getElementById('gateValText');
+    if (atEl) atEl.value = 0;
+    if (atVal) atVal.textContent = '0%';
+    if (gateEl) gateEl.value = 0;
+    if (gateVal) gateVal.textContent = '0%';
+    updateFxButtonsUI();
+    renderPresets();
+    syncSlidersFromParams();
+    const banner = document.getElementById('voiceReportBanner');
+    if (banner) {
+      banner.style.display = 'block';
+      banner.textContent = headphonesOnly
+        ? '✓ Clean Studio Vocal Mode ready — natural un-warbled voice + gentle hall polish.'
+        : '✓ Clean Natural Recording ready — full bass, clear vocals & zero warble.';
+    }
+  }
+
+  async function loadVocalFile(file) {
+    if (!file) return;
     unlockMobileAudioSync();
-    showToast('Smoothing & mastering your voice...');
+    stopPlaybackInternal();
+    showToast('Loading clean audio into Mix Studio...');
     try {
       const ctx = ensureAudioCtx();
-      const buf = await ctx.decodeAudioData(await file.arrayBuffer());
+      const rawBuf = await ctx.decodeAudioData(await file.arrayBuffer());
+      const buf = SingVazaDSP.compactVocalBuffer(ctx, rawBuf);
       suspendIdleWebAudio();
       if (!state.userLoadedBacking) {
         state.backingBuffer = null;
@@ -1272,9 +1367,9 @@ const App = (() => {
       state.vocalPeaks = SingVazaDSP.computeWaveformPeaks(buf, 220);
       state.isDemoSession = false;
       markMixDirty();
+      applyCleanPostRecordStudioProfile(false);
       switchView('mix');
-      await runSmartVoiceMatch();
-      await applyWorkerAutoTune();
+      drawTimeline(0);
       await startPlayback(0);
     } catch (_) {
       suspendIdleWebAudio();
@@ -1299,13 +1394,15 @@ const App = (() => {
       ? 'Headphones (Voice Isolation ON)'
       : 'Speaker + Voice (No Headphones)';
 
+    // Always disable phone-call AGC / noise-suppression / echo-cancellation so sustained sung notes & music NEVER pump or warble!
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          noiseSuppression: headphonesOnly,
+          channelCount: 1,
+          noiseSuppression: false,
           echoCancellation: false,
-          autoGainControl: headphonesOnly,
+          autoGainControl: false,
         },
       });
     } catch (_) {
@@ -1456,9 +1553,15 @@ const App = (() => {
     const bestMime = mimeCandidates.find((m) => window.MediaRecorder?.isTypeSupported?.(m)) || '';
     let rec;
     try {
-      rec = bestMime ? new MediaRecorder(state.micStream, { mimeType: bestMime }) : new MediaRecorder(state.micStream);
+      rec = bestMime
+        ? new MediaRecorder(state.micStream, { mimeType: bestMime, audioBitsPerSecond: 96000 })
+        : new MediaRecorder(state.micStream, { audioBitsPerSecond: 96000 });
     } catch (_) {
-      rec = new MediaRecorder(state.micStream);
+      try {
+        rec = bestMime ? new MediaRecorder(state.micStream, { mimeType: bestMime }) : new MediaRecorder(state.micStream);
+      } catch (__) {
+        rec = new MediaRecorder(state.micStream);
+      }
     }
     state.mediaRecorder = rec;
     rec.ondataavailable = (ev) => { if (ev.data && ev.data.size > 0) state.recChunks.push(ev.data); };
@@ -1466,18 +1569,23 @@ const App = (() => {
       releaseMic();
       const stageMedia = document.getElementById('stageUploadedMedia');
       if (stageMedia) { try { stageMedia.pause(); } catch (_) {} }
-      if (!state.recChunks.length) {
+      const chunks = state.recChunks;
+      state.recChunks = [];
+      if (!chunks || !chunks.length) {
         setProcessingBanner(false);
         showToast('Recording was empty — please check microphone permission');
         return;
       }
       setProcessingBanner(true);
-      showToast('Smoothing & mastering your recording...');
+      showToast('Preparing your clean studio recording...');
       try {
-        const blob = new Blob(state.recChunks, { type: rec.mimeType || bestMime || 'audio/webm' });
+        let blob = new Blob(chunks, { type: rec.mimeType || bestMime || 'audio/webm' });
+        chunks.length = 0;
+        const arrBuf = await blob.arrayBuffer();
+        blob = null;
         const ctx = ensureAudioCtx();
-        const vocalBuf = await ctx.decodeAudioData(await blob.arrayBuffer());
-        suspendIdleWebAudio();
+        const decodedBuf = await ctx.decodeAudioData(arrBuf);
+        const vocalBuf = SingVazaDSP.compactVocalBuffer(ctx, decodedBuf);
 
         if (!state.userLoadedBacking) {
           state.backingBuffer = null;
@@ -1493,17 +1601,9 @@ const App = (() => {
         const rtDone = document.getElementById('recTimerText');
         if (rtDone) rtDone.textContent = '00:00';
 
-        switchView('mix');
-        await runSmartVoiceMatch();
-        if (!headphonesOnly) {
-          state.params.hpFreq = 55;
-          state.params.noiseGate = 0.04;
-          document.getElementById('gateSlider').value = 4;
-          document.getElementById('gateValText').textContent = '4%';
-          syncSlidersFromParams();
-        }
-        await applyWorkerAutoTune();
+        applyCleanPostRecordStudioProfile(headphonesOnly);
         setProcessingBanner(false);
+        switchView('mix');
         drawTimeline(0);
         await startPlayback(0);
       } catch (err) {
