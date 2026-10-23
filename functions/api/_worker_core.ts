@@ -876,6 +876,8 @@ export default {
             `INSERT INTO site_settings (k, v, updated_at) VALUES ('admin_pass_sha256', ?, CURRENT_TIMESTAMP)
              ON CONFLICT(k) DO UPDATE SET v = excluded.v, updated_at = CURRENT_TIMESTAMP`
           ).bind(pwHash).run();
+          const curBearer = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+          await env.DB.prepare('DELETE FROM admin_sessions WHERE token != ?').bind(curBearer).run();
         }
         return json({ ok: true });
       }
