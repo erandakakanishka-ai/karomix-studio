@@ -84,7 +84,6 @@ const App = (() => {
     uploadedMediaUrl: '',
     uploadedIsVideo: false,
     uploadedFileName: '',
-    lyricsReqSeq: 0,
     lastMasterBlob: null,
     lastMasterMime: 'audio/mpeg',
     lastMasterFilename: 'singvaza-master.mp3',
@@ -934,7 +933,7 @@ const App = (() => {
       state.karaokeResults = videos;
       state.karaokeIndex = 0;
       renderKaraokeStrip();
-      selectKaraokeVideo(0, true);
+      selectKaraokeVideo(0);
       document.getElementById('btnNextKaraoke').style.display = videos.length > 1 ? 'inline-flex' : 'none';
       showToast('Karaoke video ready! Tap Start Recording to sing.');
     } catch (_) {
@@ -956,21 +955,20 @@ const App = (() => {
     `).join('');
   }
 
-  function selectKaraokeVideo(idx, skipAutoLyrics = false) {
+  function selectKaraokeVideo(idx) {
     const v = state.karaokeResults[idx];
     if (!v) return;
     state.karaokeIndex = idx;
     renderKaraokeStrip();
     renderYoutubeEmbed(v.id || v.videoId, v.title);
-    if (!skipAutoLyrics && v.title) {
-      const cleanedVidTitle = String(v.title).split(/[|•]/)[0].trim();
-      if (cleanedVidTitle) fetchLyrics(cleanedVidTitle);
+    if (!state.lrcLines.length && v.title) {
+      fetchLyrics(v.title);
     }
   }
 
   function nextKaraokeResult() {
     if (!state.karaokeResults.length) return;
-    selectKaraokeVideo((state.karaokeIndex + 1) % state.karaokeResults.length, true);
+    selectKaraokeVideo((state.karaokeIndex + 1) % state.karaokeResults.length);
   }
 
   function renderPlainLyricsText(rawText, sourceLabel = 'Lyrics ready') {
@@ -1015,7 +1013,6 @@ const App = (() => {
   }
 
   async function fetchLyrics(query) {
-    const seq = ++state.lyricsReqSeq;
     const lbl = document.getElementById('lyricsStatusLabel');
     const box = document.getElementById('lyricsStageBox');
     state.lrcLines = [];
@@ -1023,63 +1020,38 @@ const App = (() => {
     if (box) box.innerHTML = '<div class="lyric-row" style="color:var(--text-secondary);">Loading song lyrics...</div>';
 
     try {
-      const cleanQ = String(query || '')
-        .split(/[|•]/)[0]
-        .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
-        .replace(/\b(karaoke|instrumental|lyrics|lyric|version|official|acoustic|without\s+voice|minus\s+one|sinhala|new\s+song|video|audio|hd|hq)\b/gi, ' ')
-        .replace(/\s+/g, ' ')
-        .trim() || String(query || '').trim();
-
-      const hasSinhalaScript = /[\u0D80-\u0DFF]/.test(cleanQ);
-
-      // 1. Primary (Exact Yesterday Priority!): Direct browser LRCLIB query for global & indexed songs (~120ms)
+      const cleanQ = String(query || '').replace(/\b(karaoke|instrumental|lyrics|version|official|acoustic)\b/gi, '').trim() || query;
       let hit = null;
-      if (!hasSinhalaScript) {
-        const tries = [cleanQ];
-        if (cleanQ.includes('-')) {
-          tries.push(...cleanQ.split('-').map((s) => s.trim()).filter((s) => s.length > 2));
-        }
-        const qWords = cleanQ.toLowerCase().split(/\s+/).filter((w) => w.length >= 2);
-        for (const cand of tries) {
-          try {
-            const r = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(cand)}`);
-            if (r.ok) {
-              const list = await r.json();
-              if (Array.isArray(list) && list.length) {
-                hit = list.find((item) => {
-                  if (!item.plainLyrics && !item.syncedLyrics) return false;
-                  const meta = `${item.trackName || ''} ${item.name || ''} ${item.artistName || ''}`.toLowerCase();
-                  return qWords.every((w) => meta.includes(w)) || (qWords.length >= 2 && qWords.filter((w) => meta.includes(w)).length >= Math.ceil(qWords.length * 0.7));
-                }) || null;
-                if (hit) break;
-              }
-            }
-          } catch (_) {}
-        }
-      }
 
-      if (seq !== state.lyricsReqSeq) return;
+      // Primary: Edge Multi-Source API (works on Android 8.1 TLS + covers 3M+ Global LRCLIB + 2,370+ Regional songs!)
+      try {
+        const res = await fetch(`/api/lyrics?q=${encodeURIComponent(cleanQ)}`);
+        if (res.ok) {
+          const data = await res.json();
+          hit = data.track || (data.results || [])[0] || null;
+        }
+      } catch (_) {}
 
-      // 2. Fallback: Edge Multi-Source Sinhala + Regional Title-Verified API
+      // Fallback: Direct LRCLIB query
       if (!hit) {
         try {
-          const res = await fetch(`/api/lyrics?q=${encodeURIComponent(cleanQ)}`);
-          if (res.ok) {
-            const data = await res.json();
-            const tr = data.track || (data.results || [])[0] || null;
-            if (tr && (tr.plainLyrics || tr.syncedLyrics)) hit = tr;
+          const directRes = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(cleanQ)}`);
+          if (directRes.ok) {
+            const list = await directRes.json();
+            if (Array.isArray(list) && list.length) {
+              hit = list.find((item) => item.plainLyrics) || list.find((item) => item.syncedLyrics) || null;
+            }
           }
         } catch (_) {}
       }
 
-      if (seq !== state.lyricsReqSeq) return;
       if (hit && renderPlainLyricsText(hit.plainLyrics || hit.syncedLyrics || '', 'Full song lyrics')) {
         return;
       }
 
-      if (lbl) lbl.textContent = 'Tap Paste / Edit Lyrics';
+      if (lbl) lbl.textContent = 'Tap Edit Lyrics to paste';
       if (box) {
-        box.innerHTML = '<div class="lyric-row" style="color:var(--text-secondary);">Lyrics not found for this exact spelling — try typing the main 2 words of the song title or tap "Paste / Edit Lyrics".</div>';
+        box.innerHTML = '<div class="lyric-row" style="color:var(--text-secondary);">Lyrics not found in database for this version — read directly from the video above or tap "Edit Lyrics" to paste yours.</div>';
       }
     } catch (_) {}
   }
@@ -1088,13 +1060,12 @@ const App = (() => {
     const base = String(rawName || '').replace(/\.[^.]+$/, '');
     const cleaned = base
       .replace(/[_]+/g, ' ')
-      .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
-      .replace(/\b(y2mate|snaptube|savefrom|yt1s|yt5s|ssyoutube|karaoke|instrumental|official|video|audio|lyrics|lyric|hd|hq|1080p|720p|480p|360p|320kbps|128kbps|mp3|mp4|track|download|ringtone|new|sinhala|song|songs|music|mix|master|cover)\b/gi, ' ')
-      .replace(/^\s*\d{1,4}\s*[-.]?\s*/, '')
+      .replace(/\b(y2mate|snaptube|savefrom|yt1s|yt5s|ssyoutube|karaoke|instrumental|official|video|audio|lyrics|lyric|hd|hq|1080p|720p|480p|360p|320kbps|128kbps|mp3|mp4|track)\b/gi, ' ')
+      .replace(/^\s*\d{1,3}\s*[-.]\s*/, '')
       .replace(/[-.]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    if (!cleaned || cleaned.length < 3 || /^(aud|vid|whatsapp|videoplayback|recording|voice|vn|audio|video|music|song|track|untitled|unknown|\d+)\b/i.test(cleaned)) {
+    if (!cleaned || /^(aud|vid|whatsapp|videoplayback|recording|voice|vn|audio|video)\b/i.test(cleaned)) {
       return '';
     }
     return cleaned;
@@ -1114,9 +1085,9 @@ const App = (() => {
     const wrap = document.getElementById('stageVideoWrap');
     const clearBtn = document.getElementById('btnClearStageTrack');
     const nextBtn = document.getElementById('btnNextKaraoke');
-    const upLyrForm = document.getElementById('uploadLyricsSearchForm');
     if (clearBtn) clearBtn.style.display = 'inline-flex';
     if (nextBtn) nextBtn.style.display = 'none';
+    const upLyrForm = document.getElementById('uploadLyricsSearchForm');
     if (upLyrForm) upLyrForm.style.display = 'flex';
     state.ytPlayer = null;
     clearInterval(state.ytSyncInterval);
@@ -1203,21 +1174,14 @@ const App = (() => {
     renderUploadedStageMedia(file.name, objUrl, isVideo);
     document.getElementById('projectTitleInput').value = file.name.replace(/\.[^.]+$/, '') + ' — Vocal Cover';
 
-    // 2. Auto-detect song lyrics from filename OR reset cleanly for manual song lookup
+    // 2. Auto-detect song lyrics from filename OR focus lyrics search input
     const guessedTitle = cleanSongTitleFromFilename(file.name);
     const lyrInput = document.getElementById('lyricsOnlyQueryInput');
     if (guessedTitle) {
       if (lyrInput) lyrInput.value = guessedTitle;
       fetchLyrics(guessedTitle);
-    } else {
-      state.lrcLines = [];
-      if (lyrInput) lyrInput.value = '';
-      const lyrLbl = document.getElementById('lyricsStatusLabel');
-      const lyrBox = document.getElementById('lyricsStageBox');
-      if (lyrLbl) lyrLbl.textContent = 'Type song name above for lyrics';
-      if (lyrBox) {
-        lyrBox.innerHTML = '<div class="lyric-row" style="color:var(--text-secondary);">Type the song name in the box above and tap <strong>Get Lyrics</strong> — full lyrics will appear right here while your uploaded audio/video stays ready.</div>';
-      }
+    } else if (lyrInput) {
+      document.getElementById('lyricsStatusLabel').textContent = 'Type song name below for lyrics';
     }
 
     showToast(`Loaded ${isVideo ? 'video' : 'audio'}: ${file.name}`);
