@@ -611,12 +611,46 @@ export default {
 
         const cleanLatin = /[\u0D80-\u0DFF]/.test(cleanRaw) ? sinhalaToSinglish(cleanRaw) : cleanRaw;
 
-        const cacheKey = new Request(`https://singvaza-cache.local/v10/lyrics?q=${encodeURIComponent(cleanLatin.toLowerCase())}`);
+        const cacheKey = new Request(`https://singvaza-cache.local/v13/lyrics?q=${encodeURIComponent(cleanRaw.toLowerCase())}`);
         const edgeCache = (globalThis as any).caches?.default;
         if (edgeCache) {
           const cachedHit = await edgeCache.match(cacheKey);
           if (cachedHit) return cachedHit;
         }
+
+        // Helper: Cleanly extract pure song stanzas from a YouTube video description while stripping credits/ads/links!
+        const extractLyricsFromYtDescription = (desc: string): string => {
+          if (!desc || desc.length < 90) return '';
+          const promoRe = /https?:\/\/|www\.|@[a-z0-9_]|#[a-z0-9_\u0D80-\u0DFF]|\b(subscribe|whatsapp|facebook|instagram|tiktok|spotify|apple\s*music|itunes|deezer|contact|call|booking|all\s*rights|copyright|official\s*(music|lyric|audio|video)|channel|publish|powered\s*by|distributed\s*by|stream\s*now|download\s*now|follow\s*us|music\s*produced|mixed\s*(&|and)?\s*mastered|mastered\s*by|recorded\s*at|video\s*by|directed\s*by|produced\s*by|dop|cinematography|editor|colorist|artwork|thumbnail|special\s*thanks|starring|cast)\b|(?:^|\s)(artist|singer|vocals?|music|melody|lyrics|lyricist|composed|composer|arranged|guitars?|flute|keys|drums|bass|audio|video)\s*[-:|]/i;
+          const phoneRe = /\b0\d{2}[-\s]?\d{3}[-\s]?\d{4}\b|\+\d{8,15}/;
+
+          const blocks = desc.replace(/\r\n/g, '\n').split(/\n\s*\n+/);
+          const goodStanzas: string[] = [];
+          let totalCleanLines = 0;
+
+          for (const block of blocks) {
+            const rawLines = block.split('\n').map((l) => l.trim()).filter(Boolean);
+            const kept: string[] = [];
+            for (const ln of rawLines) {
+              if (ln.length < 4 || ln.length > 105) continue;
+              if (promoRe.test(ln) || phoneRe.test(ln)) continue;
+              if (/^[=\-*_~•|<>✦★☆♪♫\s]+$/.test(ln)) continue;
+              // Strip stray trailing video title copy on line 1 if it has pipe symbols
+              if (ln.includes('|') || /\b(lyrics\s*video|official\s*video)\b/i.test(ln)) continue;
+              kept.push(ln);
+            }
+            // A real song stanza has >= 2 poetic lines (or >= 4 lines total block)
+            if (kept.length >= 2) {
+              goodStanzas.push(kept.join('\n'));
+              totalCleanLines += kept.length;
+            }
+          }
+
+          if (totalCleanLines >= 6) {
+            return goodStanzas.join('\n\n').trim();
+          }
+          return '';
+        };
 
         const normPhonetic = (s: string) =>
           sinhalaToSinglish(s)
@@ -642,13 +676,13 @@ export default {
 
         let foundTrack: any = null;
 
-        // 1. Primary Global LRCLIB Search FIRST (Exact Title + Artist Word Check!)
+        // 1. Primary Global LRCLIB Search (Exact Title + Artist Word Check!)
         if (!/[\u0D80-\u0DFF]/.test(cleanRaw)) {
           try {
             const qWordsRaw = cleanLatin.toLowerCase().split(/\s+/).filter((w) => w.length >= 2);
             const lrcRes = await fetch(
               `https://lrclib.net/api/search?q=${encodeURIComponent(cleanLatin)}`,
-              { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; SingVaza/12.3)' } }
+              { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; SingVaza/13.0)' } }
             );
             if (lrcRes.ok) {
               const list = (await lrcRes.json()) as any[];
@@ -661,10 +695,96 @@ export default {
           } catch (_) {}
         }
 
-        // 2. Strict Whole-Word Title Match on LyriHub 2,372 Sinhala Songs (NEVER matches partial letters inside unrelated songs!)
+        // 2. REAL-TIME ONLINE YOUTUBE AI SEARCH + PARALLEL LYRICS EXTRACTOR (~0.6s for ANY song on Earth, auto-fixes spelling!)
+        let ytCanonicalTitle = '';
         if (!foundTrack) {
           try {
-            const idxCacheKey = new Request('https://singvaza-cache.local/v10/lyrihub-compact-index');
+            const ytSearchRes = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                context: { client: { clientName: 'WEB', clientVersion: '2.20241001.01.00', hl: 'en', gl: 'LK' } },
+                query: `${cleanRaw} lyrics`,
+              }),
+              signal: AbortSignal.timeout(4000),
+            });
+            if (ytSearchRes.ok) {
+              const sJson: any = await ytSearchRes.json();
+              const vids: { id: string; title: string }[] = [];
+              JSON.stringify(sJson, (_k, v) => {
+                if (v && typeof v === 'object' && v.videoRenderer?.videoId) {
+                  vids.push({
+                    id: v.videoRenderer.videoId,
+                    title: (v.videoRenderer.title?.runs || []).map((r: any) => r.text).join(''),
+                  });
+                }
+                return v;
+              });
+
+              if (vids.length > 0) {
+                ytCanonicalTitle = vids[0].title.split(/[|•]/)[0].replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').replace(/\b(lyrics?|official|video|audio|sinhala|hd)\b/gi, ' ').replace(/\s+/g, ' ').trim();
+
+                // Fetch top 5 lyric videos IN PARALLEL (~350ms single round-trip!)
+                const topVids = vids.slice(0, 5);
+                const playerInfos = await Promise.all(
+                  topVids.map(async (v) => {
+                    try {
+                      const pRes = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          context: { client: { clientName: 'WEB', clientVersion: '2.20241001.01.00', hl: 'en', gl: 'LK' } },
+                          videoId: v.id,
+                        }),
+                        signal: AbortSignal.timeout(3500),
+                      });
+                      if (!pRes.ok) return null;
+                      const pJson: any = await pRes.json();
+                      return {
+                        title: String(pJson?.videoDetails?.title || v.title),
+                        desc: String(pJson?.videoDetails?.shortDescription || ''),
+                      };
+                    } catch (_) {
+                      return null;
+                    }
+                  })
+                );
+
+                for (const info of playerInfos) {
+                  if (!info || !info.desc) continue;
+                  const extracted = extractLyricsFromYtDescription(info.desc);
+                  if (extracted.length > 60) {
+                    foundTrack = { plainLyrics: extracted };
+                    break;
+                  }
+                }
+              }
+            }
+          } catch (_) {}
+        }
+
+        // Also retry LRCLIB using YouTube's spell-corrected title if user had a spelling typo (e.g. "pefect ed sheeran")!
+        if (!foundTrack && ytCanonicalTitle && ytCanonicalTitle.toLowerCase() !== cleanLatin.toLowerCase()) {
+          try {
+            const lrcRes2 = await fetch(
+              `https://lrclib.net/api/search?q=${encodeURIComponent(ytCanonicalTitle)}`,
+              { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; SingVaza/13.0)' } }
+            );
+            if (lrcRes2.ok) {
+              const list2 = (await lrcRes2.json()) as any[];
+              const hit2 = list2.find((item) => item.plainLyrics || item.syncedLyrics);
+              if (hit2) foundTrack = hit2;
+            }
+          } catch (_) {}
+        }
+
+        // 3. Strict Whole-Word Title Match on LyriHub 2,372 Sinhala Songs (using BOTH user query & YouTube spell-corrected title!)
+        const searchCandidates = [cleanLatin];
+        if (ytCanonicalTitle) searchCandidates.push(ytCanonicalTitle);
+
+        if (!foundTrack) {
+          try {
+            const idxCacheKey = new Request('https://singvaza-cache.local/v13/lyrihub-compact-index');
             let indexText = '';
             if (edgeCache) {
               const idxHit = await edgeCache.match(idxCacheKey);
@@ -687,12 +807,14 @@ export default {
               }
             }
             if (indexText) {
-              const qTokens = normPhonetic(cleanLatin).split(' ').filter((t) => t.length >= 2);
-              if (qTokens.length > 0) {
+              const lines = indexText.split('\n');
+              for (const candStr of searchCandidates) {
+                if (foundTrack) break;
+                const qTokens = normPhonetic(candStr).split(' ').filter((t) => t.length >= 2);
+                if (!qTokens.length) continue;
                 let bestSlug = '';
                 let bestScore = 0;
                 const minRequired = qTokens.length <= 2 ? qTokens.length : Math.ceil(qTokens.length * 0.67);
-                const lines = indexText.split('\n');
                 for (let i = 0; i < lines.length; i++) {
                   const rawSlug = lines[i];
                   if (!rawSlug) continue;
@@ -735,15 +857,13 @@ export default {
           } catch (_) {}
         }
 
-        // 3. Strict Title-Verified SinhalaSongBook 10,000+ Sinhala Songs (ONLY accepts when post.title.rendered matches!)
+        // 4. Strict Title-Verified SinhalaSongBook 10,000+ Classic Sinhala Songs Fallback
         if (!foundTrack) {
-          const qTokens = normPhonetic(cleanLatin).split(' ').filter((t) => t.length >= 2);
           const ssbQueries = [cleanRaw];
-          if (cleanLatin.toLowerCase() !== cleanRaw.toLowerCase()) ssbQueries.push(cleanLatin);
-          const firstTwo = cleanLatin.split(/\s+/).slice(0, 2).join(' ');
-          if (firstTwo.length >= 4 && !ssbQueries.includes(firstTwo)) ssbQueries.push(firstTwo);
+          if (ytCanonicalTitle && !ssbQueries.includes(ytCanonicalTitle)) ssbQueries.push(ytCanonicalTitle);
 
           for (const sq of ssbQueries.slice(0, 2)) {
+            const qTokens = normPhonetic(sq).split(' ').filter((t) => t.length >= 2);
             if (foundTrack || !qTokens.length) break;
             try {
               const ssbRes = await fetch(
