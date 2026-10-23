@@ -361,8 +361,19 @@ export default {
     }
 
     try {
-      // Dynamic Sitemap XML (Automatically includes every published D1 human blog article!)
-      if (url.pathname === '/sitemap.xml' && request.method === 'GET') {
+      const cleanPath = (() => {
+        try { return decodeURIComponent(url.pathname).replace(/^\/\s+/, '/').replace(/\s+$/, ''); } catch (_) { return url.pathname; }
+      })();
+
+      if (cleanPath === '/google8dc68fc0e32ac33e.html') {
+        return new Response(request.method === 'HEAD' ? null : 'google-site-verification: google8dc68fc0e32ac33e.html', {
+          status: 200,
+          headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=300' },
+        });
+      }
+
+      // Dynamic Sitemap XML (Handles GET + HEAD + mobile keyboard leading-space URLs cleanly for Googlebot!)
+      if (cleanPath === '/sitemap.xml' && (request.method === 'GET' || request.method === 'HEAD')) {
         await ensureSchema(env.DB);
         const staticPaths = [
           { p: '/', pri: '1.0' },
@@ -386,11 +397,17 @@ export default {
         const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${staticPaths
           .map((s) => `\n  <url>\n    <loc>${escapeHtml(url.origin + s.p)}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>${s.pri}</priority>\n  </url>`)
           .join('')}${postUrls}\n</urlset>\n`;
-        return new Response(xml, { headers: { 'Content-Type': 'application/xml; charset=utf-8' } });
+        return new Response(request.method === 'HEAD' ? null : xml, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/xml; charset=utf-8',
+            'Cache-Control': 'public, max-age=300',
+          },
+        });
       }
 
       // Dynamic SEO Server-Side Rendered Blog Index & Single Post Pages (/blog & /blog/:slug)
-      if ((url.pathname === '/blog' || url.pathname === '/blog/' || url.pathname.startsWith('/blog/')) && request.method === 'GET') {
+      if ((url.pathname === '/blog' || url.pathname === '/blog/' || url.pathname.startsWith('/blog/')) && (request.method === 'GET' || request.method === 'HEAD')) {
         await ensureSchema(env.DB);
         const slugPart = url.pathname.replace(/^\/blog\/?/, '').replace(/\/$/, '').trim();
         if (!slugPart) {
