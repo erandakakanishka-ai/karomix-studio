@@ -2779,10 +2779,68 @@ const App = (() => {
       <div style="font-size:14.5px;color:#cbd5e1;line-height:1.78;">${bodyHtml}</div>
       <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
         <button class="btn btn-amber" onclick="App.drawerGo('home')">Explore SingVaza →</button>
-        <a href="/blog/${escHtml(post.slug)}" class="btn btn-sm" style="text-decoration:none;">Direct Article Link ↗</a>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-sm" onclick="App.shareWebsite('${escHtml(post.title)}', window.location.origin + '/blog/${escHtml(post.slug)}')">Share Article</button>
+          <a href="/blog/${escHtml(post.slug)}" class="btn btn-sm" style="text-decoration:none;">Direct Article Link ↗</a>
+        </div>
       </div>
     `;
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  let pendingSharePayload = { title: 'SingVaza — Karaoke & Vocal Studio', url: window.location.origin };
+
+  function shareWebsite(customTitle = '', customUrl = '') {
+    const shareTitle = customTitle || 'SingVaza — Free Online Karaoke, Vocal Studio & Tools';
+    const shareUrl = customUrl || window.location.origin + (window.location.pathname || '/');
+    pendingSharePayload = { title: shareTitle, url: shareUrl };
+
+    const encUrl = encodeURIComponent(shareUrl);
+    const encText = encodeURIComponent(`${shareTitle} — `);
+    const titleEl = document.getElementById('shareModalTitle');
+    if (titleEl) titleEl.textContent = customTitle ? 'Share Article' : 'Share SingVaza';
+
+    const wa = document.getElementById('shareWaBtn');
+    const fb = document.getElementById('shareFbBtn');
+    const tg = document.getElementById('shareTgBtn');
+    const tw = document.getElementById('shareXBtn');
+    const inp = document.getElementById('shareUrlInput');
+    const natBtn = document.getElementById('nativeShareBtn');
+
+    if (wa) wa.href = `https://wa.me/?text=${encodeURIComponent(shareTitle + ' ' + shareUrl)}`;
+    if (fb) fb.href = `https://www.facebook.com/sharer/sharer.php?u=${encUrl}`;
+    if (tg) tg.href = `https://t.me/share/url?url=${encUrl}&text=${encText}`;
+    if (tw) tw.href = `https://twitter.com/intent/tweet?url=${encUrl}&text=${encText}`;
+    if (inp) inp.value = shareUrl;
+    if (natBtn) natBtn.style.display = navigator.share ? 'inline-flex' : 'none';
+
+    const modal = document.getElementById('shareModal');
+    if (modal) modal.classList.add('open');
+  }
+
+  function closeShareModal() {
+    const modal = document.getElementById('shareModal');
+    if (modal) modal.classList.remove('open');
+  }
+
+  function copyShareLink() {
+    const url = pendingSharePayload.url || window.location.href;
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(url).then(() => showToast('Link copied!')).catch(() => {});
+    } else {
+      const inp = document.getElementById('shareUrlInput');
+      if (inp) { inp.select(); document.execCommand('copy'); showToast('Link copied!'); }
+    }
+  }
+
+  function triggerNativeShare() {
+    if (navigator.share) {
+      navigator.share({
+        title: pendingSharePayload.title,
+        text: pendingSharePayload.title,
+        url: pendingSharePayload.url,
+      }).catch(() => {});
+    }
   }
 
   function closeBlogPost() {
@@ -2980,6 +3038,7 @@ const App = (() => {
       switchView(v);
     },
     toggleDrawer, drawerGo,
+    shareWebsite, closeShareModal, copyShareLink, triggerNativeShare,
     openPrivacySettings, closePrivacySettings, savePrivacySettings, clearLocalStudioData,
     openBlogPost, closeBlogPost,
     openDeleteAudioModal, closeDeleteAudioModal, confirmDeleteAudio,

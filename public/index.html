@@ -880,6 +880,10 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     </a>
 
     <div class="drawer-section-label">Privacy & Account</div>
+    <button class="drawer-link" onclick="App.toggleDrawer(false);App.shareWebsite();">
+      <svg class="icon" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      <span>Share SingVaza</span>
+    </button>
     <button class="drawer-link" onclick="App.openPrivacySettings()">
       <svg class="icon" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       <span>Privacy & Cookie Settings</span>
@@ -919,6 +923,27 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
           Cancel
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Clean Share Modal (WhatsApp / Facebook / Telegram / X / Copy Link + Native OS Share) -->
+  <div id="shareModal" class="modal-backdrop" onclick="if(event.target===this)App.closeShareModal()">
+    <div class="modal-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 style="font-size:17px;" id="shareModalTitle">Share SingVaza</h3>
+        <button class="btn btn-sm" onclick="App.closeShareModal()">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+        <a id="shareWaBtn" href="#" target="_blank" rel="noopener" class="btn" style="text-decoration:none;border-color:rgba(16,185,129,0.4);color:#34d399;">WhatsApp</a>
+        <a id="shareFbBtn" href="#" target="_blank" rel="noopener" class="btn" style="text-decoration:none;border-color:rgba(56,189,248,0.4);color:#38bdf8;">Facebook</a>
+        <a id="shareTgBtn" href="#" target="_blank" rel="noopener" class="btn" style="text-decoration:none;">Telegram</a>
+        <a id="shareXBtn" href="#" target="_blank" rel="noopener" class="btn" style="text-decoration:none;">X (Twitter)</a>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <input id="shareUrlInput" type="text" readonly style="flex:1;min-width:0;font-size:12.5px;" />
+        <button type="button" class="btn btn-amber" onclick="App.copyShareLink()">Copy Link</button>
+      </div>
+      <button type="button" id="nativeShareBtn" class="btn" style="width:100%;margin-top:8px;display:none;" onclick="App.triggerNativeShare()">More Apps...</button>
     </div>
   </div>
 
@@ -969,6 +994,9 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     </nav>
 
     <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+      <button class="menu-icon-btn" onclick="App.shareWebsite()" title="Share SingVaza" aria-label="Share SingVaza" style="width:34px;height:34px;">
+        <svg class="icon" viewBox="0 0 24 24" style="width:15px;height:15px;"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      </button>
       <button class="btn btn-sm" id="topPlanBadge" onclick="App.switchView('library')">0/2 Free</button>
       <button class="btn btn-sm btn-amber" id="authTriggerBtn" onclick="App.openAuthModal()">Sign In</button>
     </div>
@@ -1541,8 +1569,8 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     </button>
   </nav>
 
-  <script src="/vendor/confetti.min.js?v=21.0"></script>
-  <script src="/dsp-engine.js?v=21.0"></script>
-  <script src="/app.js?v=21.0"></script>
+  <script src="/vendor/confetti.min.js?v=21.2"></script>
+  <script src="/dsp-engine.js?v=21.2"></script>
+  <script src="/app.js?v=21.2"></script>
 </body>
 </html>

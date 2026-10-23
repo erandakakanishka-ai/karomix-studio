@@ -170,12 +170,12 @@ function renderBlogShellHtml(opts: { origin: string; title: string; description:
   <div class="wrap">
     <header class="top">
       <a class="brand" href="/"><img src="/assets/logo.png" alt="SingVaza" /><span>SING<span style="color:var(--amber);">VAZA</span></span></a>
-      <nav class="nav-links">
+      <nav class="nav-links" style="align-items:center;">
         <a href="/">Open Studio</a>
         <a href="/blog" style="color:var(--amber);font-weight:700;">Blog</a>
         <a href="/about">About</a>
         <a href="/contact">Contact</a>
-        <a href="/privacy">Privacy</a>
+        <button onclick="if(navigator.share){navigator.share({title:document.title,url:location.href}).catch(()=>{});}else{navigator.clipboard?.writeText(location.href);alert('Link copied: '+location.href);}" style="background:rgba(251,191,36,0.14);border:1px solid rgba(251,191,36,0.4);color:var(--amber);border-radius:8px;padding:4px 10px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;">Share ↗</button>
       </nav>
     </header>
     ${opts.bodyHtml}
