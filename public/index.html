@@ -1112,9 +1112,9 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
             <span style="font-size:11.5px;color:var(--text-muted);" id="lyricsStatusLabel">Auto-loads or search below</span>
           </div>
 
-          <!-- Dedicated Lyrics Finder (Works seamlessly when user uploads any MP3/MP4 without replacing their track!) -->
-          <form style="display:flex;gap:6px;margin-bottom:8px;" onsubmit="event.preventDefault();App.searchLyricsOnly();">
-            <input type="text" id="lyricsOnlyQueryInput" class="input" style="flex:1;min-width:0;padding:8px 11px;font-size:13px;" placeholder="Find lyrics by song name (keeps your uploaded MP3/MP4)..." />
+          <!-- Dedicated Lyrics Finder (Hidden during YouTube videos — shown ONLY when user uploads their own Audio/Video file!) -->
+          <form id="uploadLyricsSearchForm" style="display:none;gap:6px;margin-bottom:8px;" onsubmit="event.preventDefault();App.searchLyricsOnly();">
+            <input type="text" id="lyricsOnlyQueryInput" class="input" style="flex:1;min-width:0;padding:8px 11px;font-size:13px;" placeholder="Type song name here & tap Get Lyrics..." />
             <button type="submit" class="btn btn-sm btn-cyan">Get Lyrics</button>
           </form>
 
@@ -1493,8 +1493,8 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     </button>
   </nav>
 
-  <script src="/vendor/confetti.min.js?v=12.0"></script>
-  <script src="/dsp-engine.js?v=12.0"></script>
-  <script src="/app.js?v=12.0"></script>
+  <script src="/vendor/confetti.min.js?v=12.2"></script>
+  <script src="/dsp-engine.js?v=12.2"></script>
+  <script src="/app.js?v=12.2"></script>
 </body>
 </html>
