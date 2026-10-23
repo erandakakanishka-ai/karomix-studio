@@ -605,7 +605,7 @@ export default {
           .replace(/\s+/g, ' ')
           .trim() || q;
 
-        const cacheKey = new Request(`https://singvaza-cache.local/v17.3/lyrics?q=${encodeURIComponent(cleanQ.toLowerCase())}`);
+        const cacheKey = new Request(`https://singvaza-cache.local/v17.4/lyrics?q=${encodeURIComponent(cleanQ.toLowerCase())}`);
         const edgeCache = (globalThis as any).caches?.default;
         if (edgeCache) {
           const cachedHit = await edgeCache.match(cacheKey);
@@ -746,7 +746,7 @@ export default {
                 entry.t === 'H'
                   ? `https://www.lyrihub.lk/song/${entry.p}/`
                   : entry.t === 'S'
-                  ? `https://sinhalasonglyrics.com/${entry.p}/`
+                  ? `https://sinhalasonglyrics.com/wp-json/wp/v2/posts?slug=${encodeURIComponent(entry.p)}&_fields=content`
                   : `https://lyrics-lk.com/song/${entry.p}`;
               try {
                 const pr = await fetch(targetUrl, {
@@ -754,6 +754,11 @@ export default {
                   signal: AbortSignal.timeout(4000),
                 });
                 if (!pr.ok) return '';
+                if (entry.t === 'S') {
+                  const arr: any = await pr.json();
+                  const postHtml = String(arr?.[0]?.content?.rendered || '');
+                  return postHtml ? extractPureSinhalaStanzas(postHtml) : '';
+                }
                 const html = await pr.text();
                 if (entry.t === 'H') {
                   const bm = html.match(/class="lyri-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
