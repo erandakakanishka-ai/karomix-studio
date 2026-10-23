@@ -611,7 +611,7 @@ export default {
 
         const cleanLatin = /[\u0D80-\u0DFF]/.test(cleanRaw) ? sinhalaToSinglish(cleanRaw) : cleanRaw;
 
-        const cacheKey = new Request(`https://singvaza-cache.local/v14/lyrics?q=${encodeURIComponent(cleanRaw.toLowerCase())}`);
+        const cacheKey = new Request(`https://singvaza-cache.local/v14b/lyrics?q=${encodeURIComponent(cleanRaw.toLowerCase())}`);
         const edgeCache = (globalThis as any).caches?.default;
         if (edgeCache) {
           const cachedHit = await edgeCache.match(cacheKey);
@@ -631,13 +631,16 @@ export default {
             })
             .replace(/&amp;/g, '&');
 
-        const promoRe = /https?:\/\/|www\.|@[a-z0-9_]|#[a-z0-9_\u0D80-\u0DFF]|\b(subscribe|whatsapp|facebook|instagram|tiktok|spotify|apple\s*music|itunes|deezer|contact|call|booking|all\s*rights|copyright|official\s*(music|lyric|audio|video)|channel|publish|powered\s*by|distributed\s*by|stream\s*now|download\s*now|follow\s*us|music\s*produced|mixing|mastering|mixed\s*(&|and)?\s*mastered|mastered\s*by|recorded\s*at|video\s*by|directed\s*by|produced\s*by|dop|cinematography|editor|colorist|artwork|thumbnail|special\s*thanks|starring|cast|privacy\s*policy|terms\s*of\s*use|cookie|skip\s*to\s*main|reality\s*show|cover\s*versions|related\s*songs)\b|(?:^|\s)(title|song|artist|singer|vocals?|music|melody|lyrics|lyricist|composed|composer|arranged|studio|guitars?|flute|keys|drums|bass|audio|video|category|views|updated)\s*[-:|]/i;
+        const promoRe = /https?:\/\/|www\.|@[a-z0-9_]|#[a-z0-9_\u0D80-\u0DFF]|\b(subscribe|whatsapp|facebook|instagram|tiktok|spotify|apple\s*music|itunes|deezer|contact|call|booking|all\s*rights|copyright|official\s*(music|lyric|audio|video)|channel|publish|powered\s*by|distributed\s*by|stream\s*now|download\s*now|follow\s*us|performed\s*by|written\s*by|sung\s*by|music\s*by|lyrics\s*by|composed\s*by|arranged\s*by|melody\s*(&|and)\s*music|music\s*produced|mixing|mastering|mixed\s*(&|and|by)?|mastered\s*by|recorded\s*(at|by)|video\s*by|directed\s*by|produced\s*by|dop|cinematography|editor|colorist|artwork|thumbnail|special\s*thanks|starring|cast|backing\s*track|kar[ao]+ke|midi|minus\s*one|privacy\s*policy|terms\s*of\s*use|cookie|skip\s*to\s*main|reality\s*show|cover\s*versions|related\s*songs)\b|(?:^|\s)(title|song|artist|singer|vocals?|music|melody|lyrics|lyricist|composed|composer|arranged|studio|guitars?|flute|veena|synth|violin|piano|keys|keyboards?|percussion|drums|bass|audio|video|art|category|views|updated)\s*[-:|–—]/i;
+        // Catches ANY generic English credit header line like "Art - Ravi Jay", "Synth - Shehan", "Mix & Master : ..."
+        const creditPairRe = /^[A-Za-z][A-Za-z0-9 &,/()+.']{1,26}\s*[-:|–—]\s+[A-Z0-9@]/;
         const phoneRe = /\b0\d{2}[-\s]?\d{3}[-\s]?\d{4}\b|\+\d{8,15}/;
 
         // Helper: Cleanly extract pure song stanzas from plain text / YouTube descriptions / scraped web bodies!
         const extractLyricsFromYtDescription = (desc: string): string => {
-          if (!desc || desc.length < 90) return '';
-          const blocks = desc.replace(/\r\n/g, '\n').split(/\n\s*\n+/);
+          if (!desc || desc.length < 110) return '';
+          const cleanedDesc = desc.replace(/[\u200B-\u200F\u202A-\u202E\uFEFF]/g, '');
+          const blocks = cleanedDesc.replace(/\r\n/g, '\n').split(/\n\s*\n+/);
           const goodStanzas: string[] = [];
           let totalCleanLines = 0;
 
@@ -646,7 +649,7 @@ export default {
             const kept: string[] = [];
             for (const ln of rawLines) {
               if (ln.length < 4 || ln.length > 96) continue;
-              if (promoRe.test(ln) || phoneRe.test(ln)) continue;
+              if (promoRe.test(ln) || creditPairRe.test(ln) || phoneRe.test(ln)) continue;
               if (/^[=\-*_~•|<>✦★☆♪♫▶\s]+$/.test(ln)) continue;
               if (ln.includes('|') || /\b(lyrics\s*video|official\s*video)\b/i.test(ln)) continue;
               // Skip long English prose sentences describing the song rather than verse lines
@@ -659,7 +662,7 @@ export default {
             }
           }
 
-          if (totalCleanLines >= 6) {
+          if (totalCleanLines >= 10) {
             return goodStanzas.join('\n\n').trim();
           }
           return '';
