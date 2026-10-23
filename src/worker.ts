@@ -294,9 +294,13 @@ async function recordEdgeVisit(request: Request, db?: D1Database, rawPath = '/')
   try {
     const cleanP = (String(rawPath || '/').split('?')[0] || '/').slice(0, 120);
     if (cleanP.startsWith('/admin') || cleanP.startsWith('/api')) return;
+    const uaFull = String(request.headers.get('User-Agent') || '');
+    if (/bot|crawler|spider|preview|curl|wget|python|headless|facebookexternalhit|whatsapp|telegrambot|slurp|mediapartners/i.test(uaFull)) {
+      return;
+    }
     const day = new Date().toISOString().slice(0, 10);
     const ip = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'anon';
-    const ua = (request.headers.get('User-Agent') || '').slice(0, 80);
+    const ua = uaFull.slice(0, 80);
     const country = (request.headers.get('CF-IPCountry') || (request as any).cf?.country || 'XX').toUpperCase().slice(0, 4);
     const visitorHash = (await sha256Hex(`${day}:${ip}:${ua}`)).slice(0, 20);
 
@@ -581,7 +585,7 @@ export default {
         const globalAdSnippet = sMapAd.ads_enabled === 'true'
           ? ((sMapAd.adsense_client_id ? `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${escapeHtml(sMapAd.adsense_client_id)}" crossorigin="anonymous"></script>` : '') + (sMapAd.custom_ad_code || ''))
           : '';
-        const beaconTag = `${globalAdSnippet}<script>try{if(!sessionStorage.getItem('sv_v_'+location.pathname)){sessionStorage.setItem('sv_v_'+location.pathname,'1');fetch('/api/ping-visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:location.pathname})}).catch(()=>{});}}catch(_){}</script>`;
+        const beaconTag = `${globalAdSnippet}<script>try{if(!localStorage.getItem('singvaza_admin_token')&&!sessionStorage.getItem('sv_v_'+location.pathname)){sessionStorage.setItem('sv_v_'+location.pathname,'1');fetch('/api/ping-visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:location.pathname})}).catch(()=>{});}}catch(_){}</script>`;
         const slugPart = url.pathname.replace(/^\/blog\/?/, '').replace(/\/$/, '').trim();
         if (!slugPart) {
           const rows = env.DB
@@ -746,9 +750,10 @@ export default {
         if (!env.DB) return json({ error: 'Database unavailable' }, 500);
 
         const today = new Date().toISOString().slice(0, 10);
+        const realUserWhere = `id NOT IN ('demo-singer-global', 'demo-singer-lk')`;
         const [uCount, proCount, exportsSum, bCount, tCount, mCount, dailyRows, countryRows, pageRows, recentUsers]: any = await Promise.all([
-          env.DB.prepare('SELECT COUNT(*) AS c FROM users').first(),
-          env.DB.prepare('SELECT COUNT(*) AS c FROM users WHERE pro_until > ? OR plan != ?').bind(Date.now(), 'free').first(),
+          env.DB.prepare(`SELECT COUNT(*) AS c FROM users WHERE ${realUserWhere}`).first(),
+          env.DB.prepare(`SELECT COUNT(*) AS c FROM users WHERE (${realUserWhere}) AND (pro_until > ? OR plan != ?)`).bind(Date.now(), 'free').first(),
           env.DB.prepare('SELECT COALESCE(SUM(exports_this_month), 0) AS s FROM users').first(),
           env.DB.prepare('SELECT COUNT(*) AS c FROM blog_posts').first(),
           env.DB.prepare('SELECT COUNT(*) AS c FROM html_tools').first(),
@@ -756,7 +761,7 @@ export default {
           env.DB.prepare('SELECT day, views, uniques FROM analytics_daily ORDER BY day DESC LIMIT 30').all(),
           env.DB.prepare('SELECT country, views FROM analytics_countries ORDER BY views DESC LIMIT 12').all(),
           env.DB.prepare('SELECT path, views FROM analytics_pages ORDER BY views DESC LIMIT 12').all(),
-          env.DB.prepare('SELECT id, email, display_name, plan, pro_until, exports_this_month, auth_provider, created_at FROM users ORDER BY created_at DESC LIMIT 8').all(),
+          env.DB.prepare(`SELECT id, email, display_name, plan, pro_until, exports_this_month, auth_provider, created_at FROM users WHERE ${realUserWhere} ORDER BY created_at DESC LIMIT 8`).all(),
         ]);
 
         const dayMap = new Map<string, { views: number; uniques: number }>();
@@ -799,7 +804,8 @@ export default {
         await ensureSchema(env.DB);
         if (!(await isValidBlogAdmin(request, env))) return json({ error: 'Unauthorized' }, 401);
         const rows = await env.DB.prepare(
-          'SELECT id, email, display_name, plan, pro_until, daily_date, daily_exports, exports_this_month, auth_provider, created_at FROM users ORDER BY created_at DESC LIMIT 300'
+          `SELECT id, email, display_name, plan, pro_until, daily_date, daily_exports, exports_this_month, auth_provider, created_at
+           FROM users WHERE id NOT IN ('demo-singer-global', 'demo-singer-lk') ORDER BY created_at DESC LIMIT 300`
         ).all();
         return json({ users: rows.results || [] });
       }
