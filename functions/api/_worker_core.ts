@@ -52,6 +52,7 @@ async function ensureSchema(db?: D1Database) {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     `ALTER TABLE blog_posts ADD COLUMN content_format TEXT DEFAULT 'html'`,
+    `ALTER TABLE blog_posts ADD COLUMN seo_tags TEXT DEFAULT ''`,
     `CREATE TABLE IF NOT EXISTS html_tools (
       id TEXT PRIMARY KEY,
       slug TEXT UNIQUE NOT NULL,
@@ -59,11 +60,13 @@ async function ensureSchema(db?: D1Database) {
       category TEXT DEFAULT 'Web Tool',
       icon TEXT DEFAULT '⚡',
       description TEXT DEFAULT '',
+      seo_tags TEXT DEFAULT '',
       html_code TEXT NOT NULL,
       views INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
+    `ALTER TABLE html_tools ADD COLUMN seo_tags TEXT DEFAULT ''`,
     `CREATE TABLE IF NOT EXISTS site_settings (
       k TEXT PRIMARY KEY,
       v TEXT NOT NULL,
@@ -128,7 +131,7 @@ function renderPlainBodyToHtml(raw: string): string {
     .join('\n');
 }
 
-function renderBlogShellHtml(opts: { origin: string; title: string; description: string; canonicalPath: string; bodyHtml: string }) {
+function renderBlogShellHtml(opts: { origin: string; title: string; description: string; keywords?: string; canonicalPath: string; extraHead?: string; bodyHtml: string }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -137,8 +140,15 @@ function renderBlogShellHtml(opts: { origin: string; title: string; description:
   <meta name="theme-color" content="#07090f" />
   <title>${escapeHtml(opts.title)}</title>
   <meta name="description" content="${escapeHtml(opts.description)}" />
+  ${opts.keywords ? `<meta name="keywords" content="${escapeHtml(opts.keywords)}" />` : ''}
+  <meta property="og:site_name" content="SingVaza" />
+  <meta property="og:title" content="${escapeHtml(opts.title)}" />
+  <meta property="og:description" content="${escapeHtml(opts.description)}" />
+  <meta property="og:url" content="${escapeHtml(opts.origin + opts.canonicalPath)}" />
   <link rel="canonical" href="${escapeHtml(opts.origin + opts.canonicalPath)}" />
-  <link rel="icon" type="image/png" href="/assets/logo.png" />
+  <link rel="icon" href="/favicon.ico" sizes="48x48" />
+  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png" />
+  ${opts.extraHead || ''}
   <style>
     :root { --bg:#07090f; --surface:#111625; --border:rgba(148,163,184,0.16); --text:#f8fafc; --muted:#94a3b8; --amber:#fbbf24; --cyan:#38bdf8; }
     * { box-sizing:border-box; margin:0; padding:0; }
@@ -473,9 +483,15 @@ export default {
         });
       }
 
-      // Dynamic Sitemap XML (Handles GET + HEAD + includes published Blog Posts & HTML Web Tools automatically!)
-      if (cleanPath === '/sitemap.xml' && (request.method === 'GET' || request.method === 'HEAD')) {
-        await ensureSchema(env.DB);
+      if (cleanPath === '/8dc68fc0e32ac33e8dc68fc0e32ac33e.txt') {
+        return new Response('8dc68fc0e32ac33e8dc68fc0e32ac33e', {
+          status: 200,
+          headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400' },
+        });
+      }
+
+      // Ultra-Fast Cold-Start Sitemap XML & RSS 2.0 Feed (0 DDL queries on read = ~8ms instant response for Googlebot!)
+      if ((cleanPath === '/sitemap.xml' || cleanPath === '/rss.xml') && (request.method === 'GET' || request.method === 'HEAD')) {
         const staticPaths = [
           { p: '/', pri: '1.0' },
           { p: '/blog', pri: '0.9' },
@@ -485,23 +501,45 @@ export default {
           { p: '/terms', pri: '0.6' },
           { p: '/refunds', pri: '0.6' },
         ];
-        let postUrls = '';
+        let postsList: any[] = [];
+        let toolsList: any[] = [];
         if (env.DB) {
           try {
-            const rows = await env.DB.prepare('SELECT slug, updated_at FROM blog_posts ORDER BY updated_at DESC LIMIT 200').all();
-            for (const r of (rows.results || []) as any[]) {
-              const d = String(r.updated_at || '').slice(0, 10) || '2026-10-23';
-              postUrls += `\n  <url>\n    <loc>${escapeHtml(url.origin)}/blog/${escapeHtml(r.slug)}</loc>\n    <lastmod>${d}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.85</priority>\n  </url>`;
-            }
-            const tRows = await env.DB.prepare('SELECT slug, updated_at FROM html_tools ORDER BY updated_at DESC LIMIT 200').all();
-            if ((tRows.results || []).length > 0) {
-              postUrls += `\n  <url>\n    <loc>${escapeHtml(url.origin)}/tools</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.9</priority>\n  </url>`;
-              for (const t of (tRows.results || []) as any[]) {
-                const d = String(t.updated_at || '').slice(0, 10) || '2026-10-23';
-                postUrls += `\n  <url>\n    <loc>${escapeHtml(url.origin)}/tools/${escapeHtml(t.slug)}</loc>\n    <lastmod>${d}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.85</priority>\n  </url>`;
-              }
-            }
+            const [rows, tRows] = await Promise.all([
+              env.DB.prepare('SELECT slug, title, excerpt, updated_at FROM blog_posts ORDER BY updated_at DESC LIMIT 200').all(),
+              env.DB.prepare('SELECT slug, title, description, updated_at FROM html_tools ORDER BY updated_at DESC LIMIT 200').all(),
+            ]);
+            postsList = (rows.results || []) as any[];
+            toolsList = (tRows.results || []) as any[];
           } catch (_) {}
+        }
+
+        if (cleanPath === '/rss.xml') {
+          let itemsXml = '';
+          for (const p of postsList) {
+            itemsXml += `\n    <item><title>${escapeHtml(p.title)}</title><link>${escapeHtml(url.origin)}/blog/${escapeHtml(p.slug)}</link><description>${escapeHtml(p.excerpt || '')}</description></item>`;
+          }
+          for (const t of toolsList) {
+            itemsXml += `\n    <item><title>${escapeHtml(t.title)}</title><link>${escapeHtml(url.origin)}/tools/${escapeHtml(t.slug)}</link><description>${escapeHtml(t.description || '')}</description></item>`;
+          }
+          const rss = `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n  <channel>\n    <title>SingVaza — Karaoke Studio, Articles &amp; Online Tools</title>\n    <link>${escapeHtml(url.origin)}/</link>\n    <description>Free online karaoke vocal recorder, audio mastering, tutorials, and web tools.</description>${itemsXml}\n  </channel>\n</rss>\n`;
+          return new Response(request.method === 'HEAD' ? null : rss, {
+            status: 200,
+            headers: { 'Content-Type': 'application/rss+xml; charset=utf-8', 'Cache-Control': 'public, max-age=300' },
+          });
+        }
+
+        let postUrls = '';
+        for (const r of postsList) {
+          const d = String(r.updated_at || '').slice(0, 10) || '2026-10-23';
+          postUrls += `\n  <url>\n    <loc>${escapeHtml(url.origin)}/blog/${escapeHtml(r.slug)}</loc>\n    <lastmod>${d}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.85</priority>\n  </url>`;
+        }
+        if (toolsList.length > 0) {
+          postUrls += `\n  <url>\n    <loc>${escapeHtml(url.origin)}/tools</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.9</priority>\n  </url>`;
+          for (const t of toolsList) {
+            const d = String(t.updated_at || '').slice(0, 10) || '2026-10-23';
+            postUrls += `\n  <url>\n    <loc>${escapeHtml(url.origin)}/tools/${escapeHtml(t.slug)}</loc>\n    <lastmod>${d}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.85</priority>\n  </url>`;
+          }
         }
         const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${staticPaths
           .map((s) => `\n  <url>\n    <loc>${escapeHtml(url.origin + s.p)}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>${s.pri}</priority>\n  </url>`)
@@ -510,7 +548,7 @@ export default {
           status: 200,
           headers: {
             'Content-Type': 'application/xml; charset=utf-8',
-            'Cache-Control': 'public, max-age=300',
+            'Cache-Control': 'public, max-age=300, s-maxage=300',
           },
         });
       }
@@ -571,7 +609,19 @@ export default {
         }
         try { await env.DB?.prepare('UPDATE html_tools SET views = views + 1 WHERE id = ?').bind(tool.id).run(); } catch (_) {}
         const rawToolHtml = String(tool.html_code || '');
-        const withBeacon = rawToolHtml.includes('</body>') ? rawToolHtml.replace('</body>', `${beaconTag}</body>`) : (rawToolHtml + beaconTag);
+        const toolSeoHead = `
+  <meta name="description" content="${escapeHtml(tool.description || tool.title)}" />
+  ${tool.seo_tags ? `<meta name="keywords" content="${escapeHtml(tool.seo_tags)}" />` : ''}
+  <meta property="og:site_name" content="SingVaza" />
+  <meta property="og:title" content="${escapeHtml(tool.title)} — SingVaza Tools" />
+  <meta property="og:description" content="${escapeHtml(tool.description || tool.title)}" />
+  <link rel="canonical" href="${escapeHtml(url.origin + '/tools/' + tool.slug)}" />
+  <link rel="icon" href="/favicon.ico" sizes="48x48" />`;
+        let enrichedTool = rawToolHtml;
+        if (enrichedTool.includes('</head>')) {
+          enrichedTool = enrichedTool.replace('</head>', `${toolSeoHead}\n</head>`);
+        }
+        const withBeacon = enrichedTool.includes('</body>') ? enrichedTool.replace('</body>', `${beaconTag}</body>`) : (enrichedTool + beaconTag);
         return new Response(request.method === 'HEAD' ? null : withBeacon, {
           status: 200,
           headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60, s-maxage=300' },
@@ -638,9 +688,29 @@ export default {
         const rawContent = String(post.content || '');
         const fmt = String(post.content_format || '').toLowerCase();
         const isStandaloneDoc = fmt === 'full_html' || /^\s*<!doctype html/i.test(rawContent) || /^\s*<html[\s>]/i.test(rawContent);
+        const postDesc = post.excerpt || rawContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 155);
+        const postTagsStr = String(post.seo_tags || '').trim();
+        const articleJsonLd = `<script type="application/ld+json">${JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'Article',
+          headline: post.title,
+          description: postDesc,
+          keywords: postTagsStr || post.category || 'Guide',
+          author: { '@type': 'Person', name: post.author_name || 'SingVaza Editorial' },
+          publisher: { '@type': 'Organization', name: 'SingVaza' },
+          mainEntityOfPage: `${url.origin}/blog/${post.slug}`,
+        })}</script>`;
 
         if (isStandaloneDoc) {
-          const fullWithBeacon = rawContent.includes('</body>') ? rawContent.replace('</body>', `${beaconTag}</body>`) : (rawContent + beaconTag);
+          const standaloneHead = `
+  <meta name="description" content="${escapeHtml(postDesc)}" />
+  ${postTagsStr ? `<meta name="keywords" content="${escapeHtml(postTagsStr)}" />` : ''}
+  <meta property="og:site_name" content="SingVaza" />
+  <meta property="og:title" content="${escapeHtml(post.title)}" />
+  <link rel="canonical" href="${escapeHtml(url.origin + '/blog/' + post.slug)}" />
+  ${articleJsonLd}`;
+          let enrichedFull = rawContent.includes('</head>') ? rawContent.replace('</head>', `${standaloneHead}\n</head>`) : rawContent;
+          const fullWithBeacon = enrichedFull.includes('</body>') ? enrichedFull.replace('</body>', `${beaconTag}</body>`) : (enrichedFull + beaconTag);
           return new Response(request.method === 'HEAD' ? null : fullWithBeacon, {
             status: 200,
             headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60, s-maxage=300' },
@@ -649,6 +719,9 @@ export default {
 
         const isRichHtml = fmt === 'html' || /<(p|div|h1|h2|h3|h4|ul|ol|table|section|article|style|img|pre|blockquote)\b/i.test(rawContent);
         const articleInner = isRichHtml ? rawContent : renderPlainBodyToHtml(rawContent);
+        const tagPillsHtml = postTagsStr
+          ? `<div style="margin-top:18px;display:flex;gap:6px;flex-wrap:wrap;">${postTagsStr.split(',').map((tg) => tg.trim()).filter(Boolean).map((tg) => `<span style="font-size:11.5px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);color:var(--cyan);padding:3px 9px;border-radius:999px;">#${escapeHtml(tg)}</span>`).join('')}</div>`
+          : '';
 
         const bodyHtml = `
           <article class="card">
@@ -657,6 +730,7 @@ export default {
             <div class="tag">${escapeHtml(post.category || 'Article')} • By ${escapeHtml(post.author_name || 'Editor')} • ${escapeHtml(String(post.created_at || '').slice(0, 10))}</div>
             <h1 style="margin-top:8px;">${escapeHtml(post.title)}</h1>
             <div class="rich-article-body" style="margin-top:16px;line-height:1.78;">${articleInner}</div>
+            ${tagPillsHtml}
             <div style="margin-top:26px;padding-top:16px;border-top:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;">
               <a class="btn" href="/">← Back to SingVaza</a>
             </div>
@@ -666,7 +740,9 @@ export default {
           request.method === 'HEAD' ? null : renderBlogShellHtml({
             origin: url.origin,
             title: `${post.title} — SingVaza`,
-            description: post.excerpt || rawContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 155),
+            description: postDesc,
+            keywords: postTagsStr,
+            extraHead: articleJsonLd,
             canonicalPath: `/blog/${post.slug}`,
             bodyHtml,
           }),
@@ -866,6 +942,9 @@ export default {
             adsense_client_id: s.adsense_client_id || '',
             custom_ad_code: s.custom_ad_code || '',
             ads_enabled: s.ads_enabled === 'true',
+            seo_home_title: s.seo_home_title || 'SingVaza — Free Online Karaoke Player, Vocal Recorder & Audio Mastering Studio',
+            seo_home_description: s.seo_home_description || 'SingVaza (Sing Vaza) is a free online karaoke player, vocal recorder, pitch changer, vocal remover, and stereo MP3 audio mastering studio in your browser.',
+            seo_home_tags: s.seo_home_tags || 'SingVaza, Sing Vaza, SingViza, online karaoke player, free vocal recorder, karaoke with lyrics, vocal remover online, pitch changer, audio mastering studio, Sinhala karaoke, MP3 vocal mixer',
             notice_banner: s.notice_banner || '',
             daily_free_limit: Number(s.daily_free_limit || DAILY_FREE_LIMIT),
           },
@@ -880,11 +959,12 @@ export default {
           'admin_username', 'support_email', 'business_whatsapp', 'whatsapp_enabled',
           'social_youtube', 'social_facebook', 'social_tiktok', 'social_telegram',
           'google_client_id', 'adsense_client_id', 'custom_ad_code', 'ads_enabled',
+          'seo_home_title', 'seo_home_description', 'seo_home_tags',
           'notice_banner', 'daily_free_limit',
         ];
         for (const k of allowedKeys) {
           if (body[k] !== undefined) {
-            const maxLen = k === 'custom_ad_code' ? 6000 : 500;
+            const maxLen = k === 'custom_ad_code' ? 6000 : (k === 'seo_home_tags' ? 1500 : 500);
             const val = String(body[k]).trim().slice(0, maxLen);
             if (k === 'admin_username' && val.length < 2) continue;
             await env.DB.prepare(
@@ -933,19 +1013,33 @@ export default {
         const category = String(body.category || 'Web Tool').trim().slice(0, 50);
         const icon = String(body.icon || '⚡').trim().slice(0, 8);
         const description = String(body.description || '').trim().slice(0, 260);
+        const seoTags = String(body.seo_tags || '').trim().slice(0, 800);
 
         await env.DB.prepare(
-          `INSERT INTO html_tools (id, slug, title, category, icon, description, html_code, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `INSERT INTO html_tools (id, slug, title, category, icon, description, seo_tags, html_code, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
            ON CONFLICT(id) DO UPDATE SET
              slug = excluded.slug,
              title = excluded.title,
              category = excluded.category,
              icon = excluded.icon,
              description = excluded.description,
+             seo_tags = excluded.seo_tags,
              html_code = excluded.html_code,
              updated_at = CURRENT_TIMESTAMP`
-        ).bind(id, rawSlug, title, category, icon, description, htmlCode).run();
+        ).bind(id, rawSlug, title, category, icon, description, seoTags, htmlCode).run();
+
+        fetch('https://api.indexnow.org/indexnow', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            host: url.host,
+            key: '8dc68fc0e32ac33e8dc68fc0e32ac33e',
+            keyLocation: `${url.origin}/8dc68fc0e32ac33e8dc68fc0e32ac33e.txt`,
+            urlList: [`${url.origin}/tools/${rawSlug}`, `${url.origin}/tools`, `${url.origin}/sitemap.xml`],
+          }),
+        }).catch(() => {});
+
         return json({ ok: true, id, slug: rawSlug, url: `/tools/${rawSlug}` });
       }
 
@@ -995,21 +1089,34 @@ export default {
         const excerpt = String(body.excerpt || (plainStrip.slice(0, 150) + (plainStrip.length > 150 ? '...' : ''))).trim().slice(0, 260);
         const authorName = String(body.author_name || 'Editor').trim().slice(0, 80);
         const contentFormat = String(body.content_format || 'html').trim().slice(0, 20);
+        const seoTags = String(body.seo_tags || '').trim().slice(0, 800);
 
         await env.DB.prepare(
-          `INSERT INTO blog_posts (id, slug, title, category, cover_image, excerpt, content, content_format, author_name, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `INSERT INTO blog_posts (id, slug, title, category, cover_image, excerpt, seo_tags, content, content_format, author_name, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
            ON CONFLICT(id) DO UPDATE SET
              slug = excluded.slug,
              title = excluded.title,
              category = excluded.category,
              cover_image = excluded.cover_image,
              excerpt = excluded.excerpt,
+             seo_tags = excluded.seo_tags,
              content = excluded.content,
              content_format = excluded.content_format,
              author_name = excluded.author_name,
              updated_at = CURRENT_TIMESTAMP`
-        ).bind(id, rawSlug, title, category, coverImage, excerpt, content, contentFormat, authorName).run();
+        ).bind(id, rawSlug, title, category, coverImage, excerpt, seoTags, content, contentFormat, authorName).run();
+
+        fetch('https://api.indexnow.org/indexnow', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            host: url.host,
+            key: '8dc68fc0e32ac33e8dc68fc0e32ac33e',
+            keyLocation: `${url.origin}/8dc68fc0e32ac33e8dc68fc0e32ac33e.txt`,
+            urlList: [`${url.origin}/blog/${rawSlug}`, `${url.origin}/blog`, `${url.origin}/sitemap.xml`],
+          }),
+        }).catch(() => {});
 
         return json({ ok: true, id, slug: rawSlug, url: `/blog/${rawSlug}` });
       }

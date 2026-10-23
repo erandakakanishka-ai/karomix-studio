@@ -585,8 +585,13 @@
           </div>
 
           <div class="field">
-            <label>Short Summary / SEO Description (Optional)</label>
+            <label>Short Summary / SEO Description (Shown under Google Search Link)</label>
             <input id="blogExcerpt" type="text" class="input" placeholder="Short summary shown on Google Search and blog cards..." />
+          </div>
+
+          <div class="field">
+            <label>SEO Tags / Keywords (YouTube-Style Tags — Separate with commas <code>,</code>)</label>
+            <input id="blogSeoTags" type="text" class="input" placeholder="e.g. online tools, free calculator, vocal guide, 2026 tutorial" />
           </div>
 
           <!-- Editor Mode Switch -->
@@ -672,9 +677,14 @@
               <input id="toolCategory" type="text" class="input" value="Utility Tool" placeholder="Utility / Converter / Finance / Audio" />
             </div>
             <div class="field">
-              <label>Short Card Description</label>
+              <label>Short Description / Google SEO Summary</label>
               <input id="toolDesc" type="text" class="input" placeholder="Fast browser tool with zero file uploads..." />
             </div>
+          </div>
+
+          <div class="field">
+            <label>Tool SEO Tags / Keywords (YouTube-Style Tags — Separate with commas <code>,</code>)</label>
+            <input id="toolSeoTags" type="text" class="input" placeholder="e.g. qr generator free, image compressor, online tool" />
           </div>
 
           <div class="field">
@@ -785,6 +795,22 @@
             <div class="field">
               <label>Optional Top Announcement Note (Leave empty to hide)</label>
               <input id="setNoticeBanner" type="text" class="input" placeholder="e.g. New tools & guides added weekly!" />
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><span>Google Search SEO — Main Website Title, Description &amp; Tags (Like YouTube Studio!)</span></div>
+            <div class="field">
+              <label>Main Website SEO Title (Shown as Blue Title on Google Search)</label>
+              <input id="setSeoHomeTitle" type="text" class="input" placeholder="SingVaza — Free Online Karaoke Player, Vocal Recorder & Audio Mastering Studio" />
+            </div>
+            <div class="field">
+              <label>Main Website SEO Description (2-Line Summary Under Title on Google)</label>
+              <input id="setSeoHomeDesc" type="text" class="input" placeholder="SingVaza is a free online karaoke player, vocal recorder, pitch changer..." />
+            </div>
+            <div class="field">
+              <label>Main Website Search Tags / Keywords (Separate with commas <code>,</code> — just like YouTube Tags!)</label>
+              <textarea id="setSeoHomeTags" class="input" style="min-height:78px;" placeholder="SingVaza, SingViza, online karaoke, vocal recorder, vocal remover..."></textarea>
             </div>
           </div>
 
@@ -1115,6 +1141,7 @@
         document.getElementById('blogCategory').value = 'Guide';
         document.getElementById('blogFormatSelect').value = 'html';
         document.getElementById('blogExcerpt').value = '';
+        document.getElementById('blogSeoTags').value = '';
         document.getElementById('blogHtmlTextarea').value = '';
         if (quill) quill.root.innerHTML = '';
         document.getElementById('blogEditorHeading').textContent = 'Publish New Article';
@@ -1156,6 +1183,7 @@
         document.getElementById('blogCover').value = p.cover_image || '/assets/studio-girl-card.jpg';
         document.getElementById('blogAuthor').value = p.author_name || 'Editorial Team';
         document.getElementById('blogExcerpt').value = p.excerpt || '';
+        document.getElementById('blogSeoTags').value = p.seo_tags || '';
         document.getElementById('blogHtmlTextarea').value = p.content || '';
         document.getElementById('blogEditorHeading').textContent = 'Editing: ' + p.title;
         if (p.content_format === 'full_html' || /^\s*<!doctype html/i.test(p.content || '')) {
@@ -1180,6 +1208,7 @@
           cover_image: document.getElementById('blogCover').value.trim(),
           author_name: document.getElementById('blogAuthor').value.trim(),
           excerpt: document.getElementById('blogExcerpt').value.trim(),
+          seo_tags: document.getElementById('blogSeoTags').value.trim(),
           content,
         };
         const { ok, data } = await api('/api/blog', { method: 'POST', body: JSON.stringify(payload) });
@@ -1229,6 +1258,7 @@
         slugEl.dataset.touched = '';
         document.getElementById('toolCategory').value = 'Utility Tool';
         document.getElementById('toolDesc').value = '';
+        document.getElementById('toolSeoTags').value = '';
         document.getElementById('toolHtmlCode').value = '';
         document.getElementById('toolEditorHeading').textContent = 'Add / Upload HTML Tool';
       }
@@ -1264,6 +1294,7 @@
         slugEl.dataset.touched = '1';
         document.getElementById('toolCategory').value = t.category || 'Utility Tool';
         document.getElementById('toolDesc').value = t.description || '';
+        document.getElementById('toolSeoTags').value = t.seo_tags || '';
         document.getElementById('toolHtmlCode').value = t.html_code || '';
         document.getElementById('toolEditorHeading').textContent = 'Editing Tool: ' + t.title;
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1276,6 +1307,7 @@
           slug: document.getElementById('toolSlug').value.trim(),
           category: document.getElementById('toolCategory').value.trim(),
           description: document.getElementById('toolDesc').value.trim(),
+          seo_tags: document.getElementById('toolSeoTags').value.trim(),
           html_code: document.getElementById('toolHtmlCode').value.trim(),
         };
         const { ok, data } = await api('/api/tools', { method: 'POST', body: JSON.stringify(payload) });
@@ -1380,6 +1412,9 @@
         document.getElementById('setTiktok').value = s.social_tiktok || '';
         document.getElementById('setTelegram').value = s.social_telegram || '';
         document.getElementById('setNoticeBanner').value = s.notice_banner || '';
+        document.getElementById('setSeoHomeTitle').value = s.seo_home_title || '';
+        document.getElementById('setSeoHomeDesc').value = s.seo_home_description || '';
+        document.getElementById('setSeoHomeTags').value = s.seo_home_tags || '';
         document.getElementById('setGoogleClientId').value = s.google_client_id || '';
         document.getElementById('setAdsenseId').value = s.adsense_client_id || '';
         document.getElementById('setCustomAdCode').value = s.custom_ad_code || '';
@@ -1399,6 +1434,9 @@
           social_tiktok: document.getElementById('setTiktok').value.trim(),
           social_telegram: document.getElementById('setTelegram').value.trim(),
           notice_banner: document.getElementById('setNoticeBanner').value.trim(),
+          seo_home_title: document.getElementById('setSeoHomeTitle').value.trim(),
+          seo_home_description: document.getElementById('setSeoHomeDesc').value.trim(),
+          seo_home_tags: document.getElementById('setSeoHomeTags').value.trim(),
           google_client_id: document.getElementById('setGoogleClientId').value.trim(),
           adsense_client_id: document.getElementById('setAdsenseId').value.trim(),
           custom_ad_code: document.getElementById('setCustomAdCode').value.trim(),

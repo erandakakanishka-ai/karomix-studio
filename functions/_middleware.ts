@@ -9,6 +9,8 @@ export const onRequest: PagesFunction<any> = async (context) => {
 
   if (
     cleanPath === '/sitemap.xml' ||
+    cleanPath === '/rss.xml' ||
+    cleanPath === '/8dc68fc0e32ac33e8dc68fc0e32ac33e.txt' ||
     cleanPath === '/google8dc68fc0e32ac33e.html' ||
     cleanPath === '/blog' ||
     cleanPath === '/blog/' ||
@@ -19,5 +21,35 @@ export const onRequest: PagesFunction<any> = async (context) => {
   ) {
     return worker.fetch(context.request, context.env);
   }
+
+  // Dynamic Homepage YouTube-Style Title, Description & Tags Injection from /admin Settings!
+  if ((cleanPath === '/' || cleanPath === '/index.html') && context.request.method === 'GET' && context.env?.DB) {
+    const res = await context.next();
+    try {
+      const rows = await context.env.DB.prepare(
+        `SELECT k, v FROM site_settings WHERE k IN ('seo_home_title', 'seo_home_description', 'seo_home_tags')`
+      ).all();
+      const map: Record<string, string> = {};
+      for (const r of (rows.results || []) as any[]) {
+        if (r?.k && r?.v) map[String(r.k)] = String(r.v);
+      }
+      if (map.seo_home_title || map.seo_home_description || map.seo_home_tags) {
+        const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        let html = await res.text();
+        if (map.seo_home_title) {
+          html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${esc(map.seo_home_title)}</title>`);
+        }
+        if (map.seo_home_description) {
+          html = html.replace(/<meta name="description" content="[^"]*"\s*\/?>/i, `<meta name="description" content="${esc(map.seo_home_description)}" />`);
+        }
+        if (map.seo_home_tags) {
+          html = html.replace(/<meta name="keywords" content="[^"]*"\s*\/?>/i, `<meta name="keywords" content="${esc(map.seo_home_tags)}" />`);
+        }
+        return new Response(html, { status: res.status, headers: res.headers });
+      }
+    } catch (_) {}
+    return res;
+  }
+
   return context.next();
 };

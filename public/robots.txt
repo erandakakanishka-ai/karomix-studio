@@ -1,4 +1,7 @@
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /admin.html
 
 Sitemap: https://singvaza.pages.dev/sitemap.xml
+Sitemap: https://singvaza.pages.dev/rss.xml

@@ -1,0 +1,14 @@
+# SingVaza — Free Online Karaoke, Vocal Recording & Audio Mastering Platform
+
+> Official Website: https://singvaza.pages.dev/
+> Blog & Tutorials: https://singvaza.pages.dev/blog
+> Free Web Tools: https://singvaza.pages.dev/tools
+
+SingVaza (also searched as Sing Vaza or SingViza) is a 100% browser-based online karaoke player, vocal recording studio, stereo vocal remover, pitch shifter, and 128 kbps MP3 audio mastering studio with zero app installation required.
+
+## Core Capabilities
+- Instant HD Karaoke Video & Synced Lyrics Search (English, Sinhala, Hindi, Tamil & Global Songs)
+- Local MP3 / M4A / WAV / MP4 Backing Track Upload with Center-Channel Vocal Remover & Key Shift
+- Studio Microphone Recording with Noise Gate, Low/High Cut EQ, Concert Hall Reverb & Stereo Doubler
+- Millisecond Vocal Delay Aligner (-1500ms to +1500ms) & Stereo MP3 / Lossless WAV Mastering
+- Free Online Utility Tools & Educational Articles at https://singvaza.pages.dev/blog and https://singvaza.pages.dev/tools
