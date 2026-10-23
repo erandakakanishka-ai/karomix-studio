@@ -1032,44 +1032,47 @@ const App = (() => {
 
       const hasSinhalaScript = /[\u0D80-\u0DFF]/.test(cleanQ);
 
-      const queryEdgeApi = async () => {
-        try {
-          const res = await fetch(`/api/lyrics?q=${encodeURIComponent(cleanQ)}`);
-          if (!res.ok) return null;
-          const data = await res.json();
-          const tr = data.track || (data.results || [])[0] || null;
-          return (tr && (tr.plainLyrics || tr.syncedLyrics)) ? tr : null;
-        } catch (_) {
-          return null;
-        }
-      };
-
-      const queryDirectLrclib = async () => {
-        if (hasSinhalaScript) return null;
+      // 1. Primary (Exact Yesterday Priority!): Direct browser LRCLIB query for global & indexed songs (~120ms)
+      let hit = null;
+      if (!hasSinhalaScript) {
         const tries = [cleanQ];
         if (cleanQ.includes('-')) {
           tries.push(...cleanQ.split('-').map((s) => s.trim()).filter((s) => s.length > 2));
         }
+        const qWords = cleanQ.toLowerCase().split(/\s+/).filter((w) => w.length >= 2);
         for (const cand of tries) {
           try {
             const r = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(cand)}`);
             if (r.ok) {
               const list = await r.json();
               if (Array.isArray(list) && list.length) {
-                const hit = list.find((item) => item.plainLyrics) || list.find((item) => item.syncedLyrics);
-                if (hit) return hit;
+                hit = list.find((item) => {
+                  if (!item.plainLyrics && !item.syncedLyrics) return false;
+                  const meta = `${item.trackName || ''} ${item.name || ''} ${item.artistName || ''}`.toLowerCase();
+                  return qWords.every((w) => meta.includes(w)) || (qWords.length >= 2 && qWords.filter((w) => meta.includes(w)).length >= Math.ceil(qWords.length * 0.7));
+                }) || null;
+                if (hit) break;
               }
             }
           } catch (_) {}
         }
-        return null;
-      };
+      }
 
-      // Run Edge Sinhala+Global API AND fast direct browser LRCLIB in parallel without blocking each other!
-      const [edgeHit, directHit] = await Promise.all([queryEdgeApi(), queryDirectLrclib()]);
       if (seq !== state.lyricsReqSeq) return;
 
-      const hit = edgeHit || directHit;
+      // 2. Fallback: Edge Multi-Source Sinhala + Regional Title-Verified API
+      if (!hit) {
+        try {
+          const res = await fetch(`/api/lyrics?q=${encodeURIComponent(cleanQ)}`);
+          if (res.ok) {
+            const data = await res.json();
+            const tr = data.track || (data.results || [])[0] || null;
+            if (tr && (tr.plainLyrics || tr.syncedLyrics)) hit = tr;
+          }
+        } catch (_) {}
+      }
+
+      if (seq !== state.lyricsReqSeq) return;
       if (hit && renderPlainLyricsText(hit.plainLyrics || hit.syncedLyrics || '', 'Full song lyrics')) {
         return;
       }
