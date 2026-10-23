@@ -1,0 +1,1420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#080b12" />
+  <title>SingVaza — Admin Console</title>
+  <link rel="icon" type="image/png" href="/assets/logo.png" />
+  <link rel="stylesheet" href="/vendor/quill.snow.css" />
+  <style>
+    :root {
+      --bg: #080b12;
+      --surface: #0f1523;
+      --surface-2: #151d30;
+      --border: rgba(148, 163, 184, 0.14);
+      --border-strong: rgba(148, 163, 184, 0.26);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --amber: #f59e0b;
+      --amber-soft: rgba(245, 158, 11, 0.14);
+      --cyan: #38bdf8;
+      --emerald: #10b981;
+      --ruby: #ef4444;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      line-height: 1.55;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--cyan); text-decoration: none; }
+    button, input, select, textarea { font-family: inherit; }
+
+    .icon { width: 17px; height: 17px; stroke: currentColor; stroke-width: 1.9; fill: none; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+
+    /* Login Gate */
+    .login-wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.08), transparent 52%);
+    }
+    .login-card {
+      width: 100%;
+      max-width: 400px;
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 18px;
+      padding: 30px 26px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+    }
+    .brand-row { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+    .brand-row img { width: 34px; height: 34px; border-radius: 9px; }
+    .brand-title { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+
+    /* Shell Layout */
+    .admin-shell { display: none; min-height: 100vh; }
+    .admin-shell.active { display: grid; grid-template-columns: 240px minmax(0, 1fr); }
+    .sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 20px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+    .nav-list { display: flex; flex-direction: column; gap: 4px; margin-top: 18px; }
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-align: left;
+    }
+    .nav-btn-left { display: flex; align-items: center; gap: 10px; }
+    .nav-btn:hover { background: rgba(255, 255, 255, 0.04); color: var(--text); }
+    .nav-btn.active {
+      background: var(--amber-soft);
+      color: #fbbf24;
+      border-color: rgba(245, 158, 11, 0.3);
+    }
+    .badge-pill {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+    }
+
+    .main-area { padding: 26px 28px 64px; max-width: 1220px; width: 100%; margin: 0 auto; }
+    .mobile-topbar {
+      display: none;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 40;
+    }
+    .mobile-tabs {
+      display: none;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 10px 16px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 57px;
+      z-index: 39;
+      scrollbar-width: none;
+    }
+    .mobile-tabs::-webkit-scrollbar { display: none; }
+
+    @media (max-width: 900px) {
+      .admin-shell.active { display: block; }
+      .sidebar { display: none; }
+      .mobile-topbar { display: flex; align-items: center; justify-content: space-between; }
+      .mobile-tabs { display: flex; }
+      .main-area { padding: 18px 14px 72px; }
+    }
+
+    /* Typography & Cards */
+    .page-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .page-head h1 { font-size: 21px; font-weight: 800; letter-spacing: -0.02em; }
+    .page-head p { color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 14.5px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 960px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+    }
+    .kpi-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .kpi-val { font-size: 26px; font-weight: 800; margin: 6px 0 3px; letter-spacing: -0.02em; }
+    .kpi-sub { font-size: 11.5px; color: var(--muted); }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 780px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* Form Controls */
+    .field { margin-bottom: 13px; }
+    .field label { display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 5px; }
+    .input, select.input, textarea.input {
+      width: 100%;
+      background: #080b12;
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+      border-radius: 9px;
+      padding: 9px 12px;
+      font-size: 13.5px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .input:focus { border-color: var(--amber); }
+    textarea.code-box {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12.5px;
+      line-height: 1.5;
+      min-height: 250px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 8px 14px;
+      border-radius: 9px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface-2);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn:hover { border-color: rgba(255, 255, 255, 0.35); }
+    .btn-primary { background: var(--amber); color: #080b12; border-color: var(--amber); font-weight: 700; }
+    .btn-primary:hover { background: #fbbf24; }
+    .btn-danger { background: rgba(239, 68, 68, 0.12); color: #f87171; border-color: rgba(239, 68, 68, 0.3); }
+    .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 7px; }
+
+    /* Upload Drop Box */
+    .upload-zone {
+      border: 1.5px dashed rgba(56, 189, 248, 0.4);
+      background: rgba(56, 189, 248, 0.04);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    /* Mode Switcher */
+    .seg-bar {
+      display: inline-flex;
+      background: #080b12;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 3px;
+      gap: 3px;
+      margin-bottom: 12px;
+    }
+    .seg-btn {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 6px 12px;
+      border-radius: 7px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .seg-btn.active { background: var(--surface-2); color: var(--text); }
+
+    /* Quill Dark Styling */
+    .ql-toolbar.ql-snow {
+      background: var(--surface-2);
+      border-color: var(--border-strong) !important;
+      border-radius: 9px 9px 0 0;
+    }
+    .ql-container.ql-snow {
+      background: #080b12;
+      color: var(--text);
+      border-color: var(--border-strong) !important;
+      border-radius: 0 0 9px 9px;
+      min-height: 230px;
+      font-size: 14px;
+    }
+    .ql-snow .ql-stroke { stroke: #cbd5e1 !important; }
+    .ql-snow .ql-fill { fill: #cbd5e1 !important; }
+    .ql-snow .ql-picker { color: #cbd5e1 !important; }
+    .ql-snow .ql-picker-options { background: var(--surface-2) !important; border-color: var(--border-strong) !important; }
+
+    /* Clean Tables */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      text-align: left;
+      padding: 9px 10px;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid var(--border);
+    }
+    td { padding: 11px 10px; border-bottom: 1px solid rgba(148, 163, 184, 0.08); vertical-align: middle; }
+    tr:last-child td { border-bottom: 0; }
+
+    .status-pro { background: rgba(16, 185, 129, 0.14); color: #34d399; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .status-free { background: rgba(148, 163, 184, 0.14); color: #cbd5e1; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+
+    .panel-tab { display: none; }
+    .panel-tab.active { display: block; }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #1e293b;
+      color: #f8fafc;
+      border: 1px solid var(--border-strong);
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px);
+      transition: all 0.2s ease;
+      z-index: 200;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+
+  <!-- ==================== 1. SECURE LOGIN GATE ==================== -->
+  <div id="loginScreen" class="login-wrap">
+    <form class="login-card" onsubmit="event.preventDefault(); AdminApp.login();">
+      <div class="brand-row">
+        <img src="/assets/logo.png" alt="SingVaza" />
+        <div>
+          <div class="brand-title">SING<span style="color:var(--amber);">VAZA</span> ADMIN</div>
+          <div style="font-size:12px;color:var(--muted);">Management & Analytics Console</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="loginUser">Admin Username</label>
+        <input id="loginUser" type="text" class="input" autocomplete="username" placeholder="admin" required />
+      </div>
+
+      <div class="field">
+        <label for="loginPass">Password</label>
+        <div style="display:flex;gap:6px;">
+          <input id="loginPass" type="password" class="input" autocomplete="current-password" placeholder="••••••••" required />
+          <button type="button" class="btn" onclick="AdminApp.togglePwVisibility('loginPass')">Show</button>
+        </div>
+      </div>
+
+      <div id="loginError" style="display:none;color:#f87171;font-size:12.5px;margin-bottom:12px;"></div>
+
+      <button type="submit" id="btnLoginSubmit" class="btn btn-primary" style="width:100%;padding:10px;">
+        Sign In to Console
+      </button>
+
+      <div style="margin-top:16px;text-align:center;font-size:12px;">
+        <a href="/">← Back to Live Website</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- ==================== 2. EXECUTIVE ADMIN SHELL ==================== -->
+  <div id="adminShell" class="admin-shell">
+    <!-- Desktop Sidebar -->
+    <aside class="sidebar">
+      <div>
+        <div class="brand-row" style="padding:0 6px;margin-bottom:10px;">
+          <img src="/assets/logo.png" alt="SingVaza" />
+          <div>
+            <div class="brand-title" style="font-size:15.5px;">SING<span style="color:var(--amber);">VAZA</span></div>
+            <div style="font-size:11px;color:var(--muted);" id="sidebarAdminName">Admin Console</div>
+          </div>
+        </div>
+
+        <nav class="nav-list">
+          <button class="nav-btn active" data-tab="overview" onclick="AdminApp.switchTab('overview')">
+            <span class="nav-btn-left">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+              <span>Overview & Traffic</span>
+            </span>
+          </button>
+
+          <button class="nav-btn" data-tab="blog" onclick="AdminApp.switchTab('blog')">
+            <span class="nav-btn-left">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span>HTML Blog Studio</span>
+            </span>
+            <span class="badge-pill" id="badgePosts">0</span>
+          </button>
+
+          <button class="nav-btn" data-tab="tools" onclick="AdminApp.switchTab('tools')">
+            <span class="nav-btn-left">
+              <svg class="icon" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+              <span>HTML Web Tools</span>
+            </span>
+            <span class="badge-pill" id="badgeTools">0</span>
+          </button>
+
+          <button class="nav-btn" data-tab="users" onclick="AdminApp.switchTab('users')">
+            <span class="nav-btn-left">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              <span>Users & Inbox</span>
+            </span>
+            <span class="badge-pill" id="badgeUsers">0</span>
+          </button>
+
+          <button class="nav-btn" data-tab="settings" onclick="AdminApp.switchTab('settings')">
+            <span class="nav-btn-left">
+              <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              <span>Business & Settings</span>
+            </span>
+          </button>
+        </nav>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;padding-top:14px;border-top:1px solid var(--border);">
+        <a class="btn btn-sm" href="/" target="_blank">Open Website ↗</a>
+        <button class="btn btn-sm btn-danger" onclick="AdminApp.logout()">Log Out</button>
+      </div>
+    </aside>
+
+    <!-- Mobile Top Header + Tabs -->
+    <div class="mobile-topbar">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <img src="/assets/logo.png" alt="SingVaza" style="width:28px;height:28px;border-radius:7px;" />
+        <strong style="font-size:14.5px;">SING<span style="color:var(--amber);">VAZA</span> ADMIN</strong>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <a class="btn btn-sm" href="/" target="_blank">Site ↗</a>
+        <button class="btn btn-sm btn-danger" onclick="AdminApp.logout()">Logout</button>
+      </div>
+    </div>
+    <div class="mobile-tabs">
+      <button class="btn btn-sm nav-mob active" data-tab="overview" onclick="AdminApp.switchTab('overview')">Overview</button>
+      <button class="btn btn-sm nav-mob" data-tab="blog" onclick="AdminApp.switchTab('blog')">HTML Blog</button>
+      <button class="btn btn-sm nav-mob" data-tab="tools" onclick="AdminApp.switchTab('tools')">Web Tools</button>
+      <button class="btn btn-sm nav-mob" data-tab="users" onclick="AdminApp.switchTab('users')">Users & Inbox</button>
+      <button class="btn btn-sm nav-mob" data-tab="settings" onclick="AdminApp.switchTab('settings')">Settings</button>
+    </div>
+
+    <!-- Main Content Column -->
+    <main class="main-area">
+
+      <!-- ==================== TAB 1: OVERVIEW & ANALYTICS ==================== -->
+      <section id="tab-overview" class="panel-tab active">
+        <div class="page-head">
+          <div>
+            <h1>Platform Overview</h1>
+            <p>Live visitors, registered members, published HTML articles, and custom tools.</p>
+          </div>
+          <button class="btn btn-sm" onclick="AdminApp.loadOverview()">Refresh Data ↻</button>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Today's Visits</div>
+            <div class="kpi-val" style="color:#fbbf24;" id="kpiTodayViews">0</div>
+            <div class="kpi-sub"><span id="kpiTodayUniques">0</span> unique visitors today</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">30-Day Traffic</div>
+            <div class="kpi-val" style="color:var(--cyan);" id="kpi30dViews">0</div>
+            <div class="kpi-sub"><span id="kpi30dUniques">0</span> unique visitors (30d)</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Registered Users</div>
+            <div class="kpi-val" style="color:#34d399;" id="kpiTotalUsers">0</div>
+            <div class="kpi-sub"><span id="kpiProUsers">0</span> active Pro • <span id="kpiExports">0</span> MP3 exports</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Content & Support</div>
+            <div class="kpi-val" id="kpiContentTotal">0</div>
+            <div class="kpi-sub"><span id="kpiPostsCount">0</span> posts • <span id="kpiToolsCount">0</span> tools • <span id="kpiMsgCount">0</span> msgs</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            <span>Last 14 Days Traffic (Page Views vs Unique Visitors)</span>
+          </div>
+          <div style="height:260px;position:relative;">
+            <canvas id="trafficChart"></canvas>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card-title"><span>Visitor Countries</span></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Country</th><th style="text-align:right;">Views</th></tr></thead>
+                <tbody id="countriesTableBody"><tr><td colspan="2" style="color:var(--muted);">Loading...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><span>Top Visited Pages</span></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Page Path</th><th style="text-align:right;">Views</th></tr></thead>
+                <tbody id="pagesTableBody"><tr><td colspan="2" style="color:var(--muted);">Loading...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== TAB 2: HTML BLOG STUDIO ==================== -->
+      <section id="tab-blog" class="panel-tab">
+        <div class="page-head">
+          <div>
+            <h1>HTML Blog & Article Studio</h1>
+            <p>Upload standalone <code>.html</code> files, write visually, or paste custom HTML on any topic.</p>
+          </div>
+          <a class="btn btn-sm" href="/blog" target="_blank">View Public Blog ↗</a>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            <span id="blogEditorHeading">Publish New Article</span>
+            <button class="btn btn-sm" onclick="AdminApp.resetBlogForm()">Clear / New</button>
+          </div>
+
+          <!-- Direct .HTML File Upload Zone -->
+          <div class="upload-zone">
+            <div>
+              <div style="font-weight:700;color:var(--cyan);font-size:13.5px;">Upload Ready-Made .HTML Article File</div>
+              <div style="font-size:12px;color:var(--muted);">Select any <code>.html</code> file from your phone or PC — styles, tables, images & scripts stay intact.</div>
+            </div>
+            <label class="btn btn-primary" style="cursor:pointer;">
+              Choose .HTML File
+              <input type="file" id="blogHtmlFileInput" accept=".html,.htm,text/html" hidden onchange="AdminApp.handleBlogHtmlFile(event)" />
+            </label>
+          </div>
+
+          <input type="hidden" id="blogEditId" value="" />
+
+          <div class="two-col">
+            <div class="field">
+              <label>Article Title *</label>
+              <input id="blogTitle" type="text" class="input" placeholder="e.g. Best Free Online Productivity Tools in 2026" oninput="AdminApp.autoSlug('blogTitle','blogSlug')" />
+            </div>
+            <div class="field">
+              <label>URL Slug (<code>/blog/your-slug</code>)</label>
+              <input id="blogSlug" type="text" class="input" placeholder="best-free-online-tools-2026" />
+            </div>
+          </div>
+
+          <div class="two-col">
+            <div class="field">
+              <label>Category (Any Topic: Tech, Tools, Guides, Finance, Music...)</label>
+              <input id="blogCategory" type="text" class="input" value="Guide" placeholder="Tech / Online Tools / Guide" />
+            </div>
+            <div class="field">
+              <label>Display Mode</label>
+              <select id="blogFormatSelect" class="input">
+                <option value="html">SingVaza Theme Frame (Clean Header + Your HTML Body)</option>
+                <option value="full_html">100% Standalone Full .HTML Page (Exact Uploaded Design)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="two-col">
+            <div class="field">
+              <label>Cover Image URL (for Blog Card Grid)</label>
+              <input id="blogCover" type="text" class="input" value="/assets/studio-girl-card.jpg" placeholder="https://... or /assets/..." />
+            </div>
+            <div class="field">
+              <label>Author Name</label>
+              <input id="blogAuthor" type="text" class="input" value="Editorial Team" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Short Summary / SEO Description (Optional)</label>
+            <input id="blogExcerpt" type="text" class="input" placeholder="Short summary shown on Google Search and blog cards..." />
+          </div>
+
+          <!-- Editor Mode Switch -->
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div class="seg-bar">
+              <button type="button" class="seg-btn active" id="modeBtnVisual" onclick="AdminApp.setEditorMode('visual')">Visual Editor</button>
+              <button type="button" class="seg-btn" id="modeBtnHtml" onclick="AdminApp.setEditorMode('html')">HTML Code / Uploaded File</button>
+              <button type="button" class="seg-btn" id="modeBtnPreview" onclick="AdminApp.setEditorMode('preview')">Live Preview</button>
+            </div>
+          </div>
+
+          <div id="visualEditorWrap">
+            <div id="quillContainer"></div>
+          </div>
+
+          <div id="htmlEditorWrap" style="display:none;">
+            <textarea id="blogHtmlTextarea" class="input code-box" placeholder="Paste full <!DOCTYPE html>... or custom HTML code here..."></textarea>
+          </div>
+
+          <div id="livePreviewWrap" style="display:none;">
+            <iframe id="blogPreviewFrame" style="width:100%;height:380px;border:1px solid var(--border-strong);border-radius:10px;background:#fff;"></iframe>
+          </div>
+
+          <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+            <button type="button" class="btn btn-primary" onclick="AdminApp.saveBlogPost()">Publish / Update Article</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span>Published Articles</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Title</th><th>Category</th><th>Mode</th><th>Date</th><th style="text-align:right;">Actions</th></tr></thead>
+              <tbody id="blogListBody"><tr><td colspan="5" style="color:var(--muted);">No articles yet.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== TAB 3: HTML WEB TOOLS HUB ==================== -->
+      <section id="tab-tools" class="panel-tab">
+        <div class="page-head">
+          <div>
+            <h1>HTML Web Tools Manager</h1>
+            <p>Upload any standalone <code>.html</code> tool (calculators, converters, generators, utilities) to publish instantly at <code>/tools/your-tool</code>.</p>
+          </div>
+          <a class="btn btn-sm" href="/tools" target="_blank">Open /tools Hub ↗</a>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            <span id="toolEditorHeading">Add / Upload HTML Tool</span>
+            <button class="btn btn-sm" onclick="AdminApp.resetToolForm()">Clear / New</button>
+          </div>
+
+          <div class="upload-zone">
+            <div>
+              <div style="font-weight:700;color:var(--cyan);font-size:13.5px;">Upload Single-File <code>.html</code> Tool</div>
+              <div style="font-size:12px;color:var(--muted);">Upload any self-contained HTML+CSS+JS tool file — automatically served live at <code>/tools/slug</code>.</div>
+            </div>
+            <label class="btn btn-primary" style="cursor:pointer;">
+              Choose Tool .HTML
+              <input type="file" id="toolHtmlFileInput" accept=".html,.htm,text/html" hidden onchange="AdminApp.handleToolHtmlFile(event)" />
+            </label>
+          </div>
+
+          <input type="hidden" id="toolEditId" value="" />
+
+          <div class="two-col">
+            <div class="field">
+              <label>Tool Name *</label>
+              <input id="toolTitle" type="text" class="input" placeholder="e.g. Image Compressor / QR Generator" oninput="AdminApp.autoSlug('toolTitle','toolSlug')" />
+            </div>
+            <div class="field">
+              <label>URL Slug (<code>/tools/your-slug</code>)</label>
+              <input id="toolSlug" type="text" class="input" placeholder="qr-generator" />
+            </div>
+          </div>
+
+          <div class="two-col">
+            <div class="field">
+              <label>Category</label>
+              <input id="toolCategory" type="text" class="input" value="Utility Tool" placeholder="Utility / Converter / Finance / Audio" />
+            </div>
+            <div class="field">
+              <label>Short Card Description</label>
+              <input id="toolDesc" type="text" class="input" placeholder="Fast browser tool with zero file uploads..." />
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Tool HTML + CSS + JS Code *</label>
+            <textarea id="toolHtmlCode" class="input code-box" placeholder="<!DOCTYPE html>..."></textarea>
+          </div>
+
+          <button type="button" class="btn btn-primary" onclick="AdminApp.saveTool()">Publish / Update Tool</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span>Published Web Tools</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Tool Name</th><th>URL</th><th>Views</th><th style="text-align:right;">Actions</th></tr></thead>
+              <tbody id="toolsListBody"><tr><td colspan="4" style="color:var(--muted);">No custom tools published yet.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== TAB 4: USERS & SUPPORT INBOX ==================== -->
+      <section id="tab-users" class="panel-tab">
+        <div class="page-head">
+          <div>
+            <h1>Registered Users & Support Inbox</h1>
+            <p>View registered accounts, manage Pro passes, and read messages sent via your Contact page.</p>
+          </div>
+          <button class="btn btn-sm" onclick="AdminApp.loadUsersAndInbox()">Refresh ↻</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            <span>Registered Members</span>
+            <input type="text" id="userSearchInput" class="input" style="max-width:240px;padding:6px 10px;font-size:12.5px;" placeholder="Search email or name..." oninput="AdminApp.renderUsersTable()" />
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Member</th><th>Login Type</th><th>Status</th><th>Exports</th><th>Joined</th><th style="text-align:right;">Manage</th></tr></thead>
+              <tbody id="usersTableBody"><tr><td colspan="6" style="color:var(--muted);">Loading members...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span>Support & Feedback Inbox (from <code>/contact</code>)</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Sender</th><th>Topic & Message</th><th>Date</th><th style="text-align:right;">Action</th></tr></thead>
+              <tbody id="messagesTableBody"><tr><td colspan="4" style="color:var(--muted);">No messages yet.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== TAB 5: BUSINESS, AUTH & SECURITY SETTINGS ==================== -->
+      <section id="tab-settings" class="panel-tab">
+        <div class="page-head">
+          <div>
+            <h1>Business Info, Integrations & Security</h1>
+            <p>Update your Gmail, Business WhatsApp, Google 1-Click Login ID, and Admin password from anywhere.</p>
+          </div>
+        </div>
+
+        <form onsubmit="event.preventDefault(); AdminApp.saveSettings();">
+          <div class="card">
+            <div class="card-title"><span>Business Contact & Social Links</span></div>
+            <div class="two-col">
+              <div class="field">
+                <label>Official Support / Business Gmail</label>
+                <input id="setSupportEmail" type="email" class="input" placeholder="yourname@gmail.com" />
+              </div>
+              <div class="field">
+                <label>Business WhatsApp Number (with Country Code, e.g. 94771234567)</label>
+                <input id="setWhatsapp" type="text" class="input" placeholder="94771234567" />
+              </div>
+            </div>
+
+            <div class="field">
+              <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="setWhatsappEnabled" />
+                <span>Show "Chat on WhatsApp" button cleanly on Contact page & Side Menu</span>
+              </label>
+            </div>
+
+            <div class="two-col">
+              <div class="field">
+                <label>YouTube Channel URL</label>
+                <input id="setYoutube" type="url" class="input" placeholder="https://youtube.com/@..." />
+              </div>
+              <div class="field">
+                <label>Facebook Page URL</label>
+                <input id="setFacebook" type="url" class="input" placeholder="https://facebook.com/..." />
+              </div>
+            </div>
+
+            <div class="two-col">
+              <div class="field">
+                <label>TikTok Profile URL</label>
+                <input id="setTiktok" type="url" class="input" placeholder="https://tiktok.com/@..." />
+              </div>
+              <div class="field">
+                <label>Telegram Channel / Contact URL</label>
+                <input id="setTelegram" type="url" class="input" placeholder="https://t.me/..." />
+              </div>
+            </div>
+
+            <div class="field">
+              <label>Optional Top Announcement Note (Leave empty to hide)</label>
+              <input id="setNoticeBanner" type="text" class="input" placeholder="e.g. New tools & guides added weekly!" />
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><span>Google Login, AdSense & Limits</span></div>
+            <div class="two-col">
+              <div class="field">
+                <label>Google 1-Click Login Client ID (<code>...apps.googleusercontent.com</code>)</label>
+                <input id="setGoogleClientId" type="text" class="input" placeholder="123456789-abc.apps.googleusercontent.com" />
+              </div>
+              <div class="field">
+                <label>Google AdSense Publisher ID (<code>ca-pub-...</code>)</label>
+                <input id="setAdsenseId" type="text" class="input" placeholder="ca-pub-0000000000000000" />
+              </div>
+            </div>
+            <div class="field" style="max-width:260px;">
+              <label>Daily Free MP3 Download Limit (Per User)</label>
+              <input id="setDailyLimit" type="number" min="1" max="100" class="input" value="2" />
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><span>Admin Login Credentials (Username & Password)</span></div>
+            <div class="two-col">
+              <div class="field">
+                <label>Admin Username</label>
+                <input id="setAdminUser" type="text" class="input" placeholder="admin" required />
+              </div>
+              <div class="field">
+                <label>New Admin Password (leave blank to keep current password)</label>
+                <div style="display:flex;gap:6px;">
+                  <input id="setNewPassword" type="password" class="input" autocomplete="new-password" placeholder="Enter new strong password..." />
+                  <button type="button" class="btn" onclick="AdminApp.togglePwVisibility('setNewPassword')">Show</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary" style="padding:11px 22px;">Save All Settings</button>
+        </form>
+      </section>
+
+    </main>
+  </div>
+
+  <div id="adminToast" class="toast"></div>
+
+  <script src="/vendor/chart.min.js"></script>
+  <script src="/vendor/quill.min.js"></script>
+  <script>
+    const AdminApp = (() => {
+      const TOKEN_KEY = 'singvaza_admin_token';
+      let token = localStorage.getItem(TOKEN_KEY) || '';
+      let quill = null;
+      let editorMode = 'visual';
+      let chartInstance = null;
+      let allUsers = [];
+      let allPosts = [];
+      let allTools = [];
+
+      function toast(msg) {
+        const el = document.getElementById('adminToast');
+        el.textContent = msg;
+        el.classList.add('show');
+        clearTimeout(toast._t);
+        toast._t = setTimeout(() => el.classList.remove('show'), 3200);
+      }
+
+      function esc(s) {
+        return String(s ?? '')
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      async function api(path, opts = {}) {
+        const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+        if (token) headers.Authorization = 'Bearer ' + token;
+        const res = await fetch(path, { ...opts, headers });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401 && path !== '/api/admin/login') {
+          logout(true);
+          throw new Error('Session expired — please sign in again.');
+        }
+        return { ok: res.ok, status: res.status, data };
+      }
+
+      function togglePwVisibility(id) {
+        const el = document.getElementById(id);
+        if (el) el.type = el.type === 'password' ? 'text' : 'password';
+      }
+
+      async function login() {
+        const username = document.getElementById('loginUser').value.trim();
+        const password = document.getElementById('loginPass').value.trim();
+        const errBox = document.getElementById('loginError');
+        const btn = document.getElementById('btnLoginSubmit');
+        errBox.style.display = 'none';
+        btn.disabled = true;
+        btn.textContent = 'Signing in...';
+        try {
+          const { ok, data } = await api('/api/admin/login', {
+            method: 'POST',
+            body: JSON.stringify({ username, password }),
+          });
+          if (!ok || !data.token) {
+            errBox.textContent = data.error || 'Invalid credentials.';
+            errBox.style.display = 'block';
+            return;
+          }
+          token = data.token;
+          localStorage.setItem(TOKEN_KEY, token);
+          document.getElementById('sidebarAdminName').textContent = '@' + (data.username || username);
+          enterConsole();
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Sign In to Console';
+        }
+      }
+
+      async function logout(silent = false) {
+        if (!silent && token) {
+          await fetch('/api/admin/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + token } }).catch(() => {});
+        }
+        token = '';
+        localStorage.removeItem(TOKEN_KEY);
+        document.getElementById('adminShell').classList.remove('active');
+        document.getElementById('loginScreen').style.display = 'flex';
+      }
+
+      function initQuillOnce() {
+        if (quill || !window.Quill) return;
+        quill = new Quill('#quillContainer', {
+          theme: 'snow',
+          placeholder: 'Write your article visually here, or switch to HTML Code / Upload .HTML file above...',
+          modules: {
+            toolbar: [
+              [{ header: [1, 2, 3, false] }],
+              ['bold', 'italic', 'underline', 'strike'],
+              [{ color: [] }, { background: [] }],
+              [{ list: 'ordered' }, { list: 'bullet' }, 'blockquote', 'code-block'],
+              ['link', 'image'],
+              ['clean'],
+            ],
+          },
+        });
+      }
+
+      function enterConsole() {
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('adminShell').classList.add('active');
+        initQuillOnce();
+        loadOverview();
+        loadBlogPosts();
+        loadTools();
+        loadSettings();
+      }
+
+      function switchTab(tab) {
+        document.querySelectorAll('.panel-tab').forEach((s) => s.classList.toggle('active', s.id === 'tab-' + tab));
+        document.querySelectorAll('.nav-btn, .nav-mob').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+        if (tab === 'overview') loadOverview();
+        if (tab === 'blog') loadBlogPosts();
+        if (tab === 'tools') loadTools();
+        if (tab === 'users') loadUsersAndInbox();
+        if (tab === 'settings') loadSettings();
+      }
+
+      // ==================== 1. OVERVIEW & CHART.JS ====================
+      async function loadOverview() {
+        try {
+          const { ok, data } = await api('/api/admin/overview');
+          if (!ok) return;
+          const k = data.kpis || {};
+          document.getElementById('kpiTodayViews').textContent = k.todayViews ?? 0;
+          document.getElementById('kpiTodayUniques').textContent = k.todayUniques ?? 0;
+          document.getElementById('kpi30dViews').textContent = k.views30d ?? 0;
+          document.getElementById('kpi30dUniques').textContent = k.uniques30d ?? 0;
+          document.getElementById('kpiTotalUsers').textContent = k.totalUsers ?? 0;
+          document.getElementById('kpiProUsers').textContent = k.proUsers ?? 0;
+          document.getElementById('kpiExports').textContent = k.totalExports ?? 0;
+          document.getElementById('kpiContentTotal').textContent = (k.blogPosts || 0) + (k.htmlTools || 0);
+          document.getElementById('kpiPostsCount').textContent = k.blogPosts ?? 0;
+          document.getElementById('kpiToolsCount').textContent = k.htmlTools ?? 0;
+          document.getElementById('kpiMsgCount').textContent = k.messages ?? 0;
+
+          document.getElementById('badgePosts').textContent = k.blogPosts ?? 0;
+          document.getElementById('badgeTools').textContent = k.htmlTools ?? 0;
+          document.getElementById('badgeUsers').textContent = k.totalUsers ?? 0;
+
+          const series = data.chart14d || [];
+          const ctx = document.getElementById('trafficChart').getContext('2d');
+          if (chartInstance) chartInstance.destroy();
+          if (window.Chart) {
+            chartInstance = new Chart(ctx, {
+              type: 'line',
+              data: {
+                labels: series.map((d) => d.day.slice(5)),
+                datasets: [
+                  {
+                    label: 'Page Views',
+                    data: series.map((d) => d.views),
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245, 158, 11, 0.14)',
+                    fill: true,
+                    tension: 0.35,
+                    borderWidth: 2.2,
+                  },
+                  {
+                    label: 'Unique Visitors',
+                    data: series.map((d) => d.uniques),
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56, 189, 248, 0.09)',
+                    fill: true,
+                    tension: 0.35,
+                    borderWidth: 2.2,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#cbd5e1' } } },
+                scales: {
+                  x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.08)' } },
+                  y: { beginAtZero: true, ticks: { color: '#94a3b8', precision: 0 }, grid: { color: 'rgba(148,163,184,0.08)' } },
+                },
+              },
+            });
+          }
+
+          const cBody = document.getElementById('countriesTableBody');
+          const countries = data.countries || [];
+          cBody.innerHTML = countries.length
+            ? countries.map((c) => `<tr><td><strong>${esc(c.country)}</strong></td><td style="text-align:right;">${esc(c.views)}</td></tr>`).join('')
+            : '<tr><td colspan="2" style="color:var(--muted);">No visitor data recorded yet.</td></tr>';
+
+          const pBody = document.getElementById('pagesTableBody');
+          const pages = data.topPages || [];
+          pBody.innerHTML = pages.length
+            ? pages.map((p) => `<tr><td><code>${esc(p.path)}</code></td><td style="text-align:right;">${esc(p.views)}</td></tr>`).join('')
+            : '<tr><td colspan="2" style="color:var(--muted);">No page views recorded yet.</td></tr>';
+        } catch (err) {
+          toast(err.message);
+        }
+      }
+
+      // ==================== 2. BLOG STUDIO (.HTML UPLOAD + VISUAL + RAW) ====================
+      function autoSlug(titleId, slugId) {
+        const slugEl = document.getElementById(slugId);
+        if (slugEl.dataset.touched === '1') return;
+        const val = document.getElementById(titleId).value
+          .toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 75);
+        slugEl.value = val;
+      }
+
+      function getCurrentBlogHtml() {
+        if (editorMode === 'visual' && quill) {
+          return quill.root.innerHTML;
+        }
+        return document.getElementById('blogHtmlTextarea').value;
+      }
+
+      function setEditorMode(mode) {
+        if (editorMode === 'visual' && mode !== 'visual' && quill) {
+          document.getElementById('blogHtmlTextarea').value = quill.root.innerHTML;
+        } else if (editorMode !== 'visual' && mode === 'visual' && quill) {
+          const raw = document.getElementById('blogHtmlTextarea').value;
+          if (!/^\s*<!doctype html/i.test(raw)) {
+            quill.root.innerHTML = raw;
+          }
+        }
+        editorMode = mode;
+        document.getElementById('modeBtnVisual').classList.toggle('active', mode === 'visual');
+        document.getElementById('modeBtnHtml').classList.toggle('active', mode === 'html');
+        document.getElementById('modeBtnPreview').classList.toggle('active', mode === 'preview');
+        document.getElementById('visualEditorWrap').style.display = mode === 'visual' ? 'block' : 'none';
+        document.getElementById('htmlEditorWrap').style.display = mode === 'html' ? 'block' : 'none';
+        document.getElementById('livePreviewWrap').style.display = mode === 'preview' ? 'block' : 'none';
+
+        if (mode === 'preview') {
+          const code = document.getElementById('blogHtmlTextarea').value;
+          document.getElementById('blogPreviewFrame').srcdoc = code;
+        }
+      }
+
+      function handleBlogHtmlFile(e) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const html = String(reader.result || '');
+          document.getElementById('blogHtmlTextarea').value = html;
+          const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+          if (titleMatch && !document.getElementById('blogTitle').value.trim()) {
+            const cleanT = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+            document.getElementById('blogTitle').value = cleanT;
+            autoSlug('blogTitle', 'blogSlug');
+          } else if (!document.getElementById('blogTitle').value.trim()) {
+            document.getElementById('blogTitle').value = file.name.replace(/\.html?$/i, '');
+            autoSlug('blogTitle', 'blogSlug');
+          }
+          if (/^\s*<!doctype html/i.test(html) || /<html[\s>]/i.test(html)) {
+            document.getElementById('blogFormatSelect').value = 'full_html';
+          }
+          editorMode = 'html';
+          setEditorMode('html');
+          toast('Loaded ' + file.name + ' — review or tap Live Preview!');
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+      }
+
+      function resetBlogForm() {
+        document.getElementById('blogEditId').value = '';
+        document.getElementById('blogTitle').value = '';
+        const slugEl = document.getElementById('blogSlug');
+        slugEl.value = '';
+        slugEl.dataset.touched = '';
+        document.getElementById('blogCategory').value = 'Guide';
+        document.getElementById('blogFormatSelect').value = 'html';
+        document.getElementById('blogExcerpt').value = '';
+        document.getElementById('blogHtmlTextarea').value = '';
+        if (quill) quill.root.innerHTML = '';
+        document.getElementById('blogEditorHeading').textContent = 'Publish New Article';
+        setEditorMode('visual');
+      }
+
+      async function loadBlogPosts() {
+        const { ok, data } = await api('/api/blog');
+        if (!ok) return;
+        allPosts = data.posts || [];
+        document.getElementById('badgePosts').textContent = allPosts.length;
+        const tbody = document.getElementById('blogListBody');
+        tbody.innerHTML = allPosts.length
+          ? allPosts.map((p, idx) => `
+            <tr>
+              <td><strong>${esc(p.title)}</strong><div style="font-size:11.5px;color:var(--muted);">/blog/${esc(p.slug)}</div></td>
+              <td>${esc(p.category)}</td>
+              <td><span class="status-free">${esc(p.content_format || 'html')}</span></td>
+              <td style="color:var(--muted);">${esc(String(p.created_at || '').slice(0, 10))}</td>
+              <td style="text-align:right;white-space:nowrap;">
+                <a class="btn btn-sm" href="/blog/${esc(p.slug)}" target="_blank">Open ↗</a>
+                <button class="btn btn-sm" onclick="AdminApp.editBlog(${idx})">Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="AdminApp.deleteBlog('${esc(p.id)}')">Delete</button>
+              </td>
+            </tr>`).join('')
+          : '<tr><td colspan="5" style="color:var(--muted);">No articles published yet.</td></tr>';
+      }
+
+      function editBlog(idx) {
+        const p = allPosts[idx];
+        if (!p) return;
+        document.getElementById('blogEditId').value = p.id;
+        document.getElementById('blogTitle').value = p.title || '';
+        const slugEl = document.getElementById('blogSlug');
+        slugEl.value = p.slug || '';
+        slugEl.dataset.touched = '1';
+        document.getElementById('blogCategory').value = p.category || 'Guide';
+        document.getElementById('blogFormatSelect').value = p.content_format || 'html';
+        document.getElementById('blogCover').value = p.cover_image || '/assets/studio-girl-card.jpg';
+        document.getElementById('blogAuthor').value = p.author_name || 'Editorial Team';
+        document.getElementById('blogExcerpt').value = p.excerpt || '';
+        document.getElementById('blogHtmlTextarea').value = p.content || '';
+        document.getElementById('blogEditorHeading').textContent = 'Editing: ' + p.title;
+        if (p.content_format === 'full_html' || /^\s*<!doctype html/i.test(p.content || '')) {
+          editorMode = 'html';
+          setEditorMode('html');
+        } else {
+          if (quill) quill.root.innerHTML = p.content || '';
+          editorMode = 'visual';
+          setEditorMode('visual');
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      async function saveBlogPost() {
+        const content = getCurrentBlogHtml().trim();
+        const payload = {
+          id: document.getElementById('blogEditId').value.trim(),
+          title: document.getElementById('blogTitle').value.trim(),
+          slug: document.getElementById('blogSlug').value.trim(),
+          category: document.getElementById('blogCategory').value.trim(),
+          content_format: document.getElementById('blogFormatSelect').value,
+          cover_image: document.getElementById('blogCover').value.trim(),
+          author_name: document.getElementById('blogAuthor').value.trim(),
+          excerpt: document.getElementById('blogExcerpt').value.trim(),
+          content,
+        };
+        const { ok, data } = await api('/api/blog', { method: 'POST', body: JSON.stringify(payload) });
+        if (!ok) {
+          toast(data.error || 'Could not publish article.');
+          return;
+        }
+        toast('Article live at ' + data.url);
+        resetBlogForm();
+        loadBlogPosts();
+      }
+
+      async function deleteBlog(id) {
+        if (!confirm('Delete this article permanently?')) return;
+        await api('/api/blog/' + encodeURIComponent(id), { method: 'DELETE' });
+        toast('Article deleted.');
+        loadBlogPosts();
+      }
+
+      // ==================== 3. HTML WEB TOOLS HUB ====================
+      function handleToolHtmlFile(e) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const html = String(reader.result || '');
+          document.getElementById('toolHtmlCode').value = html;
+          const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+          if (titleMatch && !document.getElementById('toolTitle').value.trim()) {
+            document.getElementById('toolTitle').value = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+            autoSlug('toolTitle', 'toolSlug');
+          } else if (!document.getElementById('toolTitle').value.trim()) {
+            document.getElementById('toolTitle').value = file.name.replace(/\.html?$/i, '');
+            autoSlug('toolTitle', 'toolSlug');
+          }
+          toast('Loaded tool file: ' + file.name);
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+      }
+
+      function resetToolForm() {
+        document.getElementById('toolEditId').value = '';
+        document.getElementById('toolTitle').value = '';
+        const slugEl = document.getElementById('toolSlug');
+        slugEl.value = '';
+        slugEl.dataset.touched = '';
+        document.getElementById('toolCategory').value = 'Utility Tool';
+        document.getElementById('toolDesc').value = '';
+        document.getElementById('toolHtmlCode').value = '';
+        document.getElementById('toolEditorHeading').textContent = 'Add / Upload HTML Tool';
+      }
+
+      async function loadTools() {
+        const { ok, data } = await api('/api/tools');
+        if (!ok) return;
+        allTools = data.tools || [];
+        document.getElementById('badgeTools').textContent = allTools.length;
+        const tbody = document.getElementById('toolsListBody');
+        tbody.innerHTML = allTools.length
+          ? allTools.map((t, idx) => `
+            <tr>
+              <td><strong>${esc(t.title)}</strong><div style="font-size:11.5px;color:var(--muted);">${esc(t.category)}</div></td>
+              <td><code>/tools/${esc(t.slug)}</code></td>
+              <td>${esc(t.views ?? 0)}</td>
+              <td style="text-align:right;white-space:nowrap;">
+                <a class="btn btn-sm" href="/tools/${esc(t.slug)}" target="_blank">Open ↗</a>
+                <button class="btn btn-sm" onclick="AdminApp.editTool(${idx})">Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="AdminApp.deleteTool('${esc(t.id)}')">Delete</button>
+              </td>
+            </tr>`).join('')
+          : '<tr><td colspan="4" style="color:var(--muted);">No HTML tools uploaded yet.</td></tr>';
+      }
+
+      function editTool(idx) {
+        const t = allTools[idx];
+        if (!t) return;
+        document.getElementById('toolEditId').value = t.id;
+        document.getElementById('toolTitle').value = t.title || '';
+        const slugEl = document.getElementById('toolSlug');
+        slugEl.value = t.slug || '';
+        slugEl.dataset.touched = '1';
+        document.getElementById('toolCategory').value = t.category || 'Utility Tool';
+        document.getElementById('toolDesc').value = t.description || '';
+        document.getElementById('toolHtmlCode').value = t.html_code || '';
+        document.getElementById('toolEditorHeading').textContent = 'Editing Tool: ' + t.title;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      async function saveTool() {
+        const payload = {
+          id: document.getElementById('toolEditId').value.trim(),
+          title: document.getElementById('toolTitle').value.trim(),
+          slug: document.getElementById('toolSlug').value.trim(),
+          category: document.getElementById('toolCategory').value.trim(),
+          description: document.getElementById('toolDesc').value.trim(),
+          html_code: document.getElementById('toolHtmlCode').value.trim(),
+        };
+        const { ok, data } = await api('/api/tools', { method: 'POST', body: JSON.stringify(payload) });
+        if (!ok) {
+          toast(data.error || 'Could not publish tool.');
+          return;
+        }
+        toast('Tool live at ' + data.url);
+        resetToolForm();
+        loadTools();
+      }
+
+      async function deleteTool(id) {
+        if (!confirm('Delete this tool permanently?')) return;
+        await api('/api/tools/' + encodeURIComponent(id), { method: 'DELETE' });
+        toast('Tool deleted.');
+        loadTools();
+      }
+
+      // ==================== 4. USERS & INBOX ====================
+      async function loadUsersAndInbox() {
+        const [uRes, mRes] = await Promise.all([api('/api/admin/users'), api('/api/admin/messages')]);
+        if (uRes.ok) {
+          allUsers = uRes.data.users || [];
+          document.getElementById('badgeUsers').textContent = allUsers.length;
+          renderUsersTable();
+        }
+        if (mRes.ok) {
+          const msgs = mRes.data.messages || [];
+          const mBody = document.getElementById('messagesTableBody');
+          mBody.innerHTML = msgs.length
+            ? msgs.map((m) => `
+              <tr>
+                <td><strong>${esc(m.name)}</strong><div style="font-size:11.5px;color:var(--cyan);">${esc(m.email)}</div></td>
+                <td><div style="font-weight:600;margin-bottom:2px;">${esc(m.subject)}</div><div style="color:#cbd5e1;font-size:12.5px;">${esc(m.message)}</div></td>
+                <td style="color:var(--muted);white-space:nowrap;">${esc(String(m.created_at || '').slice(0, 10))}</td>
+                <td style="text-align:right;white-space:nowrap;">
+                  <a class="btn btn-sm" href="mailto:${encodeURIComponent(m.email)}?subject=${encodeURIComponent('Re: ' + (m.subject || 'SingVaza Support'))}">Reply</a>
+                  <button class="btn btn-sm btn-danger" onclick="AdminApp.deleteMessage('${esc(m.id)}')">Delete</button>
+                </td>
+              </tr>`).join('')
+            : '<tr><td colspan="4" style="color:var(--muted);">Inbox is empty.</td></tr>';
+        }
+      }
+
+      function renderUsersTable() {
+        const q = (document.getElementById('userSearchInput').value || '').toLowerCase().trim();
+        const filtered = q
+          ? allUsers.filter((u) => String(u.email || '').toLowerCase().includes(q) || String(u.display_name || '').toLowerCase().includes(q))
+          : allUsers;
+        const now = Date.now();
+        const tbody = document.getElementById('usersTableBody');
+        tbody.innerHTML = filtered.length
+          ? filtered.map((u) => {
+              const isPro = (Number(u.pro_until || 0) > now) || (u.plan && u.plan !== 'free');
+              return `
+                <tr>
+                  <td><strong>${esc(u.display_name)}</strong><div style="font-size:11.5px;color:var(--muted);">${esc(u.email)}</div></td>
+                  <td><span class="status-free">${esc(u.auth_provider || 'email')}</span></td>
+                  <td><span class="${isPro ? 'status-pro' : 'status-free'}">${isPro ? 'PRO ACTIVE' : 'Free'}</span></td>
+                  <td>${esc(u.exports_this_month ?? 0)}</td>
+                  <td style="color:var(--muted);">${esc(String(u.created_at || '').slice(0, 10))}</td>
+                  <td style="text-align:right;white-space:nowrap;">
+                    <button class="btn btn-sm" onclick="AdminApp.toggleUserPro('${esc(u.id)}', ${!isPro})">${isPro ? 'Revoke Pro' : '+30d Pro'}</button>
+                    <button class="btn btn-sm btn-danger" onclick="AdminApp.deleteUser('${esc(u.id)}')">Delete</button>
+                  </td>
+                </tr>`;
+            }).join('')
+          : '<tr><td colspan="6" style="color:var(--muted);">No matching registered users.</td></tr>';
+      }
+
+      async function toggleUserPro(uid, grant) {
+        await api('/api/admin/users/pro', { method: 'POST', body: JSON.stringify({ user_id: uid, grant }) });
+        toast(grant ? 'Granted 30-day Pro pass!' : 'Reverted user to standard plan.');
+        loadUsersAndInbox();
+      }
+
+      async function deleteUser(uid) {
+        if (!confirm('Remove this user account permanently?')) return;
+        await api('/api/admin/users/' + encodeURIComponent(uid), { method: 'DELETE' });
+        toast('User removed.');
+        loadUsersAndInbox();
+      }
+
+      async function deleteMessage(id) {
+        await api('/api/admin/messages/' + encodeURIComponent(id), { method: 'DELETE' });
+        toast('Message deleted.');
+        loadUsersAndInbox();
+      }
+
+      // ==================== 5. BUSINESS & SECURITY SETTINGS ====================
+      async function loadSettings() {
+        const { ok, data } = await api('/api/admin/settings');
+        if (!ok || !data.settings) return;
+        const s = data.settings;
+        document.getElementById('setAdminUser').value = s.admin_username || 'admin';
+        document.getElementById('setSupportEmail').value = s.support_email || '';
+        document.getElementById('setWhatsapp').value = s.business_whatsapp || '';
+        document.getElementById('setWhatsappEnabled').checked = Boolean(s.whatsapp_enabled);
+        document.getElementById('setYoutube').value = s.social_youtube || '';
+        document.getElementById('setFacebook').value = s.social_facebook || '';
+        document.getElementById('setTiktok').value = s.social_tiktok || '';
+        document.getElementById('setTelegram').value = s.social_telegram || '';
+        document.getElementById('setNoticeBanner').value = s.notice_banner || '';
+        document.getElementById('setGoogleClientId').value = s.google_client_id || '';
+        document.getElementById('setAdsenseId').value = s.adsense_client_id || '';
+        document.getElementById('setDailyLimit').value = s.daily_free_limit || 2;
+      }
+
+      async function saveSettings() {
+        const payload = {
+          admin_username: document.getElementById('setAdminUser').value.trim(),
+          new_password: document.getElementById('setNewPassword').value.trim(),
+          support_email: document.getElementById('setSupportEmail').value.trim(),
+          business_whatsapp: document.getElementById('setWhatsapp').value.replace(/[^\d+]/g, '').trim(),
+          whatsapp_enabled: String(document.getElementById('setWhatsappEnabled').checked),
+          social_youtube: document.getElementById('setYoutube').value.trim(),
+          social_facebook: document.getElementById('setFacebook').value.trim(),
+          social_tiktok: document.getElementById('setTiktok').value.trim(),
+          social_telegram: document.getElementById('setTelegram').value.trim(),
+          notice_banner: document.getElementById('setNoticeBanner').value.trim(),
+          google_client_id: document.getElementById('setGoogleClientId').value.trim(),
+          adsense_client_id: document.getElementById('setAdsenseId').value.trim(),
+          daily_free_limit: document.getElementById('setDailyLimit').value,
+        };
+        const { ok, data } = await api('/api/admin/settings', { method: 'POST', body: JSON.stringify(payload) });
+        if (!ok) {
+          toast(data.error || 'Could not save settings.');
+          return;
+        }
+        document.getElementById('setNewPassword').value = '';
+        toast('All business & security settings saved live!');
+      }
+
+      document.getElementById('blogSlug').addEventListener('input', (e) => { e.target.dataset.touched = '1'; });
+      document.getElementById('toolSlug').addEventListener('input', (e) => { e.target.dataset.touched = '1'; });
+
+      if (token) {
+        enterConsole();
+      }
+
+      return {
+        login, logout, togglePwVisibility, switchTab, loadOverview,
+        autoSlug, setEditorMode, handleBlogHtmlFile, resetBlogForm, editBlog, saveBlogPost, deleteBlog,
+        handleToolHtmlFile, resetToolForm, editTool, saveTool, deleteTool,
+        loadUsersAndInbox, renderUsersTable, toggleUserPro, deleteUser, deleteMessage,
+        saveSettings,
+      };
+    })();
+  </script>
+</body>
+</html>

@@ -42,13 +42,55 @@ async function ensureSchema(db?: D1Database) {
       id TEXT PRIMARY KEY,
       slug TEXT UNIQUE NOT NULL,
       title TEXT NOT NULL,
-      category TEXT DEFAULT 'Studio Guide',
+      category TEXT DEFAULT 'Guide',
       cover_image TEXT DEFAULT '/assets/studio-girl-card.jpg',
       excerpt TEXT DEFAULT '',
       content TEXT NOT NULL,
+      content_format TEXT DEFAULT 'html',
       author_name TEXT DEFAULT 'Editor',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `ALTER TABLE blog_posts ADD COLUMN content_format TEXT DEFAULT 'html'`,
+    `CREATE TABLE IF NOT EXISTS html_tools (
+      id TEXT PRIMARY KEY,
+      slug TEXT UNIQUE NOT NULL,
+      title TEXT NOT NULL,
+      category TEXT DEFAULT 'Web Tool',
+      icon TEXT DEFAULT '⚡',
+      description TEXT DEFAULT '',
+      html_code TEXT NOT NULL,
+      views INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS site_settings (
+      k TEXT PRIMARY KEY,
+      v TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS admin_sessions (
+      token TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS analytics_daily (
+      day TEXT PRIMARY KEY,
+      views INTEGER DEFAULT 0,
+      uniques INTEGER DEFAULT 0
+    )`,
+    `CREATE TABLE IF NOT EXISTS analytics_uniques (
+      day_hash TEXT PRIMARY KEY,
+      day TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS analytics_countries (
+      country TEXT PRIMARY KEY,
+      views INTEGER DEFAULT 0
+    )`,
+    `CREATE TABLE IF NOT EXISTS analytics_pages (
+      path TEXT PRIMARY KEY,
+      views INTEGER DEFAULT 0
     )`,
   ];
   for (const sql of statements) {
@@ -216,11 +258,64 @@ async function sha256Hex(input: string): Promise<string> {
 }
 
 async function isValidBlogAdmin(request: Request, env: Env): Promise<boolean> {
+  const auth = String(request.headers.get('Authorization') || '').trim();
+  if (auth.startsWith('Bearer ') && env.DB) {
+    const tok = auth.slice(7).trim();
+    if (tok) {
+      try {
+        const row: any = await env.DB.prepare('SELECT token, expires_at FROM admin_sessions WHERE token = ?').bind(tok).first();
+        if (row && Number(row.expires_at || 0) > Date.now()) return true;
+      } catch (_) {}
+    }
+  }
   const code = String(request.headers.get('X-Admin-Code') || '').trim();
   if (!code) return false;
   if (env.BLOG_ADMIN_CODE && code === env.BLOG_ADMIN_CODE) return true;
   const hashed = await sha256Hex('admin:' + code);
   return hashed === DEFAULT_ADMIN_SHA256;
+}
+
+async function getSettingsMap(db?: D1Database): Promise<Record<string, string>> {
+  const map: Record<string, string> = {};
+  if (!db) return map;
+  try {
+    const rows = await db.prepare('SELECT k, v FROM site_settings').all();
+    for (const r of (rows.results || []) as any[]) {
+      if (r?.k) map[String(r.k)] = String(r.v ?? '');
+    }
+  } catch (_) {}
+  return map;
+}
+
+async function recordEdgeVisit(request: Request, db?: D1Database, rawPath = '/') {
+  if (!db) return;
+  try {
+    const cleanP = (String(rawPath || '/').split('?')[0] || '/').slice(0, 120);
+    if (cleanP.startsWith('/admin') || cleanP.startsWith('/api')) return;
+    const day = new Date().toISOString().slice(0, 10);
+    const ip = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || 'anon';
+    const ua = (request.headers.get('User-Agent') || '').slice(0, 80);
+    const country = (request.headers.get('CF-IPCountry') || (request as any).cf?.country || 'XX').toUpperCase().slice(0, 4);
+    const visitorHash = (await sha256Hex(`${day}:${ip}:${ua}`)).slice(0, 20);
+
+    const ins = await db.prepare('INSERT OR IGNORE INTO analytics_uniques (day_hash, day) VALUES (?, ?)').bind(visitorHash, day).run();
+    const isNewUnique = (ins.meta?.changes || 0) > 0 ? 1 : 0;
+
+    await db.prepare(
+      `INSERT INTO analytics_daily (day, views, uniques) VALUES (?, 1, ?)
+       ON CONFLICT(day) DO UPDATE SET views = views + 1, uniques = uniques + excluded.uniques`
+    ).bind(day, isNewUnique).run();
+
+    await db.prepare(
+      `INSERT INTO analytics_countries (country, views) VALUES (?, 1)
+       ON CONFLICT(country) DO UPDATE SET views = views + 1`
+    ).bind(country).run();
+
+    await db.prepare(
+      `INSERT INTO analytics_pages (path, views) VALUES (?, 1)
+       ON CONFLICT(path) DO UPDATE SET views = views + 1`
+    ).bind(cleanP).run();
+  } catch (_) {}
 }
 
 async function resolveUser(request: Request, env: Env) {
@@ -372,7 +467,7 @@ export default {
         });
       }
 
-      // Dynamic Sitemap XML (Handles GET + HEAD + mobile keyboard leading-space URLs cleanly for Googlebot!)
+      // Dynamic Sitemap XML (Handles GET + HEAD + includes published Blog Posts & HTML Web Tools automatically!)
       if (cleanPath === '/sitemap.xml' && (request.method === 'GET' || request.method === 'HEAD')) {
         await ensureSchema(env.DB);
         const staticPaths = [
@@ -389,8 +484,16 @@ export default {
           try {
             const rows = await env.DB.prepare('SELECT slug, updated_at FROM blog_posts ORDER BY updated_at DESC LIMIT 200').all();
             for (const r of (rows.results || []) as any[]) {
-              const d = String(r.updated_at || '').slice(0, 10) || '2026-10-22';
+              const d = String(r.updated_at || '').slice(0, 10) || '2026-10-23';
               postUrls += `\n  <url>\n    <loc>${escapeHtml(url.origin)}/blog/${escapeHtml(r.slug)}</loc>\n    <lastmod>${d}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.85</priority>\n  </url>`;
+            }
+            const tRows = await env.DB.prepare('SELECT slug, updated_at FROM html_tools ORDER BY updated_at DESC LIMIT 200').all();
+            if ((tRows.results || []).length > 0) {
+              postUrls += `\n  <url>\n    <loc>${escapeHtml(url.origin)}/tools</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.9</priority>\n  </url>`;
+              for (const t of (tRows.results || []) as any[]) {
+                const d = String(t.updated_at || '').slice(0, 10) || '2026-10-23';
+                postUrls += `\n  <url>\n    <loc>${escapeHtml(url.origin)}/tools/${escapeHtml(t.slug)}</loc>\n    <lastmod>${d}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.85</priority>\n  </url>`;
+              }
             }
           } catch (_) {}
         }
@@ -406,9 +509,67 @@ export default {
         });
       }
 
-      // Dynamic SEO Server-Side Rendered Blog Index & Single Post Pages (/blog & /blog/:slug)
+      // Dynamic HTML Web Tools Hub & Individual Standalone HTML Tools (/tools & /tools/:slug)
+      if ((cleanPath === '/tools' || cleanPath === '/tools/' || cleanPath.startsWith('/tools/')) && (request.method === 'GET' || request.method === 'HEAD')) {
+        await ensureSchema(env.DB);
+        await recordEdgeVisit(request, env.DB, cleanPath);
+        const toolSlug = cleanPath.replace(/^\/tools\/?/, '').replace(/\/$/, '').trim();
+        if (!toolSlug) {
+          const rows = env.DB
+            ? await env.DB.prepare('SELECT id, slug, title, category, icon, description, views, created_at FROM html_tools ORDER BY created_at DESC LIMIT 200').all()
+            : { results: [] };
+          const list = (rows.results || []) as any[];
+          const bodyHtml = `
+            <h1>Online Tools</h1>
+            <p style="color:var(--muted);margin-bottom:24px;">Fast browser-based utilities and interactive web tools.</p>
+            ${list.length === 0
+              ? `<div class="card"><p style="margin:0;">New tools are coming soon. <a href="/" style="color:var(--amber);">Back to Home →</a></p></div>`
+              : `<div class="grid">${list.map((t) => `
+                <a class="post-card" href="/tools/${escapeHtml(t.slug)}" style="padding:20px;">
+                  <div style="font-size:28px;margin-bottom:10px;">${escapeHtml(t.icon || '⚡')}</div>
+                  <div class="tag">${escapeHtml(t.category || 'Web Tool')}</div>
+                  <h2 style="font-size:17.5px;color:var(--text);margin:6px 0 8px;">${escapeHtml(t.title)}</h2>
+                  <p style="font-size:13.5px;color:var(--muted);margin:0;">${escapeHtml(t.description || '')}</p>
+                </a>`).join('')}</div>`
+            }`;
+          return new Response(
+            request.method === 'HEAD' ? null : renderBlogShellHtml({
+              origin: url.origin,
+              title: 'Online Tools — SingVaza',
+              description: 'Fast browser utilities and interactive tools on SingVaza.',
+              canonicalPath: '/tools',
+              bodyHtml,
+            }),
+            { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          );
+        }
+
+        const tool: any = env.DB
+          ? await env.DB.prepare('SELECT * FROM html_tools WHERE slug = ?').bind(toolSlug).first()
+          : null;
+        if (!tool) {
+          return new Response(
+            renderBlogShellHtml({
+              origin: url.origin,
+              title: 'Tool Not Found — SingVaza',
+              description: 'Tool not found.',
+              canonicalPath: '/tools',
+              bodyHtml: `<div class="card"><h1>Tool Not Found</h1><p><a class="btn" href="/tools">← View All Tools</a></p></div>`,
+            }),
+            { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          );
+        }
+        try { await env.DB?.prepare('UPDATE html_tools SET views = views + 1 WHERE id = ?').bind(tool.id).run(); } catch (_) {}
+        return new Response(request.method === 'HEAD' ? null : String(tool.html_code || ''), {
+          status: 200,
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        });
+      }
+
+      // Dynamic SEO Server-Side Rendered Blog Index & Single Post Pages (/blog & /blog/:slug — supports Plain, Rich HTML, & Full Standalone HTML!)
       if ((url.pathname === '/blog' || url.pathname === '/blog/' || url.pathname.startsWith('/blog/')) && (request.method === 'GET' || request.method === 'HEAD')) {
         await ensureSchema(env.DB);
+        await recordEdgeVisit(request, env.DB, cleanPath);
         const slugPart = url.pathname.replace(/^\/blog\/?/, '').replace(/\/$/, '').trim();
         if (!slugPart) {
           const rows = env.DB
@@ -416,25 +577,25 @@ export default {
             : { results: [] };
           const list = (rows.results || []) as any[];
           const bodyHtml = `
-            <h1>SingVaza Blog</h1>
-            <p style="color:var(--muted);margin-bottom:24px;">Original vocal recording tutorials, microphone reviews, singing techniques, and home audio guides.</p>
+            <h1>SingVaza Blog & Articles</h1>
+            <p style="color:var(--muted);margin-bottom:24px;">Latest tutorials, guides, technology insights, and resources.</p>
             ${list.length === 0
-              ? `<div class="card"><p style="margin:0;">New articles are coming soon. <a href="/" style="color:var(--amber);">Open SingVaza →</a></p></div>`
+              ? `<div class="card"><p style="margin:0;">New articles are coming soon. <a href="/" style="color:var(--amber);">Back to Home →</a></p></div>`
               : `<div class="grid">${list.map((p) => `
                 <a class="post-card" href="/blog/${escapeHtml(p.slug)}">
                   <img src="${escapeHtml(p.cover_image || '/assets/studio-girl-card.jpg')}" alt="${escapeHtml(p.title)}" />
                   <div class="post-body">
-                    <div class="tag">${escapeHtml(p.category || 'Guide')}</div>
+                    <div class="tag">${escapeHtml(p.category || 'Article')}</div>
                     <h2 style="font-size:17px;color:var(--text);margin:6px 0 8px;">${escapeHtml(p.title)}</h2>
                     <p style="font-size:13.5px;color:var(--muted);margin:0;">${escapeHtml(p.excerpt || '')}</p>
                   </div>
                 </a>`).join('')}</div>`
             }`;
           return new Response(
-            renderBlogShellHtml({
+            request.method === 'HEAD' ? null : renderBlogShellHtml({
               origin: url.origin,
-              title: 'Blog — SingVaza',
-              description: 'Original articles on home vocal recording, microphone setup, singing technique, and audio mixing.',
+              title: 'Blog & Articles — SingVaza',
+              description: 'Latest tutorials, guides, technology articles, and resources on SingVaza.',
               canonicalPath: '/blog',
               bodyHtml,
             }),
@@ -452,34 +613,323 @@ export default {
               title: 'Article Not Found — SingVaza',
               description: 'Article not found.',
               canonicalPath: '/blog',
-              bodyHtml: `<div class="card"><h1>Article Not Found</h1><p><a class="btn" href="/blog">← View All Blog Posts</a></p></div>`,
+              bodyHtml: `<div class="card"><h1>Article Not Found</h1><p><a class="btn" href="/blog">← View All Articles</a></p></div>`,
             }),
             { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
           );
         }
 
+        const rawContent = String(post.content || '');
+        const fmt = String(post.content_format || '').toLowerCase();
+        const isStandaloneDoc = fmt === 'full_html' || /^\s*<!doctype html/i.test(rawContent) || /^\s*<html[\s>]/i.test(rawContent);
+
+        if (isStandaloneDoc) {
+          return new Response(request.method === 'HEAD' ? null : rawContent, {
+            status: 200,
+            headers: { 'Content-Type': 'text/html; charset=utf-8' },
+          });
+        }
+
+        const isRichHtml = fmt === 'html' || /<(p|div|h1|h2|h3|h4|ul|ol|table|section|article|style|img|pre|blockquote)\b/i.test(rawContent);
+        const articleInner = isRichHtml ? rawContent : renderPlainBodyToHtml(rawContent);
+
         const bodyHtml = `
           <article class="card">
-            <p style="margin-bottom:14px;"><a href="/blog" style="color:var(--cyan);text-decoration:none;font-size:13.5px;">← Back to All Posts</a></p>
-            ${post.cover_image ? `<img src="${escapeHtml(post.cover_image)}" alt="${escapeHtml(post.title)}" style="width:100%;max-height:340px;object-fit:cover;border-radius:12px;margin-bottom:18px;" />` : ''}
-            <div class="tag">${escapeHtml(post.category || 'Studio Guide')} • By ${escapeHtml(post.author_name || 'Editor')} • ${escapeHtml(String(post.created_at || '').slice(0, 10))}</div>
+            <p style="margin-bottom:14px;"><a href="/blog" style="color:var(--cyan);text-decoration:none;font-size:13.5px;">← Back to All Articles</a></p>
+            ${post.cover_image ? `<img src="${escapeHtml(post.cover_image)}" alt="${escapeHtml(post.title)}" style="width:100%;max-height:360px;object-fit:cover;border-radius:12px;margin-bottom:18px;" />` : ''}
+            <div class="tag">${escapeHtml(post.category || 'Article')} • By ${escapeHtml(post.author_name || 'Editor')} • ${escapeHtml(String(post.created_at || '').slice(0, 10))}</div>
             <h1 style="margin-top:8px;">${escapeHtml(post.title)}</h1>
-            <div style="margin-top:16px;">${renderPlainBodyToHtml(post.content)}</div>
-            <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);">
-              <a class="btn" href="/">Open Vocal Studio →</a>
+            <div class="rich-article-body" style="margin-top:16px;line-height:1.78;">${articleInner}</div>
+            <div style="margin-top:26px;padding-top:16px;border-top:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;">
+              <a class="btn" href="/">← Back to SingVaza</a>
             </div>
           </article>
         `;
         return new Response(
-          renderBlogShellHtml({
+          request.method === 'HEAD' ? null : renderBlogShellHtml({
             origin: url.origin,
-            title: `${post.title} — SingVaza Blog`,
-            description: post.excerpt || String(post.content || '').slice(0, 155),
+            title: `${post.title} — SingVaza`,
+            description: post.excerpt || rawContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 155),
             canonicalPath: `/blog/${post.slug}`,
             bodyHtml,
           }),
           { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
         );
+      }
+
+      // Public Analytics Beacon & Dynamic Site Config
+      if (url.pathname === '/api/ping-visit' && request.method === 'POST') {
+        await ensureSchema(env.DB);
+        const body: any = await request.json().catch(() => ({}));
+        await recordEdgeVisit(request, env.DB, String(body?.path || '/'));
+        return json({ ok: true });
+      }
+
+      if (url.pathname === '/api/public-config' && request.method === 'GET') {
+        await ensureSchema(env.DB);
+        const s = await getSettingsMap(env.DB);
+        let toolsCount = 0;
+        if (env.DB) {
+          try {
+            const tc: any = await env.DB.prepare('SELECT COUNT(*) AS c FROM html_tools').first();
+            toolsCount = Number(tc?.c || 0);
+          } catch (_) {}
+        }
+        return json({
+          support_email: s.support_email || '',
+          business_whatsapp: s.business_whatsapp || '',
+          whatsapp_enabled: s.whatsapp_enabled === 'true',
+          social_youtube: s.social_youtube || '',
+          social_facebook: s.social_facebook || '',
+          social_tiktok: s.social_tiktok || '',
+          social_telegram: s.social_telegram || '',
+          google_client_id: s.google_client_id || env.GOOGLE_CLIENT_ID || '',
+          adsense_client_id: s.adsense_client_id || '',
+          notice_banner: s.notice_banner || '',
+          tools_count: toolsCount,
+        });
+      }
+
+      // ==================== EXECUTIVE ADMIN PANEL API (/api/admin/* & /api/tools) ====================
+      if (url.pathname === '/api/admin/login' && request.method === 'POST') {
+        await ensureSchema(env.DB);
+        if (!env.DB) return json({ error: 'Database unavailable' }, 500);
+        const body: any = await request.json().catch(() => ({}));
+        const username = String(body.username || '').trim();
+        const password = String(body.password || '').trim();
+        if (!username || !password) return json({ error: 'Enter both username and password.' }, 400);
+
+        const s = await getSettingsMap(env.DB);
+        const expectedUser = (s.admin_username || 'admin').trim();
+        const defaultPassHash = await sha256Hex('admin_pw:SingVaza@2026');
+        const expectedHash = s.admin_pass_sha256 || defaultPassHash;
+        const givenHash = await sha256Hex('admin_pw:' + password);
+        const legacyHash = await sha256Hex('admin:' + password);
+
+        const userMatch = username.toLowerCase() === expectedUser.toLowerCase();
+        const passMatch = givenHash === expectedHash || (!s.admin_pass_sha256 && legacyHash === DEFAULT_ADMIN_SHA256);
+        if (!userMatch || !passMatch) {
+          return json({ error: 'Invalid admin username or password.' }, 401);
+        }
+
+        const token = crypto.randomUUID() + crypto.randomUUID().replace(/-/g, '');
+        const expiresAt = Date.now() + THIRTY_DAYS_MS;
+        await env.DB.prepare('INSERT INTO admin_sessions (token, username, expires_at) VALUES (?, ?, ?)').bind(token, expectedUser, expiresAt).run();
+        return json({ ok: true, token, username: expectedUser });
+      }
+
+      if (url.pathname === '/api/admin/logout' && request.method === 'POST') {
+        await ensureSchema(env.DB);
+        const auth = String(request.headers.get('Authorization') || '');
+        if (auth.startsWith('Bearer ') && env.DB) {
+          await env.DB.prepare('DELETE FROM admin_sessions WHERE token = ?').bind(auth.slice(7).trim()).run();
+        }
+        return json({ ok: true });
+      }
+
+      if (url.pathname === '/api/admin/overview' && request.method === 'GET') {
+        await ensureSchema(env.DB);
+        if (!(await isValidBlogAdmin(request, env))) return json({ error: 'Unauthorized' }, 401);
+        if (!env.DB) return json({ error: 'Database unavailable' }, 500);
+
+        const today = new Date().toISOString().slice(0, 10);
+        const [uCount, proCount, exportsSum, bCount, tCount, mCount, dailyRows, countryRows, pageRows, recentUsers]: any = await Promise.all([
+          env.DB.prepare('SELECT COUNT(*) AS c FROM users').first(),
+          env.DB.prepare('SELECT COUNT(*) AS c FROM users WHERE pro_until > ? OR plan != ?').bind(Date.now(), 'free').first(),
+          env.DB.prepare('SELECT COALESCE(SUM(exports_this_month), 0) AS s FROM users').first(),
+          env.DB.prepare('SELECT COUNT(*) AS c FROM blog_posts').first(),
+          env.DB.prepare('SELECT COUNT(*) AS c FROM html_tools').first(),
+          env.DB.prepare('SELECT COUNT(*) AS c FROM contact_messages').first(),
+          env.DB.prepare('SELECT day, views, uniques FROM analytics_daily ORDER BY day DESC LIMIT 30').all(),
+          env.DB.prepare('SELECT country, views FROM analytics_countries ORDER BY views DESC LIMIT 12').all(),
+          env.DB.prepare('SELECT path, views FROM analytics_pages ORDER BY views DESC LIMIT 12').all(),
+          env.DB.prepare('SELECT id, email, display_name, plan, pro_until, exports_this_month, auth_provider, created_at FROM users ORDER BY created_at DESC LIMIT 8').all(),
+        ]);
+
+        const dayMap = new Map<string, { views: number; uniques: number }>();
+        let views30d = 0, uniques30d = 0;
+        for (const r of (dailyRows.results || []) as any[]) {
+          dayMap.set(String(r.day), { views: Number(r.views || 0), uniques: Number(r.uniques || 0) });
+          views30d += Number(r.views || 0);
+          uniques30d += Number(r.uniques || 0);
+        }
+
+        const chart14d: Array<{ day: string; views: number; uniques: number }> = [];
+        for (let i = 13; i >= 0; i--) {
+          const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+          const item = dayMap.get(d) || { views: 0, uniques: 0 };
+          chart14d.push({ day: d, views: item.views, uniques: item.uniques });
+        }
+        const todayStats = dayMap.get(today) || { views: 0, uniques: 0 };
+
+        return json({
+          kpis: {
+            todayViews: todayStats.views,
+            todayUniques: todayStats.uniques,
+            views30d,
+            uniques30d,
+            totalUsers: Number(uCount?.c || 0),
+            proUsers: Number(proCount?.c || 0),
+            totalExports: Number(exportsSum?.s || 0),
+            blogPosts: Number(bCount?.c || 0),
+            htmlTools: Number(tCount?.c || 0),
+            messages: Number(mCount?.c || 0),
+          },
+          chart14d,
+          countries: countryRows.results || [],
+          topPages: pageRows.results || [],
+          recentUsers: recentUsers.results || [],
+        });
+      }
+
+      if (url.pathname === '/api/admin/users' && request.method === 'GET') {
+        await ensureSchema(env.DB);
+        if (!(await isValidBlogAdmin(request, env))) return json({ error: 'Unauthorized' }, 401);
+        const rows = await env.DB.prepare(
+          'SELECT id, email, display_name, plan, pro_until, daily_date, daily_exports, exports_this_month, auth_provider, created_at FROM users ORDER BY created_at DESC LIMIT 300'
+        ).all();
+        return json({ users: rows.results || [] });
+      }
+
+      if (url.pathname === '/api/admin/users/pro' && request.method === 'POST') {
+        await ensureSchema(env.DB);
+        if (!(await isValidBlogAdmin(request, env))) return json({ error: 'Unauthorized' }, 401);
+        const body: any = await request.json();
+        const uid = String(body.user_id || '').trim();
+        const grant = Boolean(body.grant);
+        const proUntil = grant ? Date.now() + THIRTY_DAYS_MS : 0;
+        const plan = grant ? 'pro_global' : 'free';
+        await env.DB.prepare('UPDATE users SET plan = ?, pro_until = ? WHERE id = ?').bind(plan, proUntil, uid).run();
+        return json({ ok: true });
+      }
+
+      if (url.pathname.startsWith('/api/admin/users/') && request.method === 'DELETE') {
+        await ensureSchema(env.DB);
+        if (!(await isValidBlogAdmin(request, env))) return json({ error: 'Unauthorized' }, 401);
+        const uid = url.pathname.split('/').pop();
+        if (uid) {
+          await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(uid).run();
+          await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(uid).run().catch(() => {});
+        }
+        return json({ ok: true });
+      }
+
+      if (url.pathname === '/api/admin/messages' && request.method === 'GET') {
+        await ensureSchema(env.DB);
+        if (!(await isValidBlogAdmin(request, env))) return json({ error: 'Unauthorized' }, 401);
+        const rows = await env.DB.prepare('SELECT * FROM contact_messages ORDER BY created_at DESC LIMIT 200').all();
+        return json({ messages: rows.results || [] });
+      }
+
+      if (url.pathname.startsWith('/api/admin/messages/') && request.method === 'DELETE') {
+        await ensureSchema(env.DB);
+        if (!(await isValidBlogAdmin(request, env))) return json({ error: 'Unauthorized' }, 401);
+        const mid = url.pathname.split('/').pop();
+        if (mid) await env.DB.prepare('DELETE FROM contact_messages WHERE id = ?').bind(mid).run();
+        return json({ ok: true });
+      }
+
+      if (url.pathname === '/api/admin/settings' && request.method === 'GET') {
+        await ensureSchema(env.DB);
+        if (!(await isValidBlogAdmin(request, env))) return json({ error: 'Unauthorized' }, 401);
+        const s = await getSettingsMap(env.DB);
+        return json({
+          settings: {
+            admin_username: s.admin_username || 'admin',
+            support_email: s.support_email || '',
+            business_whatsapp: s.business_whatsapp || '',
+            whatsapp_enabled: s.whatsapp_enabled === 'true',
+            social_youtube: s.social_youtube || '',
+            social_facebook: s.social_facebook || '',
+            social_tiktok: s.social_tiktok || '',
+            social_telegram: s.social_telegram || '',
+            google_client_id: s.google_client_id || env.GOOGLE_CLIENT_ID || '',
+            adsense_client_id: s.adsense_client_id || '',
+            notice_banner: s.notice_banner || '',
+            daily_free_limit: Number(s.daily_free_limit || DAILY_FREE_LIMIT),
+          },
+        });
+      }
+
+      if (url.pathname === '/api/admin/settings' && request.method === 'POST') {
+        await ensureSchema(env.DB);
+        if (!(await isValidBlogAdmin(request, env))) return json({ error: 'Unauthorized' }, 401);
+        const body: any = await request.json();
+        const allowedKeys = [
+          'admin_username', 'support_email', 'business_whatsapp', 'whatsapp_enabled',
+          'social_youtube', 'social_facebook', 'social_tiktok', 'social_telegram',
+          'google_client_id', 'adsense_client_id', 'notice_banner', 'daily_free_limit',
+        ];
+        for (const k of allowedKeys) {
+          if (body[k] !== undefined) {
+            const val = String(body[k]).trim().slice(0, 500);
+            if (k === 'admin_username' && val.length < 2) continue;
+            await env.DB.prepare(
+              `INSERT INTO site_settings (k, v, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(k) DO UPDATE SET v = excluded.v, updated_at = CURRENT_TIMESTAMP`
+            ).bind(k, val).run();
+          }
+        }
+        if (body.new_password && String(body.new_password).trim().length >= 5) {
+          const pwHash = await sha256Hex('admin_pw:' + String(body.new_password).trim());
+          await env.DB.prepare(
+            `INSERT INTO site_settings (k, v, updated_at) VALUES ('admin_pass_sha256', ?, CURRENT_TIMESTAMP)
+             ON CONFLICT(k) DO UPDATE SET v = excluded.v, updated_at = CURRENT_TIMESTAMP`
+          ).bind(pwHash).run();
+        }
+        return json({ ok: true });
+      }
+
+      // HTML Web Tools CRUD API (/api/tools)
+      if (url.pathname === '/api/tools' && request.method === 'GET') {
+        await ensureSchema(env.DB);
+        if (!env.DB) return json({ tools: [] });
+        const rows = await env.DB.prepare('SELECT * FROM html_tools ORDER BY created_at DESC LIMIT 200').all();
+        return json({ tools: rows.results || [] });
+      }
+
+      if (url.pathname === '/api/tools' && request.method === 'POST') {
+        await ensureSchema(env.DB);
+        if (!(await isValidBlogAdmin(request, env))) return json({ error: 'Unauthorized' }, 401);
+        if (!env.DB) return json({ error: 'Database unavailable' }, 500);
+        const body: any = await request.json();
+        const title = String(body.title || '').trim();
+        const htmlCode = String(body.html_code || '').trim();
+        if (title.length < 2 || htmlCode.length < 15) {
+          return json({ error: 'Please provide a tool title and valid HTML code.' }, 400);
+        }
+        const rawSlug = String(body.slug || title)
+          .toLowerCase()
+          .replace(/[^a-z0-9\s-]/g, '')
+          .trim()
+          .replace(/\s+/g, '-')
+          .slice(0, 80) || ('tool-' + Date.now());
+        const id = String(body.id || '').trim() || crypto.randomUUID();
+        const category = String(body.category || 'Web Tool').trim().slice(0, 50);
+        const icon = String(body.icon || '⚡').trim().slice(0, 8);
+        const description = String(body.description || '').trim().slice(0, 260);
+
+        await env.DB.prepare(
+          `INSERT INTO html_tools (id, slug, title, category, icon, description, html_code, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+           ON CONFLICT(id) DO UPDATE SET
+             slug = excluded.slug,
+             title = excluded.title,
+             category = excluded.category,
+             icon = excluded.icon,
+             description = excluded.description,
+             html_code = excluded.html_code,
+             updated_at = CURRENT_TIMESTAMP`
+        ).bind(id, rawSlug, title, category, icon, description, htmlCode).run();
+        return json({ ok: true, id, slug: rawSlug, url: `/tools/${rawSlug}` });
+      }
+
+      if (url.pathname.startsWith('/api/tools/') && request.method === 'DELETE') {
+        await ensureSchema(env.DB);
+        if (!(await isValidBlogAdmin(request, env))) return json({ error: 'Unauthorized' }, 401);
+        const tid = url.pathname.split('/').pop();
+        if (env.DB && tid) await env.DB.prepare('DELETE FROM html_tools WHERE id = ?').bind(tid).run();
+        return json({ ok: true });
       }
 
       // Blog JSON API & Admin CMS Endpoints
@@ -504,7 +954,7 @@ export default {
         const body: any = await request.json();
         const title = String(body.title || '').trim();
         const content = String(body.content || '').trim();
-        if (title.length < 3 || content.length < 20) {
+        if (title.length < 2 || content.length < 15) {
           return json({ error: 'Please enter a post title and full article content.' }, 400);
         }
         const rawSlug = String(body.slug || title)
@@ -514,14 +964,16 @@ export default {
           .replace(/\s+/g, '-')
           .slice(0, 80) || ('post-' + Date.now());
         const id = String(body.id || '').trim() || crypto.randomUUID();
-        const category = String(body.category || 'Vocal Guide').trim().slice(0, 50);
-        const coverImage = String(body.cover_image || '/assets/studio-girl-card.jpg').trim().slice(0, 400);
-        const excerpt = String(body.excerpt || content.slice(0, 150) + '...').trim().slice(0, 260);
+        const category = String(body.category || 'Article').trim().slice(0, 50);
+        const coverImage = String(body.cover_image || '/assets/studio-girl-card.jpg').trim().slice(0, 500);
+        const plainStrip = content.replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        const excerpt = String(body.excerpt || (plainStrip.slice(0, 150) + (plainStrip.length > 150 ? '...' : ''))).trim().slice(0, 260);
         const authorName = String(body.author_name || 'Editor').trim().slice(0, 80);
+        const contentFormat = String(body.content_format || 'html').trim().slice(0, 20);
 
         await env.DB.prepare(
-          `INSERT INTO blog_posts (id, slug, title, category, cover_image, excerpt, content, author_name, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `INSERT INTO blog_posts (id, slug, title, category, cover_image, excerpt, content, content_format, author_name, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
            ON CONFLICT(id) DO UPDATE SET
              slug = excluded.slug,
              title = excluded.title,
@@ -529,9 +981,10 @@ export default {
              cover_image = excluded.cover_image,
              excerpt = excluded.excerpt,
              content = excluded.content,
+             content_format = excluded.content_format,
              author_name = excluded.author_name,
              updated_at = CURRENT_TIMESTAMP`
-        ).bind(id, rawSlug, title, category, coverImage, excerpt, content, authorName).run();
+        ).bind(id, rawSlug, title, category, coverImage, excerpt, content, contentFormat, authorName).run();
 
         return json({ ok: true, id, slug: rawSlug, url: `/blog/${rawSlug}` });
       }
@@ -943,12 +1396,14 @@ export default {
         if (!credential) return json({ error: 'Missing Google credential token.' }, 400);
         if (!env.DB) return json({ error: 'Database unavailable' }, 500);
 
+        const sMap = await getSettingsMap(env.DB);
+        const activeGoogleClientId = sMap.google_client_id || env.GOOGLE_CLIENT_ID || '';
         const verifyRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
         if (!verifyRes.ok) {
           return json({ error: 'Invalid or expired Google sign-in token.' }, 401);
         }
         const gUser: any = await verifyRes.json();
-        if (env.GOOGLE_CLIENT_ID && gUser.aud !== env.GOOGLE_CLIENT_ID) {
+        if (activeGoogleClientId && gUser.aud !== activeGoogleClientId) {
           return json({ error: 'Google Client ID mismatch.' }, 401);
         }
         const email = String(gUser.email || '').trim().toLowerCase();
@@ -1086,6 +1541,10 @@ export default {
             googleClientId: env.GOOGLE_CLIENT_ID || '',
           });
         }
+        await ensureSchema(env.DB);
+        const sMap = await getSettingsMap(env.DB);
+        const activeGoogleClientId = sMap.google_client_id || env.GOOGLE_CLIENT_ID || '';
+        const customDailyLimit = Math.max(1, Number(sMap.daily_free_limit || DAILY_FREE_LIMIT));
         const { user, authenticated } = await resolveUser(request, env);
         const projects = await env.DB.prepare(
           'SELECT * FROM projects WHERE user_id = ? ORDER BY updated_at DESC LIMIT 25'
@@ -1094,14 +1553,17 @@ export default {
           'SELECT * FROM custom_presets WHERE is_public = 1 OR user_id = ? ORDER BY created_at DESC LIMIT 20'
         ).bind(user.id).all();
 
+        const quotaObj = buildQuotaSummary(user, authenticated, tzInfo);
+        quotaObj.dailyLimit = customDailyLimit;
+
         return json({
           user,
           projects: projects.results,
           presets: presets.results,
           d1Connected: true,
           authenticated,
-          quota: buildQuotaSummary(user, authenticated, tzInfo),
-          googleClientId: env.GOOGLE_CLIENT_ID || '',
+          quota: quotaObj,
+          googleClientId: activeGoogleClientId,
         });
       }
 

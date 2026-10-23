@@ -7,7 +7,16 @@ export const onRequest: PagesFunction<any> = async (context) => {
     cleanPath = decodeURIComponent(url.pathname).replace(/^\/\s+/, '/').replace(/\s+$/, '');
   } catch (_) {}
 
-  if (cleanPath === '/sitemap.xml' || cleanPath === '/google8dc68fc0e32ac33e.html') {
+  if (
+    cleanPath === '/sitemap.xml' ||
+    cleanPath === '/google8dc68fc0e32ac33e.html' ||
+    cleanPath === '/blog' ||
+    cleanPath === '/blog/' ||
+    cleanPath.startsWith('/blog/') ||
+    cleanPath === '/tools' ||
+    cleanPath === '/tools/' ||
+    cleanPath.startsWith('/tools/')
+  ) {
     return worker.fetch(context.request, context.env);
   }
   return context.next();

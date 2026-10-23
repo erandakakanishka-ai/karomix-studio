@@ -2729,7 +2729,7 @@ const App = (() => {
         <div class="card" style="grid-column:1 / -1;text-align:center;padding:34px 20px;">
           <div style="font-size:16px;font-weight:700;margin-bottom:6px;">No Articles Published Yet</div>
           <p style="font-size:13.5px;color:var(--text-secondary);max-width:440px;margin:0 auto;">
-            Original singing guides, microphone tips, and studio stories will appear here as soon as they are published.
+            New guides, tutorials, and helpful articles will appear here as soon as they are published.
           </p>
         </div>
       `;
@@ -2741,7 +2741,7 @@ const App = (() => {
         <img src="${escHtml(b.cover_image || '/assets/studio-girl-card.jpg')}" alt="${escHtml(b.title)}" loading="lazy" />
         <div class="blog-card-body">
           <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:6px;">
-            <span style="color:var(--cyan);font-weight:800;text-transform:uppercase;letter-spacing:0.06em;">${escHtml(b.category || 'Vocal Guide')}</span>
+            <span style="color:var(--cyan);font-weight:800;text-transform:uppercase;letter-spacing:0.06em;">${escHtml(b.category || 'Guide')}</span>
             <span style="color:var(--text-muted);">${escHtml(String(b.created_at || '').slice(0, 10))}</span>
           </div>
           <h3 style="font-size:16px;line-height:1.35;margin-bottom:8px;">${escHtml(b.title)}</h3>
@@ -2755,6 +2755,10 @@ const App = (() => {
   function openBlogPost(postId) {
     const post = liveBlogPosts.find((b) => String(b.id) === String(postId));
     if (!post) return;
+    if (post.content_format === 'full_html') {
+      window.location.href = `/blog/${encodeURIComponent(post.slug)}`;
+      return;
+    }
     const grid = document.getElementById('blogPostsGrid');
     const reader = document.getElementById('blogReaderWrap');
     const content = document.getElementById('blogReaderContent');
@@ -2762,16 +2766,20 @@ const App = (() => {
     grid.style.display = 'none';
     reader.style.display = 'block';
 
+    const rawBody = String(post.content || '');
+    const isRichHtml = post.content_format === 'html' || /<(p|div|h1|h2|h3|h4|ul|ol|table|section|article|img|blockquote|pre)[\s>]/i.test(rawBody);
+    const bodyHtml = isRichHtml ? rawBody : formatArticleBodyHtml(rawBody);
+
     content.innerHTML = `
       ${post.cover_image ? `<img src="${escHtml(post.cover_image)}" alt="${escHtml(post.title)}" style="width:100%;max-height:280px;object-fit:cover;border-radius:14px;margin-bottom:16px;" />` : ''}
       <div style="font-size:11.5px;font-weight:800;color:var(--cyan);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">
-        ${escHtml(post.category || 'Vocal Guide')} • By ${escHtml(post.author_name || 'Editor')} • ${escHtml(String(post.created_at || '').slice(0, 10))}
+        ${escHtml(post.category || 'Guide')} • By ${escHtml(post.author_name || 'Editorial Team')} • ${escHtml(String(post.created_at || '').slice(0, 10))}
       </div>
       <h2 style="font-size:22px;line-height:1.25;margin-bottom:14px;">${escHtml(post.title)}</h2>
-      <div style="font-size:14.5px;color:#cbd5e1;line-height:1.78;">${formatArticleBodyHtml(post.content)}</div>
+      <div style="font-size:14.5px;color:#cbd5e1;line-height:1.78;">${bodyHtml}</div>
       <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
-        <button class="btn btn-amber" onclick="App.drawerGo('sing')">Open Vocal Studio →</button>
-        <a href="/blog/${escHtml(post.slug)}" class="btn btn-sm" style="text-decoration:none;">Direct SEO Page ↗</a>
+        <button class="btn btn-amber" onclick="App.drawerGo('home')">Explore SingVaza →</button>
+        <a href="/blog/${escHtml(post.slug)}" class="btn btn-sm" style="text-decoration:none;">Direct Article Link ↗</a>
       </div>
     `;
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2910,6 +2918,38 @@ const App = (() => {
       switchView('blog');
     }
     refreshServerState();
+
+    // Deferred non-blocking analytics beacon + conditional public links (zero startup delay)
+    setTimeout(() => {
+      fetch('/api/ping-visit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: window.location.pathname || '/' }),
+      }).catch(() => {});
+
+      fetch('/api/public-config')
+        .then((r) => r.json())
+        .then((cfg) => {
+          if (!cfg) return;
+          if (Number(cfg.tools_count || 0) > 0) {
+            const dl = document.getElementById('drawerToolsLink');
+            const bb = document.getElementById('blogToolsBtn');
+            if (dl) dl.style.display = 'flex';
+            if (bb) bb.style.display = 'inline-flex';
+          }
+          if (cfg.whatsapp_enabled && cfg.business_whatsapp) {
+            const wl = document.getElementById('drawerWhatsappLink');
+            if (wl) {
+              wl.href = 'https://wa.me/' + String(cfg.business_whatsapp).replace(/[^\d]/g, '');
+              wl.style.display = 'flex';
+            }
+          }
+          if (cfg.google_client_id && !state.googleClientId) {
+            state.googleClientId = cfg.google_client_id;
+          }
+        })
+        .catch(() => {});
+    }, 900);
 
     window.addEventListener('pointerdown', unlockMobileAudioSync, { once: true, passive: true });
     window.addEventListener('touchstart', unlockMobileAudioSync, { once: true, passive: true });
