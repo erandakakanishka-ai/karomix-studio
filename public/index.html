@@ -1220,6 +1220,35 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
           <input type="range" id="playheadSlider" min="0" max="1000" value="0" style="width:100%;" oninput="App.scrubPlayhead(this.value, false)" onchange="App.scrubPlayhead(this.value, true)" />
         </div>
 
+        <!-- Dedicated Variable Vocal Delay / Headphone Latency Aligner (Right Under Waveform!) -->
+        <div style="margin-top:10px;padding:11px 13px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.32);border-radius:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:7px;">
+            <div>
+              <span style="font-size:12.5px;font-weight:800;color:var(--amber-bright);">🎯 VOCAL DELAY / TIMING SYNC</span>
+              <div style="font-size:11px;color:var(--text-secondary);">Fix phone / wired headphone mic delay (◀ Negative = pull late voice earlier onto beat)</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input type="number" id="syncOffsetInput" class="input mono" min="-2000" max="2000" step="1" value="0" style="width:86px;padding:5px 8px;font-size:12.5px;font-weight:800;text-align:center;color:var(--amber-bright);" onchange="App.setVocalOffset(this.value, true)" />
+              <span class="mono" style="font-size:12px;font-weight:700;color:var(--cyan);" id="syncOffsetTopBadge">ms</span>
+            </div>
+          </div>
+
+          <input type="range" id="syncOffsetTopSlider" min="-1500" max="1500" step="5" value="0" style="width:100%;margin-bottom:8px;" oninput="App.setVocalOffset(this.value, false)" onchange="App.setVocalOffset(this.value, true)" />
+
+          <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
+            <div style="display:flex;gap:5px;flex-wrap:wrap;">
+              <button class="btn btn-sm" onclick="App.nudgeVocalOffset(-100)">⏪ -100ms</button>
+              <button class="btn btn-sm" onclick="App.nudgeVocalOffset(-25)">◀ -25ms</button>
+              <button class="btn btn-sm" onclick="App.nudgeVocalOffset(-5)">◂ -5ms</button>
+              <button class="btn btn-sm" onclick="App.setVocalOffset(0, true)">0ms</button>
+              <button class="btn btn-sm" onclick="App.nudgeVocalOffset(5)">+5ms ▸</button>
+              <button class="btn btn-sm" onclick="App.nudgeVocalOffset(25)">+25ms ▶</button>
+              <button class="btn btn-sm" onclick="App.nudgeVocalOffset(100)">+100ms ⏩</button>
+            </div>
+            <button class="btn btn-sm btn-cyan" onclick="App.autoAlignTracks()">⚡ Auto Sync</button>
+          </div>
+        </div>
+
         <!-- Easy Studio Crop / Trim Tool -->
         <div style="margin-top:10px;padding:10px 12px;background:#060810;border:1px solid var(--border);border-radius:12px;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
@@ -1306,7 +1335,7 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
 
           <div class="fader-item">
             <label><span>Voice Sync Timing</span><span class="mono" style="color:var(--amber-bright);" id="syncOffsetLabel">0 ms</span></label>
-            <input type="range" id="syncOffsetSlider" min="-500" max="500" step="5" value="0" oninput="App.setVocalOffset(this.value, false)" onchange="App.setVocalOffset(this.value, true)" />
+            <input type="range" id="syncOffsetSlider" min="-1500" max="1500" step="5" value="0" oninput="App.setVocalOffset(this.value, false)" onchange="App.setVocalOffset(this.value, true)" />
           </div>
         </div>
       </div>
@@ -1506,8 +1535,8 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     </button>
   </nav>
 
-  <script src="/vendor/confetti.min.js?v=19.0"></script>
-  <script src="/dsp-engine.js?v=19.0"></script>
-  <script src="/app.js?v=19.0"></script>
+  <script src="/vendor/confetti.min.js?v=20.0"></script>
+  <script src="/dsp-engine.js?v=20.0"></script>
+  <script src="/app.js?v=20.0"></script>
 </body>
 </html>

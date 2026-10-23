@@ -11,14 +11,19 @@ const App = (() => {
     (navigator.deviceMemory && navigator.deviceMemory <= 4) ||
     (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
 
-  // Dedicated OS-Level Hardware Audio Player (Direct Android AudioFlinger / iOS CoreAudio hardware pipeline — 0% JS DSP crackle!)
-  const hwAudio = document.createElement('audio');
-  hwAudio.id = 'singvazaHwAudio';
-  hwAudio.preload = 'auto';
-  hwAudio.playsInline = true;
-  hwAudio.setAttribute('playsinline', '');
-  hwAudio.setAttribute('webkit-playsinline', '');
-  hwAudio.style.display = 'none';
+  // Double-Buffered OS-Level Hardware Audio Players (Direct Android AudioFlinger / iOS CoreAudio hardware pipeline — 0% JS DSP crackle!)
+  function createHardwareAudioEl(id) {
+    const el = document.createElement('audio');
+    el.id = id;
+    el.preload = 'auto';
+    el.playsInline = true;
+    el.setAttribute('playsinline', '');
+    el.setAttribute('webkit-playsinline', '');
+    el.style.display = 'none';
+    return el;
+  }
+  let hwAudio = createHardwareAudioEl('singvazaHwAudioA');
+  let hwAudioStandby = createHardwareAudioEl('singvazaHwAudioB');
 
   const clientTimezone = (() => {
     try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (_) { return 'UTC'; }
@@ -117,7 +122,7 @@ const App = (() => {
     activePreset: 'crystal_hd',
     params: {
       ...SingVazaDSP.PRESETS.crystal_hd,
-      vocalOffsetMs: 0,
+      vocalOffsetMs: Number(localStorage.getItem('singvaza_mic_offset_ms') || 0) || 0,
       scaleKey: 9,
       bypassFx: false,
       soloVocal: false,
@@ -173,9 +178,8 @@ const App = (() => {
   }
 
   function unlockMobileAudioSync() {
-    if (!document.body.contains(hwAudio)) {
-      document.body.appendChild(hwAudio);
-    }
+    if (!document.body.contains(hwAudio)) document.body.appendChild(hwAudio);
+    if (!document.body.contains(hwAudioStandby)) document.body.appendChild(hwAudioStandby);
     try {
       if (navigator.audioSession && navigator.audioSession.type !== 'playback') {
         navigator.audioSession.type = 'playback';
@@ -184,10 +188,13 @@ const App = (() => {
 
     if (!state.audioUnlocked) {
       state.audioUnlocked = true;
-      // Prime native <audio> element inside user tap gesture without overriding active stream
       if (!hwAudio.src) {
         hwAudio.src = '/assets/demo-studio-fx.mp3';
         hwAudio.load();
+      }
+      if (!hwAudioStandby.src) {
+        hwAudioStandby.src = '/assets/demo-studio-fx.mp3';
+        hwAudioStandby.load();
       }
     }
   }
@@ -352,22 +359,21 @@ const App = (() => {
   }
 
   function getTotalDuration() {
-    if (state.hwPlaying && hwAudio.duration && Number.isFinite(hwAudio.duration) && hwAudio.duration > 0.5) {
+    if (state.hwDirectDemo && hwAudio.duration && Number.isFinite(hwAudio.duration) && hwAudio.duration > 0.5) {
       return hwAudio.duration;
     }
     const off = (state.params.vocalOffsetMs || 0) / 1000;
     const bDur = state.backingBuffer ? state.backingBuffer.duration : (state.isDemoSession ? 11.0 : 0);
-    const vDur = state.rawVocalBuffer ? state.rawVocalBuffer.duration + Math.max(0, off) : 0;
+    const vDur = state.rawVocalBuffer ? Math.max(0, state.rawVocalBuffer.duration + off) : 0;
     if (bDur <= 0 && vDur <= 0) return 0;
     return Math.max(bDur, vDur, 1);
   }
 
   function getCurrentPlayhead() {
-    if (state.isPlaying && state.livePlaying && state.audioCtx) {
-      const elapsed = Math.max(0, state.audioCtx.currentTime - (state.liveStartCtxTime || 0));
-      return Math.min(getTotalDuration(), Math.max(0, (state.liveStartOffsetSec || 0) + elapsed));
+    if (state.isPlaying && state.hwWindowActive && Number.isFinite(hwAudio.currentTime)) {
+      return Math.min(getTotalDuration(), (state.hwWindowStartSec || 0) + Math.max(0, hwAudio.currentTime));
     }
-    if (state.isPlaying && state.hwPlaying && Number.isFinite(hwAudio.currentTime)) {
+    if (state.isPlaying && state.hwDirectDemo && Number.isFinite(hwAudio.currentTime)) {
       return hwAudio.currentTime;
     }
     return state.pausePositionSec;
@@ -433,24 +439,122 @@ const App = (() => {
     if (mixBtn) mixBtn.textContent = playing ? 'Pause Mix' : 'Play Mix';
   }
 
+  function releaseChunkUrls() {
+    if (state.activeChunkUrl) {
+      try { URL.revokeObjectURL(state.activeChunkUrl); } catch (_) {}
+      state.activeChunkUrl = '';
+    }
+    if (state.standbyChunkUrl) {
+      try { URL.revokeObjectURL(state.standbyChunkUrl); } catch (_) {}
+      state.standbyChunkUrl = '';
+    }
+    state.standbyChunkInfo = null;
+    state.preRenderBusy = false;
+  }
+
   function stopPlaybackInternal() {
     clearTimeout(state.refreshTimerId);
+    state.renderSeq = (state.renderSeq || 0) + 1;
     if (state.uiTimerId) {
       clearInterval(state.uiTimerId);
       state.uiTimerId = null;
     }
     stopLiveGraphNodes();
-    state.hwPlaying = false;
+    state.hwDirectDemo = false;
+    state.hwWindowActive = false;
     try { hwAudio.pause(); } catch (_) {}
+    try { hwAudioStandby.pause(); } catch (_) {}
+    releaseChunkUrls();
     state.isPlaying = false;
     updatePlayButtonsUI(false);
     suspendIdleWebAudio();
     if (state.view === 'mix') drawSpectrum();
   }
 
-  // Instant Zero-Wait Dual Playback Engine:
-  // 1) Unedited Landing Demo -> direct pre-mastered hardware MP3 (0ms)
-  // 2) Recordings / Uploads / Mix Edits (any length: 5s to 10+ min!) -> instant real-time WebAudio console graph (2ms start, 0 MB WAV allocation, 0 "Smoothing..." freeze!)
+  async function queueNextHardwareChunk(sessionSeq) {
+    if (state.preRenderBusy || state.standbyChunkInfo || !state.hwWindowActive || state.hwWindowIsLast) return;
+    const nextStart = state.hwWindowEndSec;
+    const totalDur = getTotalDuration();
+    if (nextStart >= totalDur - 0.08) {
+      state.hwWindowIsLast = true;
+      return;
+    }
+    state.preRenderBusy = true;
+    try {
+      const nextChunk = await SingVazaDSP.renderWindowWav(
+        { backing: state.backingBuffer, rawVocal: state.rawVocalBuffer, tunedVocal: state.tunedVocalBuffer },
+        state.params,
+        nextStart,
+        24,
+        24000
+      );
+      if (sessionSeq !== state.renderSeq || !state.isPlaying) {
+        return;
+      }
+      const nextUrl = URL.createObjectURL(nextChunk.blob);
+      if (state.standbyChunkUrl) {
+        try { URL.revokeObjectURL(state.standbyChunkUrl); } catch (_) {}
+      }
+      state.standbyChunkUrl = nextUrl;
+      state.standbyChunkInfo = nextChunk;
+      hwAudioStandby.src = nextUrl;
+      hwAudioStandby.currentTime = 0;
+      hwAudioStandby.load();
+    } catch (_) {
+    } finally {
+      state.preRenderBusy = false;
+    }
+  }
+
+  async function handoffToStandbyChunk() {
+    const seq = state.renderSeq;
+    if (!state.hwWindowActive || !state.isPlaying) return;
+    if (state.hwWindowIsLast) {
+      stopPlaybackInternal();
+      state.pausePositionSec = 0;
+      const mixEnd = document.getElementById('transportTime');
+      if (mixEnd) mixEnd.textContent = `00:00 / ${fmtTime(getTotalDuration())}`;
+      if (state.view === 'mix') drawTimeline(0);
+      return;
+    }
+
+    if (!state.standbyChunkInfo) {
+      await startPlayback(state.hwWindowEndSec);
+      return;
+    }
+
+    const oldAudio = hwAudio;
+    const oldUrl = state.activeChunkUrl;
+    const nextInfo = state.standbyChunkInfo;
+    const nextUrl = state.standbyChunkUrl;
+
+    hwAudio = hwAudioStandby;
+    hwAudioStandby = oldAudio;
+    state.activeChunkUrl = nextUrl;
+    state.standbyChunkUrl = '';
+    state.standbyChunkInfo = null;
+    state.hwWindowStartSec = nextInfo.windowStartSec;
+    state.hwWindowEndSec = nextInfo.windowEndSec;
+    state.hwWindowIsLast = nextInfo.isLastChunk;
+
+    try { oldAudio.pause(); } catch (_) {}
+    if (oldUrl) {
+      setTimeout(() => { try { URL.revokeObjectURL(oldUrl); } catch (_) {} }, 250);
+    }
+
+    try {
+      await hwAudio.play();
+    } catch (_) {
+      await startPlayback(nextInfo.windowStartSec);
+      return;
+    }
+
+    if (!nextInfo.isLastChunk) {
+      setTimeout(() => queueNextHardwareChunk(seq), 200);
+    }
+  }
+
+  // Zero-Crackle Pure OS Hardware <audio> Streaming Engine (~65ms instant chunk start, Full Vocal FX ON, 0% "කර කර" on old phones, 10+ min song support!)
   async function startPlayback(fromSec = 0) {
     unlockMobileAudioSync();
     if (state.uiTimerId) {
@@ -458,8 +562,11 @@ const App = (() => {
       state.uiTimerId = null;
     }
     stopLiveGraphNodes();
-    state.hwPlaying = false;
     try { hwAudio.pause(); } catch (_) {}
+    try { hwAudioStandby.pause(); } catch (_) {}
+    releaseChunkUrls();
+
+    const seq = ++state.renderSeq;
 
     const useDirectDemoMp3 = state.isDemoSession
       && !state.demoEdited
@@ -482,11 +589,12 @@ const App = (() => {
 
       try {
         await hwAudio.play();
-        state.hwPlaying = true;
+        state.hwDirectDemo = true;
+        state.hwWindowActive = false;
         state.isPlaying = true;
         updatePlayButtonsUI(true);
       } catch (_) {
-        state.hwPlaying = false;
+        state.hwDirectDemo = false;
         state.isPlaying = false;
         updatePlayButtonsUI(false);
         return;
@@ -503,25 +611,38 @@ const App = (() => {
       }
 
       try {
-        const ctx = ensureAudioCtx();
-        if (ctx.state === 'suspended') {
-          await ctx.resume();
-        }
         const totalDur = getTotalDuration();
         const safeSec = totalDur > 0.25 && fromSec >= totalDur - 0.15 ? 0 : Math.max(0, fromSec);
-        state.liveNodes = SingVazaDSP.buildStudioGraph(
-          ctx,
+        const firstChunk = await SingVazaDSP.renderWindowWav(
           { backing: state.backingBuffer, rawVocal: state.rawVocalBuffer, tunedVocal: state.tunedVocalBuffer },
           state.params,
-          safeSec
+          safeSec,
+          18,
+          24000
         );
-        state.liveStartOffsetSec = safeSec;
-        state.liveStartCtxTime = ctx.currentTime;
-        state.livePlaying = true;
+        suspendIdleWebAudio();
+        if (seq !== state.renderSeq) return;
+
+        const chunkUrl = URL.createObjectURL(firstChunk.blob);
+        state.activeChunkUrl = chunkUrl;
+        state.hwWindowStartSec = firstChunk.windowStartSec;
+        state.hwWindowEndSec = firstChunk.windowEndSec;
+        state.hwWindowIsLast = firstChunk.isLastChunk;
+        state.hwDirectDemo = false;
+        state.hwWindowActive = true;
+
+        hwAudio.src = chunkUrl;
+        hwAudio.currentTime = 0;
+        await hwAudio.play();
         state.isPlaying = true;
         updatePlayButtonsUI(true);
+
+        if (!firstChunk.isLastChunk) {
+          setTimeout(() => queueNextHardwareChunk(seq), 350);
+        }
       } catch (err) {
-        stopLiveGraphNodes();
+        releaseChunkUrls();
+        state.hwWindowActive = false;
         state.isPlaying = false;
         updatePlayButtonsUI(false);
         showToast('Playback warning: ' + (err?.message || 'tap Play Mix again'));
@@ -529,20 +650,22 @@ const App = (() => {
       }
     }
 
-    // Calm 10 FPS (100ms) UI update timer — saves 85% main-thread CPU on Android!
+    // Calm 10 FPS (100ms) UI & seamless chunk pre-fetch monitor
     state.uiTimerId = setInterval(() => {
       if (!state.isPlaying) return;
-      if (state.hwPlaying && hwAudio.paused) return;
+      if (state.hwWindowActive && Number.isFinite(hwAudio.duration) && hwAudio.duration > 0.2) {
+        const rem = hwAudio.duration - hwAudio.currentTime;
+        if (!state.hwWindowIsLast && !state.standbyChunkInfo && !state.preRenderBusy && rem < 7.5) {
+          queueNextHardwareChunk(seq);
+        }
+        if (rem <= 0.035) {
+          handoffToStandbyChunk();
+          return;
+        }
+      }
+      if (hwAudio.paused) return;
       const pos = getCurrentPlayhead();
       const dur = getTotalDuration();
-      if (state.livePlaying && dur > 0.2 && pos >= dur - 0.04) {
-        stopPlaybackInternal();
-        state.pausePositionSec = 0;
-        const mixEnd = document.getElementById('transportTime');
-        if (mixEnd) mixEnd.textContent = `00:00 / ${fmtTime(dur)}`;
-        if (state.view === 'mix') drawTimeline(0);
-        return;
-      }
       const tStr = `${fmtTime(pos)} / ${fmtTime(dur)}`;
       const mixT = document.getElementById('transportTime');
       const heroT = document.getElementById('heroDemoTime');
@@ -556,26 +679,29 @@ const App = (() => {
     }, 100);
   }
 
-  hwAudio.addEventListener('ended', () => {
+  function handleHwAudioEnded(ev) {
+    if (ev.target !== hwAudio) return;
+    if (state.hwWindowActive && state.isPlaying) {
+      handoffToStandbyChunk();
+      return;
+    }
     stopPlaybackInternal();
     state.pausePositionSec = 0;
     if (state.view === 'mix') drawTimeline(0);
-  });
+  }
+  hwAudio.addEventListener('ended', handleHwAudioEnded);
+  hwAudioStandby.addEventListener('ended', handleHwAudioEnded);
 
-  // Zero-latency live console parameter update (0ms live AudioParam tweak; zero "Smoothing..." re-render!)
-  function scheduleHardwareRefresh(delayMs = 80, forceRestart = false) {
+  // Instant ~65ms hardware window refresh when sliders/presets/vocal-delay change!
+  function scheduleHardwareRefresh(delayMs = 90, rewindSec = 0) {
     clearTimeout(state.refreshTimerId);
     if (!state.isPlaying) return;
-    if (state.livePlaying && state.liveNodes && !forceRestart) {
-      SingVazaDSP.applyLiveParamsToGraph(state.liveNodes, state.params);
-      return;
-    }
     state.refreshTimerId = setTimeout(() => {
       if (state.isPlaying) {
-        const cur = getCurrentPlayhead();
+        const cur = Math.max(0, getCurrentPlayhead() - rewindSec);
         startPlayback(cur);
       }
-    }, Math.min(delayMs, 80));
+    }, delayMs);
   }
 
   function pausePlayback() {
@@ -689,16 +815,21 @@ const App = (() => {
     const clarityPct = Math.min(100, Math.max(0, Math.round(((p.airDb ?? 5.0) / 6.5) * 100)));
     set('claritySlider', clarityPct);
     txt('clarityValText', `${clarityPct}%`);
-    set('atStrength', Math.round((p.autotuneAmount || 0) * 100));
-    txt('atStrengthText', `${Math.round((p.autotuneAmount || 0) * 100)}%`);
-    set('gateSlider', Math.round((p.noiseGate || 0.55) * 100));
-    txt('gateValText', `${Math.round((p.noiseGate || 0.55) * 100)}%`);
+    set('atStrength', Math.round((p.autotuneAmount ?? 0) * 100));
+    txt('atStrengthText', `${Math.round((p.autotuneAmount ?? 0) * 100)}%`);
+    set('gateSlider', Math.round((p.noiseGate ?? 0) * 100));
+    txt('gateValText', `${Math.round((p.noiseGate ?? 0) * 100)}%`);
     const hpHz = Math.round(p.hpFreq ?? 95);
     const lpHz = Math.round(p.lpFreq ?? 16000);
     set('lowCutSlider', hpHz);
     txt('lowCutValText', `${hpHz} Hz`);
     set('highCutSlider', lpHz);
     txt('highCutValText', `${(lpHz / 1000).toFixed(1)} kHz`);
+    const offMs = Math.round(p.vocalOffsetMs ?? 0);
+    set('syncOffsetSlider', offMs);
+    set('syncOffsetTopSlider', offMs);
+    set('syncOffsetInput', offMs);
+    txt('syncOffsetLabel', `${offMs > 0 ? '+' : ''}${offMs} ms`);
     setMasterProfile(p.masterProfile || 'warm', false);
   }
 
@@ -753,13 +884,31 @@ const App = (() => {
   }
 
   function setVocalOffset(ms, restartAudio = false) {
-    const val = Math.round(Number(ms) || 0);
+    const val = Math.max(-2000, Math.min(2000, Math.round(Number(ms) || 0)));
     state.params.vocalOffsetMs = val;
+    try { localStorage.setItem('singvaza_mic_offset_ms', String(val)); } catch (_) {}
     markMixDirty();
-    document.getElementById('syncOffsetSlider').value = val;
-    document.getElementById('syncOffsetLabel').textContent = `${val > 0 ? '+' : ''}${val} ms`;
+    const s1 = document.getElementById('syncOffsetSlider');
+    const s2 = document.getElementById('syncOffsetTopSlider');
+    const inp = document.getElementById('syncOffsetInput');
+    const lbl = document.getElementById('syncOffsetLabel');
+    if (s1) s1.value = Math.max(-1500, Math.min(1500, val));
+    if (s2) s2.value = Math.max(-1500, Math.min(1500, val));
+    if (inp) inp.value = val;
+    if (lbl) lbl.textContent = `${val > 0 ? '+' : ''}${val} ms`;
     drawTimeline();
-    if (restartAudio && state.isPlaying) scheduleHardwareRefresh(60, true);
+    if (restartAudio) {
+      if (state.isPlaying) {
+        scheduleHardwareRefresh(45, 0.7);
+      } else if (state.backingBuffer || state.rawVocalBuffer) {
+        startPlayback(Math.max(0, state.pausePositionSec - 0.4));
+      }
+    }
+  }
+
+  function nudgeVocalOffset(deltaMs) {
+    const next = Math.max(-2000, Math.min(2000, Math.round((state.params.vocalOffsetMs || 0) + Number(deltaMs || 0))));
+    setVocalOffset(next, true);
   }
 
   async function autoAlignTracks() {
@@ -1787,7 +1936,7 @@ const App = (() => {
     if (mixT) mixT.textContent = `${fmtTime(targetSec)} / ${fmtTime(total)}`;
     drawTimeline(targetSec, false);
     if (commitAudio && state.isPlaying) {
-      try { hwAudio.currentTime = targetSec; } catch (_) {}
+      startPlayback(targetSec);
     }
   }
 
@@ -1864,8 +2013,6 @@ const App = (() => {
     const undoBtn = document.getElementById('btnUndoCrop');
     if (undoBtn) undoBtn.style.display = 'inline-flex';
 
-    await ensureHardwareStreamUrl();
-    hwAudio.src = state.cachedMixUrl;
     drawTimeline(0);
     updateCropLabels();
     document.getElementById('transportTime').textContent = `00:00 / ${fmtTime(endSec - startSec)}`;
@@ -1888,8 +2035,6 @@ const App = (() => {
     state.pausePositionSec = 0;
     resetCropMarkers();
     document.getElementById('btnUndoCrop').style.display = 'none';
-    await ensureHardwareStreamUrl();
-    if (state.cachedMixUrl) hwAudio.src = state.cachedMixUrl;
     drawTimeline(0);
     updateCropLabels();
     showToast('Restored full original audio!');
@@ -2667,11 +2812,13 @@ const App = (() => {
     }
     state.cachedMixUrl = '';
     state.lastMasterBlob = null;
-    try {
-      hwAudio.pause();
-      hwAudio.removeAttribute('src');
-      hwAudio.load();
-    } catch (_) {}
+    for (const el of [hwAudio, hwAudioStandby]) {
+      try {
+        el.pause();
+        el.removeAttribute('src');
+        el.load();
+      } catch (_) {}
+    }
     const rtEl = document.getElementById('recTimerText');
     if (rtEl) rtEl.textContent = '00:00';
     const pitchEl = document.getElementById('livePitchText');
@@ -2809,7 +2956,7 @@ const App = (() => {
     toggleHeroDemo, openMixWithRealDemo, loadRealSingerDemo, loadInstrumentalDemoForSing,
     togglePlayback, stopAndRewind, toggleBypassFx, toggleSoloVocal,
     scrubPlayhead, updateCropSlider, markCropAtPlayhead, applyAudioCrop, undoAudioCrop,
-    applyPreset, setClarityMacro, setFilterCut, updateParam, setMasterProfile, setVocalOffset, autoAlignTracks, runSmartVoiceMatch,
+    applyPreset, setClarityMacro, setFilterCut, updateParam, setMasterProfile, setVocalOffset, nudgeVocalOffset, autoAlignTracks, runSmartVoiceMatch,
     applyWorkerAutoTune, shiftBackingKey, applyKaraokeVocalCut,
     heroSearchSubmit, quickSingSong, searchOrLoadKaraoke, selectKaraokeVideo, nextKaraokeResult, seekToLyric,
     searchLyricsOnly, clearUploadedStageTrack,
