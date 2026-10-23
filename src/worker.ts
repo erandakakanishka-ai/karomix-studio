@@ -565,7 +565,7 @@ export default {
           .replace(/\s+/g, ' ')
           .trim() || q;
 
-        const cacheKey = new Request(`https://singvaza-cache.local/v7/lyrics?q=${encodeURIComponent(cleanQ.toLowerCase())}`);
+        const cacheKey = new Request(`https://singvaza-cache.local/v16/lyrics?q=${encodeURIComponent(cleanQ.toLowerCase())}`);
         const edgeCache = (globalThis as any).caches?.default;
         if (edgeCache) {
           const cachedHit = await edgeCache.match(cacheKey);
@@ -611,7 +611,7 @@ export default {
             }
             if (xml) {
               const norm = (s: string) =>
-                s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/aa/g, 'a').replace(/ee/g, 'i').replace(/oo/g, 'u').replace(/th/g, 't').replace(/dh/g, 'd').replace(/sh/g, 's');
+                s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/aa/g, 'a').replace(/ee/g, 'i').replace(/oo/g, 'u').replace(/uu/g, 'u').replace(/th/g, 't').replace(/dh/g, 'd').replace(/sh/g, 's').replace(/v/g, 'w');
               const qTokens = norm(cleanQ).split(/\s+/).filter((t) => t.length >= 3);
               if (qTokens.length > 0) {
                 let bestUrl = '';
