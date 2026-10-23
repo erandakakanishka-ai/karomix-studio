@@ -611,7 +611,7 @@ export default {
 
         const cleanLatin = /[\u0D80-\u0DFF]/.test(cleanRaw) ? sinhalaToSinglish(cleanRaw) : cleanRaw;
 
-        const cacheKey = new Request(`https://singvaza-cache.local/v15/lyrics?q=${encodeURIComponent(cleanRaw.toLowerCase())}`);
+        const cacheKey = new Request(`https://singvaza-cache.local/v15.1/lyrics?q=${encodeURIComponent(cleanRaw.toLowerCase())}`);
         const edgeCache = (globalThis as any).caches?.default;
         if (edgeCache) {
           const cachedHit = await edgeCache.match(cacheKey);
@@ -631,7 +631,7 @@ export default {
             })
             .replace(/&amp;/g, '&');
 
-        const promoRe = /https?:\/\/|www\.|@[a-z0-9_]|#[a-z0-9_\u0D80-\u0DFF]|\b(subscribe|whatsapp|facebook|instagram|tiktok|spotify|apple\s*music|itunes|deezer|contact|call|booking|all\s*rights|copyright|official\s*(music|lyric|audio|video)|channel|publish|powered\s*by|distributed\s*by|stream\s*\/?\s*download|stream\s*now|download\s*now|follow\s*us|performed\s*by|written\s*by|screenplay\s*by|story\s*by|sung\s*by|music\s*by|lyrics\s*by|composed\s*by|arranged\s*by|melody\s*(&|and)\s*music|music\s*produced|song\s*credits|credits\s*:|mixing|mastering|mixed\s*(&|and|by)?|mastered\s*by|recorded\s*(at|by)|video\s*by|directed\s*by|produced\s*by|dop|cinematography|editor|colorist|artwork|thumbnail|special\s*thanks|starring|cast|backing\s*track|keyboard\s*(voices|style)|songs?\s*notation|kar[ao]+ke|midi|minus\s*one|privacy\s*policy|terms\s*of\s*use|cookie|skip\s*to\s*main|reality\s*show|cover\s*versions|related\s*songs)\b|(?:^|\s)(title|song|artist|singer|vocals?|music|melody|lyrics|lyricist|composed|composer|arranged|studio|guitars?|flute|veena|synth|violin|piano|keys|keyboards?|percussion|drums|bass|audio|video|art|category|views|updated)\s*[-:|–—]/i;
+        const promoRe = /https?:\/\/|www\.|@[a-z0-9_]|#[a-z0-9_\u0D80-\u0DFF]|[🎵🎶🔔⭐⭐️]|\b(subscribe|notifications?|7clouds|whatsapp|facebook|instagram|tiktok|spotify|apple\s*music|itunes|deezer|contact|call|booking|all\s*rights|copyright|official\s*(music|lyric|audio|video)|channel|publish|powered\s*by|distributed\s*by|stream\s*\/?\s*download|stream\s*now|download\s*now|follow\s*us|performed\s*by|written\s*by|screenplay\s*by|story\s*by|sung\s*by|music\s*by|lyrics\s*by|composed\s*by|arranged\s*by|melody\s*(&|and)\s*music|music\s*produced|song\s*credits|credits\s*:|mixing|mastering|mixed\s*(&|and|by)?|mastered\s*by|recorded\s*(at|by)|video\s*by|directed\s*by|produced\s*by|dop|cinematography|editor|colorist|artwork|thumbnail|special\s*thanks|starring|cast|backing\s*track|keyboard\s*(voices|style)|songs?\s*notation|kar[ao]+ke|midi|minus\s*one|privacy\s*policy|terms\s*of\s*use|cookie|skip\s*to\s*main|reality\s*show|cover\s*versions|related\s*songs)\b|(?:^|\s)(title|song|artist|singer|vocals?|music|melody|lyrics|lyricist|composed|composer|arranged|studio|guitars?|flute|veena|synth|violin|piano|keys|keyboards?|percussion|drums|bass|audio|video|art|category|views|updated)\s*[-:|–—]/i;
         const creditPairRe = /^[A-Za-z][A-Za-z0-9 &,/()+.']{1,26}\s*[-:|–—]\s+[A-Z0-9@]/;
         const phoneRe = /\b0\d{2}[-\s]?\d{3}[-\s]?\d{4}\b|\+\d{8,15}/;
 
@@ -737,7 +737,7 @@ export default {
               const qWordsRaw = cleanLatin.toLowerCase().split(/\s+/).filter((w) => w.length >= 2);
               const lrcRes = await fetch(
                 `https://lrclib.net/api/search?q=${encodeURIComponent(cleanLatin)}`,
-                { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; SingVaza/15.0)' }, signal: AbortSignal.timeout(3500) }
+                { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; SingVaza/15.1)' }, signal: AbortSignal.timeout(4500) }
               );
               if (lrcRes.ok) {
                 const list = (await lrcRes.json()) as any[];
@@ -814,24 +814,27 @@ export default {
 
             // 2B. SinhalaSongLyrics.com WordPress REST API (Modern 2020-2026 Releases)
             (async () => {
-              for (const sq of searchCandidates.slice(0, 2)) {
-                try {
-                  const r = await fetch(
-                    `https://sinhalasonglyrics.com/wp-json/wp/v2/posts?per_page=8&_fields=title,content&search=${encodeURIComponent(sq)}`,
-                    { signal: AbortSignal.timeout(4000) }
-                  );
-                  if (!r.ok) continue;
-                  const posts = (await r.json()) as any[];
-                  const matched = posts.find((p) => titleMatchesCandidates(decodeHtmlEntities(String(p?.title?.rendered || '').replace(/<[^>]+>/g, '')), searchCandidates));
-                  if (matched?.content?.rendered) {
-                    const html = String(matched.content.rendered);
-                    const afterHeading = html.split(/Song\s*Lyrics\s*<\/h[1-4]>/i)[1] || html;
-                    const cleaned = extractLyricsFromWebHtml(afterHeading);
-                    if (cleaned.length > 50) return { plainLyrics: cleaned };
-                  }
-                } catch (_) {}
-              }
-              return null;
+              const results = await Promise.all(
+                searchCandidates.slice(0, 2).map(async (sq) => {
+                  try {
+                    const r = await fetch(
+                      `https://sinhalasonglyrics.com/wp-json/wp/v2/posts?per_page=8&_fields=title,content&search=${encodeURIComponent(sq)}`,
+                      { signal: AbortSignal.timeout(2500) }
+                    );
+                    if (!r.ok) return null;
+                    const posts = (await r.json()) as any[];
+                    const matched = posts.find((p) => titleMatchesCandidates(decodeHtmlEntities(String(p?.title?.rendered || '').replace(/<[^>]+>/g, '')), searchCandidates));
+                    if (matched?.content?.rendered) {
+                      const html = String(matched.content.rendered);
+                      const afterHeading = html.split(/Song\s*Lyrics\s*<\/h[1-4]>/i)[1] || html;
+                      const cleaned = extractLyricsFromWebHtml(afterHeading);
+                      if (cleaned.length > 50) return { plainLyrics: cleaned };
+                    }
+                  } catch (_) {}
+                  return null;
+                })
+              );
+              return results.find(Boolean) || null;
             })(),
 
             // 2C. LyriHub.lk 2,372 Sinhala Songs Index
@@ -905,45 +908,48 @@ export default {
 
             // 2D. SinhalaSongBook.com 10,000+ Classics API
             (async () => {
-              for (const sq of searchCandidates.slice(0, 2)) {
-                try {
-                  const ssbRes = await fetch(
-                    `https://www.sinhalasongbook.com/wp-json/wp/v2/posts?per_page=12&_fields=title,content&search=${encodeURIComponent(sq)}`,
-                    { signal: AbortSignal.timeout(4500) }
-                  );
-                  if (!ssbRes.ok) continue;
-                  const posts = (await ssbRes.json()) as any[];
-                  const matchedPost = posts.find((post) =>
-                    titleMatchesCandidates(decodeHtmlEntities(String(post?.title?.rendered || '').replace(/<[^>]+>/g, '')), searchCandidates)
-                  );
-                  if (matchedPost) {
-                    const html = String(matchedPost?.content?.rendered || '');
-                    const preMatch = html.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
-                    if (preMatch) {
-                      const rawPre = decodeHtmlEntities(
-                        preMatch[1].replace(/<a[^>]*>[\s\S]*?<\/a>/gi, '').replace(/<[^>]+>/g, '')
-                      );
-                      const cleanLines: string[] = [];
-                      for (const rawLine of rawPre.split(/\r?\n/)) {
-                        const ln = rawLine.trim();
-                        if (!ln) {
-                          if (cleanLines.length && cleanLines[cleanLines.length - 1] !== '') cleanLines.push('');
-                          continue;
+              const results = await Promise.all(
+                searchCandidates.slice(0, 2).map(async (sq) => {
+                  try {
+                    const ssbRes = await fetch(
+                      `https://www.sinhalasongbook.com/wp-json/wp/v2/posts?per_page=12&_fields=title,content&search=${encodeURIComponent(sq)}`,
+                      { signal: AbortSignal.timeout(2500) }
+                    );
+                    if (!ssbRes.ok) return null;
+                    const posts = (await ssbRes.json()) as any[];
+                    const matchedPost = posts.find((post) =>
+                      titleMatchesCandidates(decodeHtmlEntities(String(post?.title?.rendered || '').replace(/<[^>]+>/g, '')), searchCandidates)
+                    );
+                    if (matchedPost) {
+                      const html = String(matchedPost?.content?.rendered || '');
+                      const preMatch = html.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+                      if (preMatch) {
+                        const rawPre = decodeHtmlEntities(
+                          preMatch[1].replace(/<a[^>]*>[\s\S]*?<\/a>/gi, '').replace(/<[^>]+>/g, '')
+                        );
+                        const cleanLines: string[] = [];
+                        for (const rawLine of rawPre.split(/\r?\n/)) {
+                          const ln = rawLine.trim();
+                          if (!ln) {
+                            if (cleanLines.length && cleanLines[cleanLines.length - 1] !== '') cleanLines.push('');
+                            continue;
+                          }
+                          if (/^(INTRO|INTER|CHORUS|VERSE|BRIDGE|OUTRO|END)/i.test(ln)) continue;
+                          if (ln.includes('|') || (/^[\-\sxA-G#bmajinsudg0-9/()+]+$/.test(ln) && !/[h-w\u0D80-\u0DFF]/i.test(ln))) continue;
+                          cleanLines.push(ln);
                         }
-                        if (/^(INTRO|INTER|CHORUS|VERSE|BRIDGE|OUTRO|END)/i.test(ln)) continue;
-                        if (ln.includes('|') || (/^[\-\sxA-G#bmajinsudg0-9/()+]+$/.test(ln) && !/[h-w\u0D80-\u0DFF]/i.test(ln))) continue;
-                        cleanLines.push(ln);
-                      }
-                      const joined = cleanLines.join('\n').trim();
-                      if (joined.length > 30) {
-                        const cleanTitle = decodeHtmlEntities(String(matchedPost?.title?.rendered || '').replace(/<[^>]+>/g, '')).trim();
-                        return { plainLyrics: cleanTitle ? `${cleanTitle}\n\n${joined}` : joined };
+                        const joined = cleanLines.join('\n').trim();
+                        if (joined.length > 30) {
+                          const cleanTitle = decodeHtmlEntities(String(matchedPost?.title?.rendered || '').replace(/<[^>]+>/g, '')).trim();
+                          return { plainLyrics: cleanTitle ? `${cleanTitle}\n\n${joined}` : joined };
+                        }
                       }
                     }
-                  }
-                } catch (_) {}
-              }
-              return null;
+                  } catch (_) {}
+                  return null;
+                })
+              );
+              return results.find(Boolean) || null;
             })(),
           ]);
 
