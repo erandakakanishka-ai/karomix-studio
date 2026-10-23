@@ -611,7 +611,7 @@ export default {
 
         const cleanLatin = /[\u0D80-\u0DFF]/.test(cleanRaw) ? sinhalaToSinglish(cleanRaw) : cleanRaw;
 
-        const cacheKey = new Request(`https://singvaza-cache.local/v14b/lyrics?q=${encodeURIComponent(cleanRaw.toLowerCase())}`);
+        const cacheKey = new Request(`https://singvaza-cache.local/v15/lyrics?q=${encodeURIComponent(cleanRaw.toLowerCase())}`);
         const edgeCache = (globalThis as any).caches?.default;
         if (edgeCache) {
           const cachedHit = await edgeCache.match(cacheKey);
@@ -631,28 +631,28 @@ export default {
             })
             .replace(/&amp;/g, '&');
 
-        const promoRe = /https?:\/\/|www\.|@[a-z0-9_]|#[a-z0-9_\u0D80-\u0DFF]|\b(subscribe|whatsapp|facebook|instagram|tiktok|spotify|apple\s*music|itunes|deezer|contact|call|booking|all\s*rights|copyright|official\s*(music|lyric|audio|video)|channel|publish|powered\s*by|distributed\s*by|stream\s*now|download\s*now|follow\s*us|performed\s*by|written\s*by|sung\s*by|music\s*by|lyrics\s*by|composed\s*by|arranged\s*by|melody\s*(&|and)\s*music|music\s*produced|mixing|mastering|mixed\s*(&|and|by)?|mastered\s*by|recorded\s*(at|by)|video\s*by|directed\s*by|produced\s*by|dop|cinematography|editor|colorist|artwork|thumbnail|special\s*thanks|starring|cast|backing\s*track|kar[ao]+ke|midi|minus\s*one|privacy\s*policy|terms\s*of\s*use|cookie|skip\s*to\s*main|reality\s*show|cover\s*versions|related\s*songs)\b|(?:^|\s)(title|song|artist|singer|vocals?|music|melody|lyrics|lyricist|composed|composer|arranged|studio|guitars?|flute|veena|synth|violin|piano|keys|keyboards?|percussion|drums|bass|audio|video|art|category|views|updated)\s*[-:|–—]/i;
-        // Catches ANY generic English credit header line like "Art - Ravi Jay", "Synth - Shehan", "Mix & Master : ..."
+        const promoRe = /https?:\/\/|www\.|@[a-z0-9_]|#[a-z0-9_\u0D80-\u0DFF]|\b(subscribe|whatsapp|facebook|instagram|tiktok|spotify|apple\s*music|itunes|deezer|contact|call|booking|all\s*rights|copyright|official\s*(music|lyric|audio|video)|channel|publish|powered\s*by|distributed\s*by|stream\s*\/?\s*download|stream\s*now|download\s*now|follow\s*us|performed\s*by|written\s*by|screenplay\s*by|story\s*by|sung\s*by|music\s*by|lyrics\s*by|composed\s*by|arranged\s*by|melody\s*(&|and)\s*music|music\s*produced|song\s*credits|credits\s*:|mixing|mastering|mixed\s*(&|and|by)?|mastered\s*by|recorded\s*(at|by)|video\s*by|directed\s*by|produced\s*by|dop|cinematography|editor|colorist|artwork|thumbnail|special\s*thanks|starring|cast|backing\s*track|keyboard\s*(voices|style)|songs?\s*notation|kar[ao]+ke|midi|minus\s*one|privacy\s*policy|terms\s*of\s*use|cookie|skip\s*to\s*main|reality\s*show|cover\s*versions|related\s*songs)\b|(?:^|\s)(title|song|artist|singer|vocals?|music|melody|lyrics|lyricist|composed|composer|arranged|studio|guitars?|flute|veena|synth|violin|piano|keys|keyboards?|percussion|drums|bass|audio|video|art|category|views|updated)\s*[-:|–—]/i;
         const creditPairRe = /^[A-Za-z][A-Za-z0-9 &,/()+.']{1,26}\s*[-:|–—]\s+[A-Z0-9@]/;
         const phoneRe = /\b0\d{2}[-\s]?\d{3}[-\s]?\d{4}\b|\+\d{8,15}/;
 
-        // Helper: Cleanly extract pure song stanzas from plain text / YouTube descriptions / scraped web bodies!
         const extractLyricsFromYtDescription = (desc: string): string => {
           if (!desc || desc.length < 110) return '';
           const cleanedDesc = desc.replace(/[\u200B-\u200F\u202A-\u202E\uFEFF]/g, '');
+          // If a description explicitly contains a "Song Credits:" / "Keyboard voices" section without real lyrics, strip lines inside credits blocks
           const blocks = cleanedDesc.replace(/\r\n/g, '\n').split(/\n\s*\n+/);
           const goodStanzas: string[] = [];
           let totalCleanLines = 0;
 
           for (const block of blocks) {
+            if (/\b(song\s*credits|credits\s*:|keyboard\s*voices|songs?\s*notation|screenplay\s*by)\b/i.test(block)) continue;
             const rawLines = block.split('\n').map((l) => l.trim()).filter(Boolean);
             const kept: string[] = [];
             for (const ln of rawLines) {
               if (ln.length < 4 || ln.length > 96) continue;
               if (promoRe.test(ln) || creditPairRe.test(ln) || phoneRe.test(ln)) continue;
-              if (/^[=\-*_~•|<>✦★☆♪♫▶\s]+$/.test(ln)) continue;
+              if (/^[=\-*_~•|<>✦★☆♪♫🎵🎶▶\s]+$/.test(ln)) continue;
+              if (/^--\s*.+\s*--$/.test(ln)) continue;
               if (ln.includes('|') || /\b(lyrics\s*video|official\s*video)\b/i.test(ln)) continue;
-              // Skip long English prose sentences describing the song rather than verse lines
               if (ln.length > 72 && /\b(sung by|presented here|written by|composed by|melodic|romantic)\b/i.test(ln)) continue;
               kept.push(ln);
             }
@@ -668,7 +668,6 @@ export default {
           return '';
         };
 
-        // Helper: Extract lyrics from ANY webpage HTML across the open internet!
         const extractLyricsFromWebHtml = (rawHtml: string): string => {
           const bodyIdx = rawHtml.search(/<body[\s>]/i);
           let chunk = bodyIdx >= 0 ? rawHtml.slice(bodyIdx) : rawHtml;
@@ -725,141 +724,66 @@ export default {
           return false;
         };
 
+        // STAGE 1 (~350ms IN PARALLEL): LRCLIB Global Search + YouTube Live AI Spell-Corrector / Video Discovery
         let foundTrack: any = null;
-
-        // 1. Primary Global LRCLIB Search (3,000,000+ Synced LRC + Plain Songs)
-        if (!/[\u0D80-\u0DFF]/.test(cleanRaw)) {
-          try {
-            const qWordsRaw = cleanLatin.toLowerCase().split(/\s+/).filter((w) => w.length >= 2);
-            const lrcRes = await fetch(
-              `https://lrclib.net/api/search?q=${encodeURIComponent(cleanLatin)}`,
-              { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; SingVaza/14.0)' } }
-            );
-            if (lrcRes.ok) {
-              const list = (await lrcRes.json()) as any[];
-              foundTrack = list.find((item) => {
-                if (!item.plainLyrics && !item.syncedLyrics) return false;
-                const meta = `${item.trackName || ''} ${item.name || ''} ${item.artistName || ''}`.toLowerCase();
-                return qWordsRaw.every((w) => meta.includes(w)) || (qWordsRaw.length >= 2 && qWordsRaw.filter((w) => meta.includes(w)).length >= Math.ceil(qWordsRaw.length * 0.7));
-              }) || null;
-            }
-          } catch (_) {}
-        }
-
-        // 2. REAL-TIME YOUTUBE AI SEARCH + PARALLEL 6-VIDEO DESCRIPTION + SUBTITLES (CC) EXTRACTOR
         let ytCanonicalTitle = '';
         let ytRawFirstTitle = '';
-        if (!foundTrack) {
-          try {
-            const ytSearchRes = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                context: { client: { clientName: 'WEB', clientVersion: '2.20241001.01.00', hl: 'en', gl: 'LK' } },
-                query: `${cleanRaw} lyrics`,
-              }),
-              signal: AbortSignal.timeout(4000),
-            });
-            if (ytSearchRes.ok) {
-              const sJson: any = await ytSearchRes.json();
-              const vids: { id: string; title: string }[] = [];
-              JSON.stringify(sJson, (_k, v) => {
-                if (v && typeof v === 'object' && v.videoRenderer?.videoId) {
-                  vids.push({
-                    id: v.videoRenderer.videoId,
-                    title: (v.videoRenderer.title?.runs || []).map((r: any) => r.text).join(''),
-                  });
-                }
-                return v;
+        let ytVids: { id: string; title: string }[] = [];
+
+        await Promise.all([
+          (async () => {
+            if (/[\u0D80-\u0DFF]/.test(cleanRaw)) return;
+            try {
+              const qWordsRaw = cleanLatin.toLowerCase().split(/\s+/).filter((w) => w.length >= 2);
+              const lrcRes = await fetch(
+                `https://lrclib.net/api/search?q=${encodeURIComponent(cleanLatin)}`,
+                { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; SingVaza/15.0)' }, signal: AbortSignal.timeout(3500) }
+              );
+              if (lrcRes.ok) {
+                const list = (await lrcRes.json()) as any[];
+                foundTrack = list.find((item) => {
+                  if (!item.plainLyrics && !item.syncedLyrics) return false;
+                  const meta = `${item.trackName || ''} ${item.name || ''} ${item.artistName || ''}`.toLowerCase();
+                  return qWordsRaw.every((w) => meta.includes(w)) || (qWordsRaw.length >= 2 && qWordsRaw.filter((w) => meta.includes(w)).length >= Math.ceil(qWordsRaw.length * 0.7));
+                }) || null;
+              }
+            } catch (_) {}
+          })(),
+          (async () => {
+            try {
+              const ytSearchRes = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  context: { client: { clientName: 'WEB', clientVersion: '2.20241001.01.00', hl: 'en', gl: 'LK' } },
+                  query: `${cleanRaw} lyrics`,
+                }),
+                signal: AbortSignal.timeout(3500),
               });
-
-              if (vids.length > 0) {
-                ytRawFirstTitle = vids[0].title;
-                ytCanonicalTitle = vids[0].title
-                  .split(/[|•]/)[0]
-                  .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
-                  .replace(/\b(lyrics?|official|video|audio|sinhala|hd|4k|full\s*song)\b/gi, ' ')
-                  .replace(/\s+/g, ' ')
-                  .trim();
-
-                const topVids = vids.slice(0, 6);
-                const playerInfos = await Promise.all(
-                  topVids.map(async (v) => {
-                    try {
-                      const pRes = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          context: { client: { clientName: 'WEB', clientVersion: '2.20241001.01.00', hl: 'en', gl: 'LK' } },
-                          videoId: v.id,
-                        }),
-                        signal: AbortSignal.timeout(3500),
-                      });
-                      if (!pRes.ok) return null;
-                      const pJson: any = await pRes.json();
-                      const tracks = pJson?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
-                      // Prefer human-uploaded lyrics subtitles over auto-generated ASR
-                      const manualTrack = tracks.find((t: any) => t?.baseUrl && t.kind !== 'asr');
-                      return {
-                        title: String(pJson?.videoDetails?.title || v.title),
-                        desc: String(pJson?.videoDetails?.shortDescription || ''),
-                        captionUrl: manualTrack?.baseUrl ? String(manualTrack.baseUrl) : '',
-                      };
-                    } catch (_) {
-                      return null;
-                    }
-                  })
-                );
-
-                // 2A. Check all 6 videos' Descriptions first
-                for (const info of playerInfos) {
-                  if (!info || !info.desc) continue;
-                  const extracted = extractLyricsFromYtDescription(info.desc);
-                  if (extracted.length > 60) {
-                    foundTrack = { plainLyrics: extracted };
-                    break;
+              if (ytSearchRes.ok) {
+                const sJson: any = await ytSearchRes.json();
+                JSON.stringify(sJson, (_k, v) => {
+                  if (v && typeof v === 'object' && v.videoRenderer?.videoId) {
+                    ytVids.push({
+                      id: v.videoRenderer.videoId,
+                      title: (v.videoRenderer.title?.runs || []).map((r: any) => r.text).join(''),
+                    });
                   }
-                }
-
-                // 2B. If NO video had lyrics in its Description, extract directly from YouTube Closed Captions / Subtitles (CC)!
-                if (!foundTrack) {
-                  for (const info of playerInfos) {
-                    if (!info?.captionUrl) continue;
-                    try {
-                      const capRes = await fetch(info.captionUrl, { signal: AbortSignal.timeout(3000) });
-                      if (!capRes.ok) continue;
-                      const capXml = await capRes.text();
-                      const syncedLines: string[] = [];
-                      const plainLines: string[] = [];
-                      const cueRe = /<text[^>]*start="([\d.]+)"[^>]*>([\s\S]*?)<\/text>/gi;
-                      let cm: RegExpExecArray | null;
-                      while ((cm = cueRe.exec(capXml)) !== null) {
-                        const sec = parseFloat(cm[1] || '0');
-                        const txt = decodeHtmlEntities(cm[2].replace(/<[^>]+>/g, ' '))
-                          .replace(/[♪♫♬]+/g, '')
-                          .replace(/\s+/g, ' ')
-                          .trim();
-                        if (!txt || txt.length < 3 || /^\[(music|applause|intro|instrumental)\]$/i.test(txt)) continue;
-                        if (plainLines[plainLines.length - 1] === txt) continue;
-                        const mm = String(Math.floor(sec / 60)).padStart(2, '0');
-                        const ss = (sec % 60).toFixed(2).padStart(5, '0');
-                        syncedLines.push(`[${mm}:${ss}] ${txt}`);
-                        plainLines.push(txt);
-                      }
-                      if (plainLines.length >= 6) {
-                        foundTrack = {
-                          syncedLyrics: syncedLines.join('\n'),
-                          plainLyrics: plainLines.join('\n'),
-                        };
-                        break;
-                      }
-                    } catch (_) {}
-                  }
+                  return v;
+                });
+                if (ytVids.length > 0) {
+                  ytRawFirstTitle = ytVids[0].title;
+                  ytCanonicalTitle = ytVids[0].title
+                    .split(/[|•]/)[0]
+                    .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+                    .replace(/\b(lyrics?|official|video|audio|sinhala|hd|4k|full\s*song)\b/gi, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
                 }
               }
-            }
-          } catch (_) {}
-        }
+            } catch (_) {}
+          })(),
+        ]);
 
         const searchCandidates = Array.from(
           new Set(
@@ -869,25 +793,26 @@ export default {
           )
         );
 
-        // 3. Retry LRCLIB with YouTube's spell-corrected title if user made a typo
-        if (!foundTrack && ytCanonicalTitle && ytCanonicalTitle.toLowerCase() !== cleanLatin.toLowerCase()) {
-          try {
-            const lrcRes2 = await fetch(
-              `https://lrclib.net/api/search?q=${encodeURIComponent(ytCanonicalTitle)}`,
-              { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; SingVaza/14.0)' } }
-            );
-            if (lrcRes2.ok) {
-              const list2 = (await lrcRes2.json()) as any[];
-              const hit2 = list2.find((item) => (item.plainLyrics || item.syncedLyrics) && titleMatchesCandidates(`${item.trackName || ''} ${item.artistName || ''}`, searchCandidates));
-              if (hit2) foundTrack = hit2;
-            }
-          } catch (_) {}
-        }
-
-        // 4. Parallel Sinhala Structured Libraries: SinhalaSongLyrics.com (Modern 2018-2026 Hits) + LyriHub (2,372) + SinhalaSongBook (10,000+ Classics)
+        // STAGE 2 (~450ms IN PARALLEL): Dedicated Zero-Noise Pure Lyrics Databases (LRCLIB Spell-Corrected + SinhalaSongLyrics 2026 + LyriHub + SinhalaSongBook)
         if (!foundTrack) {
-          const [sslHit, lyriHit, ssbHit] = await Promise.all([
-            // 4A. SinhalaSongLyrics.com WordPress REST API (Modern 2020-2026 Releases)
+          const [lrc2Hit, sslHit, lyriHit, ssbHit] = await Promise.all([
+            // 2A. LRCLIB Retry using YouTube's AI-corrected title
+            (async () => {
+              if (!ytCanonicalTitle || ytCanonicalTitle.toLowerCase() === cleanLatin.toLowerCase()) return null;
+              try {
+                const lrcRes2 = await fetch(
+                  `https://lrclib.net/api/search?q=${encodeURIComponent(ytCanonicalTitle)}`,
+                  { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; SingVaza/15.0)' }, signal: AbortSignal.timeout(3500) }
+                );
+                if (lrcRes2.ok) {
+                  const list2 = (await lrcRes2.json()) as any[];
+                  return list2.find((item) => (item.plainLyrics || item.syncedLyrics) && titleMatchesCandidates(`${item.trackName || ''} ${item.artistName || ''}`, searchCandidates)) || null;
+                }
+              } catch (_) {}
+              return null;
+            })(),
+
+            // 2B. SinhalaSongLyrics.com WordPress REST API (Modern 2020-2026 Releases)
             (async () => {
               for (const sq of searchCandidates.slice(0, 2)) {
                 try {
@@ -909,10 +834,10 @@ export default {
               return null;
             })(),
 
-            // 4B. LyriHub.lk 2,372 Sinhala Songs Index
+            // 2C. LyriHub.lk 2,372 Sinhala Songs Index
             (async () => {
               try {
-                const idxCacheKey = new Request('https://singvaza-cache.local/v14/lyrihub-compact-index');
+                const idxCacheKey = new Request('https://singvaza-cache.local/v15/lyrihub-compact-index');
                 let indexText = '';
                 if (edgeCache) {
                   const idxHit = await edgeCache.match(idxCacheKey);
@@ -978,7 +903,7 @@ export default {
               return null;
             })(),
 
-            // 4C. SinhalaSongBook.com 10,000+ Classics API
+            // 2D. SinhalaSongBook.com 10,000+ Classics API
             (async () => {
               for (const sq of searchCandidates.slice(0, 2)) {
                 try {
@@ -1022,11 +947,85 @@ export default {
             })(),
           ]);
 
-          foundTrack = sslHit || lyriHit || ssbHit || null;
+          foundTrack = lrc2Hit || sslHit || lyriHit || ssbHit || null;
         }
 
-        // 5. LIVE OPEN-INTERNET WEB SEARCH FALLBACK (DuckDuckGo HTML + Bing Web Search in Parallel!)
-        // Catches ANY song anywhere on Google/Bing/DDG (lyrics-lk.com, lankawebsites.com, bharatlyrics, tamil2lyrics, azlyrics, blogs, etc.) even when NO YouTube video has Description OR Captions!
+        // STAGE 3 (~350ms IN PARALLEL): YouTube Human Subtitles / CC + Clean Video Descriptions (for brand-new/indie songs not on ANY lyrics site!)
+        if (!foundTrack && ytVids.length > 0) {
+          try {
+            const playerInfos = await Promise.all(
+              ytVids.slice(0, 6).map(async (v) => {
+                try {
+                  const pRes = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      context: { client: { clientName: 'WEB', clientVersion: '2.20241001.01.00', hl: 'en', gl: 'LK' } },
+                      videoId: v.id,
+                    }),
+                    signal: AbortSignal.timeout(3500),
+                  });
+                  if (!pRes.ok) return null;
+                  const pJson: any = await pRes.json();
+                  const tracks = pJson?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+                  const manualTrack = tracks.find((t: any) => t?.baseUrl && t.kind !== 'asr');
+                  return {
+                    title: String(pJson?.videoDetails?.title || v.title),
+                    desc: String(pJson?.videoDetails?.shortDescription || ''),
+                    captionUrl: manualTrack?.baseUrl ? String(manualTrack.baseUrl) : '',
+                  };
+                } catch (_) {
+                  return null;
+                }
+              })
+            );
+
+            // 3A. Human Subtitles / Closed Captions (CC) — works even when Description has ZERO lyrics!
+            for (const info of playerInfos) {
+              if (!info?.captionUrl) continue;
+              try {
+                const capRes = await fetch(info.captionUrl, { signal: AbortSignal.timeout(3000) });
+                if (!capRes.ok) continue;
+                const capXml = await capRes.text();
+                const syncedLines: string[] = [];
+                const plainLines: string[] = [];
+                const cueRe = /<text[^>]*start="([\d.]+)"[^>]*>([\s\S]*?)<\/text>/gi;
+                let cm: RegExpExecArray | null;
+                while ((cm = cueRe.exec(capXml)) !== null) {
+                  const sec = parseFloat(cm[1] || '0');
+                  const txt = decodeHtmlEntities(cm[2].replace(/<[^>]+>/g, ' '))
+                    .replace(/[♪♫♬]+/g, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                  if (!txt || txt.length < 3 || /^\[(music|applause|intro|instrumental)\]$/i.test(txt)) continue;
+                  if (plainLines[plainLines.length - 1] === txt) continue;
+                  const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+                  const ss = (sec % 60).toFixed(2).padStart(5, '0');
+                  syncedLines.push(`[${mm}:${ss}] ${txt}`);
+                  plainLines.push(txt);
+                }
+                if (plainLines.length >= 6) {
+                  foundTrack = { syncedLyrics: syncedLines.join('\n'), plainLyrics: plainLines.join('\n') };
+                  break;
+                }
+              } catch (_) {}
+            }
+
+            // 3B. Clean Video Stanza Descriptions across all 6 videos
+            if (!foundTrack) {
+              for (const info of playerInfos) {
+                if (!info || !info.desc) continue;
+                const extracted = extractLyricsFromYtDescription(info.desc);
+                if (extracted.length > 60) {
+                  foundTrack = { plainLyrics: extracted };
+                  break;
+                }
+              }
+            }
+          } catch (_) {}
+        }
+
+        // STAGE 4 (~500ms IN PARALLEL): LIVE OPEN-WEB SEARCH (DuckDuckGo HTML + Bing Web Search across EVERY public lyrics website on Earth!)
         if (!foundTrack) {
           try {
             const webQuery = `${ytCanonicalTitle || cleanRaw} lyrics`;
