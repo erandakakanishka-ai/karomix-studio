@@ -605,7 +605,7 @@ export default {
           .replace(/\s+/g, ' ')
           .trim() || q;
 
-        const cacheKey = new Request(`https://singvaza-cache.local/v17.2/lyrics?q=${encodeURIComponent(cleanQ.toLowerCase())}`);
+        const cacheKey = new Request(`https://singvaza-cache.local/v17.3/lyrics?q=${encodeURIComponent(cleanQ.toLowerCase())}`);
         const edgeCache = (globalThis as any).caches?.default;
         if (edgeCache) {
           const cachedHit = await edgeCache.match(cacheKey);
@@ -724,7 +724,7 @@ export default {
               if (entry.w.some((sw) => wordsMatch(sw, qWords[j]))) hits++;
             }
             if (hits >= minReq) {
-              const typeBonus = entry.t === 'H' ? 0.08 : entry.t === 'L' ? 0.04 : 0.02;
+              const typeBonus = entry.t === 'H' ? 0.06 : entry.t === 'S' ? 0.04 : 0.01;
               const score = hits / Math.max(qWords.length, entry.w.length * 0.75) + typeBonus;
               if (score >= 0.25) {
                 if (top.length < 3) {
