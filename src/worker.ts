@@ -514,8 +514,12 @@ export default {
       // Dynamic HTML Web Tools Hub & Individual Standalone HTML Tools (/tools & /tools/:slug)
       if ((cleanPath === '/tools' || cleanPath === '/tools/' || cleanPath.startsWith('/tools/')) && (request.method === 'GET' || request.method === 'HEAD')) {
         await ensureSchema(env.DB);
+        const sMapAd = await getSettingsMap(env.DB);
+        const globalAdSnippet = sMapAd.ads_enabled === 'true'
+          ? ((sMapAd.adsense_client_id ? `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${escapeHtml(sMapAd.adsense_client_id)}" crossorigin="anonymous"></script>` : '') + (sMapAd.custom_ad_code || ''))
+          : '';
         const toolSlug = cleanPath.replace(/^\/tools\/?/, '').replace(/\/$/, '').trim();
-        const beaconTag = `<script>try{if(!sessionStorage.getItem('sv_v_'+location.pathname)){sessionStorage.setItem('sv_v_'+location.pathname,'1');fetch('/api/ping-visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:location.pathname})}).catch(()=>{});}}catch(_){}</script>`;
+        const beaconTag = `${globalAdSnippet}<script>try{if(!sessionStorage.getItem('sv_v_'+location.pathname)){sessionStorage.setItem('sv_v_'+location.pathname,'1');fetch('/api/ping-visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:location.pathname})}).catch(()=>{});}}catch(_){}</script>`;
         if (!toolSlug) {
           const rows = env.DB
             ? await env.DB.prepare('SELECT id, slug, title, category, icon, description, views, created_at FROM html_tools ORDER BY created_at DESC LIMIT 200').all()
@@ -573,7 +577,11 @@ export default {
       // Dynamic SEO Server-Side Rendered Blog Index & Single Post Pages (/blog & /blog/:slug — supports Plain, Rich HTML, & Full Standalone HTML!)
       if ((url.pathname === '/blog' || url.pathname === '/blog/' || url.pathname.startsWith('/blog/')) && (request.method === 'GET' || request.method === 'HEAD')) {
         await ensureSchema(env.DB);
-        const beaconTag = `<script>try{if(!sessionStorage.getItem('sv_v_'+location.pathname)){sessionStorage.setItem('sv_v_'+location.pathname,'1');fetch('/api/ping-visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:location.pathname})}).catch(()=>{});}}catch(_){}</script>`;
+        const sMapAd = await getSettingsMap(env.DB);
+        const globalAdSnippet = sMapAd.ads_enabled === 'true'
+          ? ((sMapAd.adsense_client_id ? `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${escapeHtml(sMapAd.adsense_client_id)}" crossorigin="anonymous"></script>` : '') + (sMapAd.custom_ad_code || ''))
+          : '';
+        const beaconTag = `${globalAdSnippet}<script>try{if(!sessionStorage.getItem('sv_v_'+location.pathname)){sessionStorage.setItem('sv_v_'+location.pathname,'1');fetch('/api/ping-visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:location.pathname})}).catch(()=>{});}}catch(_){}</script>`;
         const slugPart = url.pathname.replace(/^\/blog\/?/, '').replace(/\/$/, '').trim();
         if (!slugPart) {
           const rows = env.DB
@@ -850,6 +858,8 @@ export default {
             social_telegram: s.social_telegram || '',
             google_client_id: s.google_client_id || env.GOOGLE_CLIENT_ID || '',
             adsense_client_id: s.adsense_client_id || '',
+            custom_ad_code: s.custom_ad_code || '',
+            ads_enabled: s.ads_enabled === 'true',
             notice_banner: s.notice_banner || '',
             daily_free_limit: Number(s.daily_free_limit || DAILY_FREE_LIMIT),
           },
@@ -863,11 +873,13 @@ export default {
         const allowedKeys = [
           'admin_username', 'support_email', 'business_whatsapp', 'whatsapp_enabled',
           'social_youtube', 'social_facebook', 'social_tiktok', 'social_telegram',
-          'google_client_id', 'adsense_client_id', 'notice_banner', 'daily_free_limit',
+          'google_client_id', 'adsense_client_id', 'custom_ad_code', 'ads_enabled',
+          'notice_banner', 'daily_free_limit',
         ];
         for (const k of allowedKeys) {
           if (body[k] !== undefined) {
-            const val = String(body[k]).trim().slice(0, 500);
+            const maxLen = k === 'custom_ad_code' ? 6000 : 500;
+            const val = String(body[k]).trim().slice(0, maxLen);
             if (k === 'admin_username' && val.length < 2) continue;
             await env.DB.prepare(
               `INSERT INTO site_settings (k, v, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
