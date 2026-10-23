@@ -1,6 +1,6 @@
 {
-  "name": "KaroMix Studio — Vocal Recording & Audio Mastering",
-  "short_name": "KaroMix Studio",
+  "name": "SingCraft Studio — Vocal Recording & Audio Mastering",
+  "short_name": "SingCraft Studio",
   "description": "Sing karaoke with full lyrics, record vocals cleanly, and master compact stereo MP3 tracks in your browser.",
   "start_url": "/",
   "display": "standalone",

@@ -119,7 +119,7 @@ function renderBlogShellHtml(opts: { origin: string; title: string; description:
 <body>
   <div class="wrap">
     <header class="top">
-      <a class="brand" href="/"><img src="/assets/logo.png" alt="KaroMix Studio" /><span>KAROMIX <span style="color:var(--amber);">STUDIO</span></span></a>
+      <a class="brand" href="/"><img src="/assets/logo.png" alt="SingCraft Studio" /><span>SINGCRAFT <span style="color:var(--amber);">STUDIO</span></span></a>
       <nav class="nav-links">
         <a href="/">Open Studio</a>
         <a href="/blog" style="color:var(--amber);font-weight:700;">Blog</a>
@@ -138,7 +138,7 @@ function renderBlogShellHtml(opts: { origin: string; title: string; description:
         <a href="/privacy">Privacy Policy</a> •
         <a href="/terms">Terms of Service</a>
       </div>
-      <div style="margin-top:8px;">© 2026 KaroMix Studio</div>
+      <div style="margin-top:8px;">© 2026 SingCraft Studio</div>
     </footer>
   </div>
 </body>
@@ -237,7 +237,7 @@ async function resolveUser(request: Request, env: Env) {
   if (env.DB) {
     await env.DB.prepare(
       `INSERT OR IGNORE INTO users (id, email, password_hash, display_name, plan, currency, exports_this_month)
-       VALUES (?, 'guest@karomixstudio.com', '', 'Guest Artist', 'free', 'USD', 0)`
+       VALUES (?, 'guest@singcraftstudio.com', '', 'Guest Artist', 'free', 'USD', 0)`
     ).bind(fallbackId).run();
     const u = await env.DB.prepare(
       'SELECT id, email, display_name, plan, currency, exports_this_month, pro_until, daily_date, daily_exports FROM users WHERE id = ?'
@@ -246,7 +246,7 @@ async function resolveUser(request: Request, env: Env) {
   }
 
   return {
-    user: { id: fallbackId, email: 'guest@karomixstudio.com', display_name: 'Guest Artist', plan: 'free', currency: 'USD', exports_this_month: 0, pro_until: 0, daily_date: '', daily_exports: 0 },
+    user: { id: fallbackId, email: 'guest@singcraftstudio.com', display_name: 'Guest Artist', plan: 'free', currency: 'USD', exports_this_month: 0, pro_until: 0, daily_date: '', daily_exports: 0 },
     authenticated: false,
   };
 }
@@ -393,10 +393,10 @@ export default {
             : { results: [] };
           const list = (rows.results || []) as any[];
           const bodyHtml = `
-            <h1>KaroMix Studio Blog</h1>
+            <h1>SingCraft Studio Blog</h1>
             <p style="color:var(--muted);margin-bottom:24px;">Original vocal recording tutorials, microphone reviews, singing techniques, and home audio guides.</p>
             ${list.length === 0
-              ? `<div class="card"><p style="margin:0;">New articles are coming soon. <a href="/" style="color:var(--amber);">Open KaroMix Studio →</a></p></div>`
+              ? `<div class="card"><p style="margin:0;">New articles are coming soon. <a href="/" style="color:var(--amber);">Open SingCraft Studio →</a></p></div>`
               : `<div class="grid">${list.map((p) => `
                 <a class="post-card" href="/blog/${escapeHtml(p.slug)}">
                   <img src="${escapeHtml(p.cover_image || '/assets/studio-girl-card.jpg')}" alt="${escapeHtml(p.title)}" />
@@ -410,7 +410,7 @@ export default {
           return new Response(
             renderBlogShellHtml({
               origin: url.origin,
-              title: 'Blog — KaroMix Studio',
+              title: 'Blog — SingCraft Studio',
               description: 'Original articles on home vocal recording, microphone setup, singing technique, and audio mixing.',
               canonicalPath: '/blog',
               bodyHtml,
@@ -426,7 +426,7 @@ export default {
           return new Response(
             renderBlogShellHtml({
               origin: url.origin,
-              title: 'Article Not Found — KaroMix Studio',
+              title: 'Article Not Found — SingCraft Studio',
               description: 'Article not found.',
               canonicalPath: '/blog',
               bodyHtml: `<div class="card"><h1>Article Not Found</h1><p><a class="btn" href="/blog">← View All Blog Posts</a></p></div>`,
@@ -450,7 +450,7 @@ export default {
         return new Response(
           renderBlogShellHtml({
             origin: url.origin,
-            title: `${post.title} — KaroMix Studio Blog`,
+            title: `${post.title} — SingCraft Studio Blog`,
             description: post.excerpt || String(post.content || '').slice(0, 155),
             canonicalPath: `/blog/${post.slug}`,
             bodyHtml,
@@ -532,7 +532,7 @@ export default {
         const q = (url.searchParams.get('q') || '').trim();
         if (!q) return json({ videos: [] });
 
-        const cacheKey = new Request(`https://karomix-edge-cache.local/karaoke-v4?q=${encodeURIComponent(q.toLowerCase())}`);
+        const cacheKey = new Request(`https://singcraft-edge-cache.local/karaoke-v4?q=${encodeURIComponent(q.toLowerCase())}`);
         const edgeCache = (globalThis as any).caches?.default;
         if (edgeCache) {
           const hit = await edgeCache.match(cacheKey);
@@ -565,7 +565,7 @@ export default {
           .replace(/\s+/g, ' ')
           .trim() || q;
 
-        const cacheKey = new Request(`https://karomix-cache.local/v7/lyrics?q=${encodeURIComponent(cleanQ.toLowerCase())}`);
+        const cacheKey = new Request(`https://singcraft-cache.local/v7/lyrics?q=${encodeURIComponent(cleanQ.toLowerCase())}`);
         const edgeCache = (globalThis as any).caches?.default;
         if (edgeCache) {
           const cachedHit = await edgeCache.match(cacheKey);
@@ -583,7 +583,7 @@ export default {
           try {
             const lrcRes = await fetch(
               `https://lrclib.net/api/search?q=${encodeURIComponent(cand)}`,
-              { headers: { 'User-Agent': 'KaroMixStudio/11.0 (https://karomix-studio.pages.dev)' } }
+              { headers: { 'User-Agent': 'SingCraftStudio/11.0 (https://singcraft-studio.pages.dev)' } }
             );
             if (lrcRes.ok) {
               const list = (await lrcRes.json()) as any[];
@@ -594,7 +594,7 @@ export default {
 
         if (!foundTrack) {
           try {
-            const smCacheKey = new Request('https://karomix-cache.local/v7/lyrihub-sitemap');
+            const smCacheKey = new Request('https://singcraft-cache.local/v7/lyrihub-sitemap');
             let xml = '';
             if (edgeCache) {
               const smHit = await edgeCache.match(smCacheKey);

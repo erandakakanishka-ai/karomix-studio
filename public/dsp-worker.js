@@ -1,5 +1,5 @@
 /**
- * KaroMix Studio v10.0 - Dedicated Background Audio DSP Worker
+ * SingCraft Studio v10.0 - Dedicated Background Audio DSP Worker
  * Runs Noise Gate, YIN Pitch Analysis & Phase-Aligned WSOLA off the UI Main Thread (Zero Mobile Freeze!)
  */
 

@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://karomix-studio.pages.dev/sitemap.xml
+Sitemap: https://singcraft-studio.pages.dev/sitemap.xml

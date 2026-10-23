@@ -1,4 +1,4 @@
--- KaroMix Studio v11.0 - Cloudflare D1 Database Schema (Human Blog CMS + Global Timezone Quota + 30-Day Free Pro Pass + Auth + Contact)
+-- SingCraft Studio v11.0 - Cloudflare D1 Database Schema (Human Blog CMS + Global Timezone Quota + 30-Day Free Pro Pass + Auth + Contact)
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT UNIQUE,
@@ -69,4 +69,4 @@ CREATE TABLE IF NOT EXISTS blog_posts (
 );
 
 INSERT OR IGNORE INTO users (id, email, password_hash, display_name, plan, currency, exports_this_month, pro_until, daily_date, daily_exports, auth_provider)
-VALUES ('demo-singer-global', 'guest@karomixstudio.com', '', 'Guest Artist', 'free', 'USD', 0, 0, '', 0, 'guest');
+VALUES ('demo-singer-global', 'guest@singcraftstudio.com', '', 'Guest Artist', 'free', 'USD', 0, 0, '', 0, 'guest');
