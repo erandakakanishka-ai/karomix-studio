@@ -605,14 +605,6 @@ export default {
           .replace(/\s+/g, ' ')
           .trim() || q;
 
-        const cacheKey = new Request(`https://singvaza-cache.local/v17.4/lyrics?q=${encodeURIComponent(cleanQ.toLowerCase())}`);
-        const edgeCache = (globalThis as any).caches?.default;
-        if (edgeCache) {
-          const cachedHit = await edgeCache.match(cacheKey);
-          if (cachedHit) return cachedHit;
-        }
-
-        // Canonical Sinhala/Singlish phonetic normalizer (maps aayee=aye, kauruda=kawuruda, paravi=parawi, adaraneeya=adaraniya!)
         const normPhonetic = (s: string) =>
           sinhalaToSinglish(s)
             .toLowerCase()
@@ -634,6 +626,27 @@ export default {
             .replace(/([a-z])\1+/g, '$1')
             .replace(/\s+/g, ' ')
             .trim();
+
+        const qNormKey = normPhonetic(cleanQ);
+        if (env.DB && qNormKey) {
+          await ensureSchema(env.DB);
+          try {
+            const d1Hit: any = await env.DB.prepare('SELECT plain_lyrics FROM cached_lyrics WHERE q_norm = ?').bind(qNormKey).first();
+            if (d1Hit?.plain_lyrics) {
+              return new Response(JSON.stringify({ track: { plainLyrics: d1Hit.plain_lyrics } }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=604800, s-maxage=604800', ...CORS_HEADERS },
+              });
+            }
+          } catch (_) {}
+        }
+
+        const cacheKey = new Request(`https://singvaza-cache.local/v17.5/lyrics?q=${encodeURIComponent(cleanQ.toLowerCase())}`);
+        const edgeCache = (globalThis as any).caches?.default;
+        if (edgeCache) {
+          const cachedHit = await edgeCache.match(cacheKey);
+          if (cachedHit) return cachedHit;
+        }
 
         const wordsMatch = (sw: string, qw: string) =>
           sw === qw || (qw.length >= 4 && sw.length >= 4 && (sw.startsWith(qw) || qw.startsWith(sw)));
@@ -662,7 +675,6 @@ export default {
               if (out.length && out[out.length - 1] !== '') out.push('');
               continue;
             }
-            // Keep ONLY pure Sinhala poetic lines — ZERO English singer names, ZERO chords, ZERO phone numbers!
             if (!/[\u0D80-\u0DFF]{2,}/.test(ln)) continue;
             if (/[A-Za-z]{2,}/.test(ln)) continue;
             if (/\d{3}/.test(ln) || ln.length > 80) continue;
@@ -673,20 +685,6 @@ export default {
 
           return verseCount >= 8 ? out.join('\n').replace(/\n{3,}/g, '\n\n').trim() : '';
         };
-
-        const qNormKey = normPhonetic(cleanQ);
-        if (env.DB && qNormKey) {
-          await ensureSchema(env.DB);
-          try {
-            const d1Hit: any = await env.DB.prepare('SELECT plain_lyrics FROM cached_lyrics WHERE q_norm = ?').bind(qNormKey).first();
-            if (d1Hit?.plain_lyrics) {
-              return new Response(JSON.stringify({ track: { plainLyrics: d1Hit.plain_lyrics } }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=604800, s-maxage=604800', ...CORS_HEADERS },
-              });
-            }
-          } catch (_) {}
-        }
         if (!memSlIndex) {
           try {
             const assetUrl = new URL('/sl-songs.txt', request.url);
