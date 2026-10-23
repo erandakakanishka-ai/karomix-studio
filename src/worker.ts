@@ -743,11 +743,12 @@ export default {
           const firstTwo = cleanLatin.split(/\s+/).slice(0, 2).join(' ');
           if (firstTwo.length >= 4 && !ssbQueries.includes(firstTwo)) ssbQueries.push(firstTwo);
 
-          for (const sq of ssbQueries) {
+          for (const sq of ssbQueries.slice(0, 2)) {
             if (foundTrack || !qTokens.length) break;
             try {
               const ssbRes = await fetch(
-                `https://www.sinhalasongbook.com/wp-json/wp/v2/posts?per_page=15&_fields=title,content&search=${encodeURIComponent(sq)}`
+                `https://www.sinhalasongbook.com/wp-json/wp/v2/posts?per_page=12&_fields=title,content&search=${encodeURIComponent(sq)}`,
+                { signal: AbortSignal.timeout(4500) }
               );
               if (ssbRes.ok) {
                 const posts = (await ssbRes.json()) as any[];
@@ -790,7 +791,7 @@ export default {
                         continue;
                       }
                       if (/^(INTRO|INTER|CHORUS|VERSE|BRIDGE|OUTRO|END)/i.test(ln)) continue;
-                      if (/^[|\-\sA-G#bmajinsudg0-9/()+]+$/.test(ln) && !/[h-z\u0D80-\u0DFF]/i.test(ln)) continue;
+                      if (ln.includes('|') || (/^[\-\sxA-G#bmajinsudg0-9/()+]+$/.test(ln) && !/[h-w\u0D80-\u0DFF]/i.test(ln))) continue;
                       cleanLines.push(ln);
                     }
                     const joined = cleanLines.join('\n').trim();
