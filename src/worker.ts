@@ -600,7 +600,7 @@ export default {
           .replace(/\s+/g, ' ')
           .trim() || q;
 
-        const cacheKey = new Request(`https://singvaza-cache.local/v17/lyrics?q=${encodeURIComponent(cleanQ.toLowerCase())}`);
+        const cacheKey = new Request(`https://singvaza-cache.local/v17.1/lyrics?q=${encodeURIComponent(cleanQ.toLowerCase())}`);
         const edgeCache = (globalThis as any).caches?.default;
         if (edgeCache) {
           const cachedHit = await edgeCache.match(cacheKey);
@@ -698,8 +698,7 @@ export default {
           if (!qWords.length) return '';
           const minReq = qWords.length <= 2 ? qWords.length : Math.ceil(qWords.length * 0.75);
 
-          let bestEntry: { t: string; w: string[]; p: string } | null = null;
-          let bestScore = 0;
+          const top: Array<{ score: number; entry: { t: string; w: string[]; p: string } }> = [];
 
           for (let i = 0; i < memSlIndex.length; i++) {
             const entry = memSlIndex[i];
@@ -708,43 +707,52 @@ export default {
               if (entry.w.some((sw) => wordsMatch(sw, qWords[j]))) hits++;
             }
             if (hits >= minReq) {
-              // Bonus for clean LyriHub (H) & SinhalaSongLyrics (S), and tighter title length match
-              const typeBonus = entry.t === 'H' ? 0.05 : entry.t === 'S' ? 0.03 : 0;
-              const score = hits / Math.max(qWords.length, entry.w.length * 0.8) + typeBonus;
-              if (score > bestScore) {
-                bestScore = score;
-                bestEntry = entry;
+              const typeBonus = entry.t === 'H' ? 0.08 : entry.t === 'L' ? 0.04 : 0.02;
+              const score = hits / Math.max(qWords.length, entry.w.length * 0.75) + typeBonus;
+              if (score >= 0.25) {
+                if (top.length < 3) {
+                  top.push({ score, entry });
+                  top.sort((a, b) => b.score - a.score);
+                } else if (score > top[2].score) {
+                  top[2] = { score, entry };
+                  top.sort((a, b) => b.score - a.score);
+                }
               }
             }
           }
 
-          if (!bestEntry || bestScore < 0.5) return '';
+          if (!top.length) return '';
 
-          const targetUrl =
-            bestEntry.t === 'H'
-              ? `https://www.lyrihub.lk/song/${bestEntry.p}/`
-              : bestEntry.t === 'S'
-              ? `https://sinhalasonglyrics.com/${bestEntry.p}/`
-              : `https://lyrics-lk.com/song/${bestEntry.p}`;
-
-          try {
-            const pr = await fetch(targetUrl, {
-              headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SingVaza/17.0)' },
-              signal: AbortSignal.timeout(3500),
-            });
-            if (!pr.ok) return '';
-            const html = await pr.text();
-            if (bestEntry.t === 'H') {
-              const bm = html.match(/class="lyri-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-              if (bm) {
-                const pure = extractPureSinhalaStanzas(bm[1]);
-                if (pure) return pure;
+          const pages = await Promise.all(
+            top.map(async ({ entry }) => {
+              const targetUrl =
+                entry.t === 'H'
+                  ? `https://www.lyrihub.lk/song/${entry.p}/`
+                  : entry.t === 'S'
+                  ? `https://sinhalasonglyrics.com/${entry.p}/`
+                  : `https://lyrics-lk.com/song/${entry.p}`;
+              try {
+                const pr = await fetch(targetUrl, {
+                  headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128.0.0.0 Safari/537.36' },
+                  signal: AbortSignal.timeout(4000),
+                });
+                if (!pr.ok) return '';
+                const html = await pr.text();
+                if (entry.t === 'H') {
+                  const bm = html.match(/class="lyri-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+                  if (bm) {
+                    const pure = extractPureSinhalaStanzas(bm[1]);
+                    if (pure) return pure;
+                  }
+                }
+                return extractPureSinhalaStanzas(html);
+              } catch (_) {
+                return '';
               }
-            }
-            return extractPureSinhalaStanzas(html);
-          } catch (_) {
-            return '';
-          }
+            })
+          );
+
+          return pages.find((x) => x.length > 40) || '';
         };
 
         let foundTrack: any = null;
@@ -846,18 +854,16 @@ export default {
                   const infos = await Promise.all(
                     vids.slice(0, 5).map(async (v) => {
                       try {
-                        const pr = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            context: { client: { clientName: 'WEB', clientVersion: '2.20241001.01.00', hl: 'en', gl: 'LK' } },
-                            videoId: v.id,
-                          }),
-                          signal: AbortSignal.timeout(3000),
+                        const wr = await fetch(`https://www.youtube.com/watch?v=${encodeURIComponent(v.id)}&hl=en`, {
+                          headers: { 'User-Agent': browserUa, 'Accept-Language': 'en-US,en;q=0.9' },
+                          signal: AbortSignal.timeout(3500),
                         });
-                        if (!pr.ok) return '';
-                        const pj: any = await pr.json();
-                        return extractPureSinhalaStanzas(String(pj?.videoDetails?.shortDescription || ''));
+                        if (!wr.ok) return '';
+                        const wHtml = await wr.text();
+                        const sdMatch = wHtml.match(/"shortDescription":"((?:\\.|[^"\\])*)"/);
+                        if (!sdMatch) return '';
+                        const decodedDesc = JSON.parse(`"${sdMatch[1]}"`);
+                        return extractPureSinhalaStanzas(decodedDesc);
                       } catch (_) {
                         return '';
                       }
