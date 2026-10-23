@@ -81,6 +81,9 @@ const App = (() => {
     cachedMixUrl: '',
     renderSeq: 0,
     userLoadedBacking: false,
+    uploadedMediaUrl: '',
+    uploadedIsVideo: false,
+    uploadedFileName: '',
     lastMasterBlob: null,
     lastMasterMime: 'audio/mpeg',
     lastMasterFilename: 'karomix-master.mp3',
@@ -853,6 +856,15 @@ const App = (() => {
   }
 
   function renderYoutubeEmbed(videoId, title = '') {
+    if (state.uploadedMediaUrl) {
+      try { URL.revokeObjectURL(state.uploadedMediaUrl); } catch (_) {}
+      state.uploadedMediaUrl = '';
+      state.uploadedIsVideo = false;
+      state.uploadedFileName = '';
+      state.userLoadedBacking = false;
+    }
+    const clearBtn = document.getElementById('btnClearStageTrack');
+    if (clearBtn) clearBtn.style.display = 'none';
     ensureYtApi();
     const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
     const originParam = isIp ? '' : `&origin=${encodeURIComponent(window.location.origin)}`;
@@ -1042,51 +1054,183 @@ const App = (() => {
     } catch (_) {}
   }
 
+  function cleanSongTitleFromFilename(rawName) {
+    const base = String(rawName || '').replace(/\.[^.]+$/, '');
+    const cleaned = base
+      .replace(/[_]+/g, ' ')
+      .replace(/\b(y2mate|snaptube|savefrom|yt1s|yt5s|ssyoutube|karaoke|instrumental|official|video|audio|lyrics|lyric|hd|hq|1080p|720p|480p|360p|320kbps|128kbps|mp3|mp4|track)\b/gi, ' ')
+      .replace(/^\s*\d{1,3}\s*[-.]\s*/, '')
+      .replace(/[-.]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!cleaned || /^(aud|vid|whatsapp|videoplayback|recording|voice|vn|audio|video)\b/i.test(cleaned)) {
+      return '';
+    }
+    return cleaned;
+  }
+
+  function searchLyricsOnly() {
+    const q = document.getElementById('lyricsOnlyQueryInput')?.value?.trim() || '';
+    if (!q) {
+      showToast('Type the song name first to fetch lyrics');
+      document.getElementById('lyricsOnlyQueryInput')?.focus();
+      return;
+    }
+    fetchLyrics(q);
+  }
+
+  function renderUploadedStageMedia(fileName, url, isVideo) {
+    const wrap = document.getElementById('stageVideoWrap');
+    const clearBtn = document.getElementById('btnClearStageTrack');
+    const nextBtn = document.getElementById('btnNextKaraoke');
+    if (clearBtn) clearBtn.style.display = 'inline-flex';
+    if (nextBtn) nextBtn.style.display = 'none';
+    state.ytPlayer = null;
+    clearInterval(state.ytSyncInterval);
+
+    if (!wrap) return;
+    const safeTitle = String(fileName || 'Uploaded Track')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    if (isVideo) {
+      wrap.innerHTML = `
+        <video id="stageUploadedMedia" src="${url}" controls playsinline webkit-playsinline preload="metadata"
+          style="width:100%;height:100%;max-height:386px;object-fit:contain;background:#000;border-radius:10px;"></video>
+      `;
+    } else {
+      wrap.innerHTML = `
+        <div style="width:100%;max-width:460px;padding:12px;">
+          <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;color:var(--emerald);margin-bottom:6px;">
+            ● UPLOADED AUDIO TRACK READY
+          </div>
+          <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px;word-break:break-word;">
+            ${safeTitle}
+          </div>
+          <div style="font-size:12.5px;color:var(--text-secondary);margin-bottom:14px;">
+            Press ▶ below to preview, or tap <strong style="color:var(--amber-bright);">Start Recording</strong> below to sing from 00:00 automatically.
+          </div>
+          <audio id="stageUploadedMedia" src="${url}" controls preload="metadata" style="width:100%;height:42px;"></audio>
+        </div>
+      `;
+    }
+  }
+
+  function clearUploadedStageTrack() {
+    const mediaEl = document.getElementById('stageUploadedMedia');
+    if (mediaEl) { try { mediaEl.pause(); } catch (_) {} }
+    if (state.uploadedMediaUrl) {
+      try { URL.revokeObjectURL(state.uploadedMediaUrl); } catch (_) {}
+    }
+    state.uploadedMediaUrl = '';
+    state.uploadedIsVideo = false;
+    state.uploadedFileName = '';
+    state.userLoadedBacking = false;
+    state.backingBuffer = null;
+    state.originalBackingBuffer = null;
+    state.backingPeaks = null;
+    markMixDirty();
+
+    const clearBtn = document.getElementById('btnClearStageTrack');
+    if (clearBtn) clearBtn.style.display = 'none';
+    const wrap = document.getElementById('stageVideoWrap');
+    if (wrap) {
+      wrap.innerHTML = `
+        <div>
+          <div style="font-weight:700;color:var(--text);font-size:15px;margin-bottom:4px;">Karaoke Video / Audio Stage</div>
+          <div style="font-size:13px;">Search any song above or tap <strong>Upload Audio / Video</strong> to play your own MP3 or MP4 right here.</div>
+        </div>
+      `;
+    }
+    drawTimeline(0);
+    showToast('Removed uploaded track.');
+  }
+
   // ==================== CLEAN LOW-CPU MIC RECORDING & FILE UPLOAD ====================
   async function handleBackingUpload(e) {
     const file = e.target.files?.[0];
+    if (e.target) e.target.value = '';
     if (!file) return;
     unlockMobileAudioSync();
-    showToast('Decoding music track...');
-    const ctx = ensureAudioCtx();
-    const buf = await ctx.decodeAudioData(await file.arrayBuffer());
-    suspendIdleWebAudio();
-    state.originalBackingBuffer = buf;
-    state.backingBuffer = buf;
-    state.backingPeaks = KaroDSP.computeWaveformPeaks(buf, 220);
+
+    if (state.uploadedMediaUrl) {
+      try { URL.revokeObjectURL(state.uploadedMediaUrl); } catch (_) {}
+    }
+    const objUrl = URL.createObjectURL(file);
+    const isVideo = (file.type && file.type.startsWith('video/')) || /\.(mp4|webm|mkv|mov|m4v|3gp)$/i.test(file.name);
+    state.uploadedMediaUrl = objUrl;
+    state.uploadedIsVideo = isVideo;
+    state.uploadedFileName = file.name;
     state.isDemoSession = false;
     state.userLoadedBacking = true;
     state.transposeSemitones = 0;
-    markMixDirty();
+
+    // 1. Immediately mount visible playable Video or Audio player inside #stageVideoWrap (0ms wait!)
+    renderUploadedStageMedia(file.name, objUrl, isVideo);
     document.getElementById('projectTitleInput').value = file.name.replace(/\.[^.]+$/, '') + ' — Vocal Cover';
-    if (state.view === 'mix') {
-      drawTimeline();
-      if (state.isPlaying) startPlayback(0);
+
+    // 2. Auto-detect song lyrics from filename OR focus lyrics search input
+    const guessedTitle = cleanSongTitleFromFilename(file.name);
+    const lyrInput = document.getElementById('lyricsOnlyQueryInput');
+    if (guessedTitle) {
+      if (lyrInput) lyrInput.value = guessedTitle;
+      fetchLyrics(guessedTitle);
+    } else if (lyrInput) {
+      document.getElementById('lyricsStatusLabel').textContent = 'Type song name below for lyrics';
     }
-    showToast(`Loaded music: ${file.name}`);
+
+    showToast(`Loaded ${isVideo ? 'video' : 'audio'}: ${file.name}`);
+
+    // 3. Safely decode AudioBuffer for studio stem mixing without ever crashing if browser rejects video container
+    try {
+      const ctx = ensureAudioCtx();
+      const buf = await ctx.decodeAudioData(await file.arrayBuffer());
+      suspendIdleWebAudio();
+      state.originalBackingBuffer = buf;
+      state.backingBuffer = buf;
+      state.backingPeaks = KaroDSP.computeWaveformPeaks(buf, 220);
+      markMixDirty();
+      if (state.view === 'mix') {
+        drawTimeline(0);
+        if (state.isPlaying) startPlayback(0);
+      }
+    } catch (_) {
+      suspendIdleWebAudio();
+      state.originalBackingBuffer = null;
+      state.backingBuffer = null;
+      state.backingPeaks = null;
+      markMixDirty();
+      if (state.view === 'mix') drawTimeline(0);
+    }
   }
 
   async function handleVocalUpload(e) {
     const file = e.target.files?.[0];
+    if (e.target) e.target.value = '';
     if (!file) return;
     unlockMobileAudioSync();
     showToast('Smoothing & mastering your voice...');
-    const ctx = ensureAudioCtx();
-    const buf = await ctx.decodeAudioData(await file.arrayBuffer());
-    if (!state.userLoadedBacking) {
-      state.backingBuffer = null;
-      state.originalBackingBuffer = null;
-      state.backingPeaks = null;
+    try {
+      const ctx = ensureAudioCtx();
+      const buf = await ctx.decodeAudioData(await file.arrayBuffer());
+      suspendIdleWebAudio();
+      if (!state.userLoadedBacking) {
+        state.backingBuffer = null;
+        state.originalBackingBuffer = null;
+        state.backingPeaks = null;
+      }
+      state.rawVocalBuffer = buf;
+      state.tunedVocalBuffer = buf;
+      state.vocalPeaks = KaroDSP.computeWaveformPeaks(buf, 220);
+      state.isDemoSession = false;
+      markMixDirty();
+      switchView('mix');
+      await runSmartVoiceMatch();
+      await applyWorkerAutoTune();
+      await startPlayback(0);
+    } catch (_) {
+      suspendIdleWebAudio();
+      showToast('Could not decode this audio format — try MP3, WAV, M4A, or OGG');
     }
-    state.rawVocalBuffer = buf;
-    state.tunedVocalBuffer = buf;
-    state.vocalPeaks = KaroDSP.computeWaveformPeaks(buf, 220);
-    state.isDemoSession = false;
-    markMixDirty();
-    switchView('mix');
-    await runSmartVoiceMatch();
-    await applyWorkerAutoTune();
-    await startPlayback(0);
   }
 
   function onMicModeChange() {
@@ -1106,24 +1250,30 @@ const App = (() => {
       ? 'Headphones (Voice Isolation ON)'
       : 'Speaker + Voice (No Headphones)';
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        noiseSuppression: headphonesOnly,
-        echoCancellation: false,
-        autoGainControl: headphonesOnly,
-        channelCount: 1,
-      },
-    });
-    state.micStream = stream;
-    const ctx = ensureAudioCtx();
-    if (ctx.state === 'suspended') {
-      await ctx.resume().catch(() => {});
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          noiseSuppression: headphonesOnly,
+          echoCancellation: false,
+          autoGainControl: headphonesOnly,
+        },
+      });
+    } catch (_) {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     }
-    const src = ctx.createMediaStreamSource(stream);
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 1024;
-    src.connect(analyser);
-    state.micAnalyser = analyser;
+    state.micStream = stream;
+    try {
+      const ctx = ensureAudioCtx();
+      if (ctx.state === 'suspended') {
+        await ctx.resume().catch(() => {});
+      }
+      const src = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      src.connect(analyser);
+      state.micAnalyser = analyser;
+    } catch (_) {}
     startMicMeterLoop();
     return stream;
   }
@@ -1134,16 +1284,17 @@ const App = (() => {
     const buf = new Float32Array(1024);
     let tickCount = 0;
     state.recMeterTimer = setInterval(() => {
-      if (!state.micAnalyser) return;
-      state.micAnalyser.getFloatTimeDomainData(buf);
-      let sum = 0;
-      for (let i = 0; i < buf.length; i += 4) sum += buf[i] * buf[i];
-      const rms = Math.sqrt(sum / (buf.length / 4));
-      document.getElementById('micMeterFill').style.width = `${Math.min(100, rms * 340)}%`;
+      if (state.micAnalyser) {
+        state.micAnalyser.getFloatTimeDomainData(buf);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i += 4) sum += buf[i] * buf[i];
+        const rms = Math.sqrt(sum / (buf.length / 4));
+        document.getElementById('micMeterFill').style.width = `${Math.min(100, rms * 340)}%`;
 
-      if (++tickCount % 3 === 0 && state.audioCtx) {
-        const note = KaroDSP.detectPitchLive(buf, state.audioCtx.sampleRate);
-        document.getElementById('livePitchText').textContent = note ? `Note: ${note}` : 'Note: --';
+        if (++tickCount % 3 === 0 && state.audioCtx) {
+          const note = KaroDSP.detectPitchLive(buf, state.audioCtx.sampleRate);
+          document.getElementById('livePitchText').textContent = note ? `Note: ${note}` : 'Note: --';
+        }
       }
       if (state.isRecording) {
         const elapsed = (Date.now() - state.recStartMs) / 1000;
@@ -1205,46 +1356,68 @@ const App = (() => {
     if (!state.micStream || state.isRecording) return;
     const headphonesOnly = document.getElementById('useCleanMic').checked;
     state.recChunks = [];
-    const bestMime = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm']
-      .find((m) => window.MediaRecorder?.isTypeSupported?.(m)) || '';
-    const recOpts = bestMime ? { mimeType: bestMime, audioBitsPerSecond: 128000 } : { audioBitsPerSecond: 128000 };
-    const rec = new MediaRecorder(state.micStream, recOpts);
+    const mimeCandidates = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg'];
+    const bestMime = mimeCandidates.find((m) => window.MediaRecorder?.isTypeSupported?.(m)) || '';
+    let rec;
+    try {
+      rec = bestMime ? new MediaRecorder(state.micStream, { mimeType: bestMime }) : new MediaRecorder(state.micStream);
+    } catch (_) {
+      rec = new MediaRecorder(state.micStream);
+    }
     state.mediaRecorder = rec;
-    rec.ondataavailable = (ev) => { if (ev.data.size > 0) state.recChunks.push(ev.data); };
+    rec.ondataavailable = (ev) => { if (ev.data && ev.data.size > 0) state.recChunks.push(ev.data); };
     rec.onstop = async () => {
       releaseMic();
+      const stageMedia = document.getElementById('stageUploadedMedia');
+      if (stageMedia) { try { stageMedia.pause(); } catch (_) {} }
+      if (!state.recChunks.length) {
+        showToast('Recording was empty — please check microphone permission');
+        return;
+      }
       showToast('Smoothing & mastering your recording...');
-      const blob = new Blob(state.recChunks, { type: rec.mimeType || bestMime || 'audio/webm' });
-      const ctx = ensureAudioCtx();
-      const vocalBuf = await ctx.decodeAudioData(await blob.arrayBuffer());
-      suspendIdleWebAudio();
+      try {
+        const blob = new Blob(state.recChunks, { type: rec.mimeType || bestMime || 'audio/webm' });
+        const ctx = ensureAudioCtx();
+        const vocalBuf = await ctx.decodeAudioData(await blob.arrayBuffer());
+        suspendIdleWebAudio();
 
-      if (!state.userLoadedBacking) {
-        state.backingBuffer = null;
-        state.originalBackingBuffer = null;
-        state.backingPeaks = null;
-      }
-      state.rawVocalBuffer = vocalBuf;
-      state.tunedVocalBuffer = vocalBuf;
-      state.vocalPeaks = KaroDSP.computeWaveformPeaks(vocalBuf, 220);
-      state.isDemoSession = false;
-      markMixDirty();
+        if (!state.userLoadedBacking) {
+          state.backingBuffer = null;
+          state.originalBackingBuffer = null;
+          state.backingPeaks = null;
+        }
+        state.rawVocalBuffer = vocalBuf;
+        state.tunedVocalBuffer = vocalBuf;
+        state.vocalPeaks = KaroDSP.computeWaveformPeaks(vocalBuf, 220);
+        state.isDemoSession = false;
+        markMixDirty();
 
-      switchView('mix');
-      await runSmartVoiceMatch();
-      if (!headphonesOnly) {
-        state.params.hpFreq = 55;
-        state.params.noiseGate = 0.04;
-        document.getElementById('gateSlider').value = 4;
-        document.getElementById('gateValText').textContent = '4%';
+        switchView('mix');
+        await runSmartVoiceMatch();
+        if (!headphonesOnly) {
+          state.params.hpFreq = 55;
+          state.params.noiseGate = 0.04;
+          document.getElementById('gateSlider').value = 4;
+          document.getElementById('gateValText').textContent = '4%';
+        }
+        await applyWorkerAutoTune();
+        await startPlayback(0);
+      } catch (err) {
+        suspendIdleWebAudio();
+        showToast('Could not process recording: ' + (err?.message || 'try again'));
       }
-      await applyWorkerAutoTune();
-      // Plays through 100% Native OS Hardware <audio> — ZERO "jara bara" crackling on Android 8.1!
-      await startPlayback(0);
     };
 
-    // Play uploaded backing via native hardware <audio> if loaded (0% WebAudio CPU during recording!)
-    if (state.backingBuffer && state.userLoadedBacking) {
+    // Start uploaded Video or Audio player immediately from 00:00 (0ms latency, 0% WebAudio CPU!)
+    const stageMedia = document.getElementById('stageUploadedMedia');
+    if (stageMedia) {
+      try {
+        stageMedia.muted = false;
+        stageMedia.volume = 1;
+        stageMedia.currentTime = 0;
+        stageMedia.play().catch(() => {});
+      } catch (_) {}
+    } else if (state.backingBuffer && state.userLoadedBacking) {
       KaroDSP.renderMasterWav({ backing: state.backingBuffer, rawVocal: null, tunedVocal: null }, { ...state.params, vocalPocket: false }, true)
         .then((bBlob) => {
           if (state.isRecording) {
@@ -1255,7 +1428,7 @@ const App = (() => {
         }).catch(() => {});
     }
 
-    rec.start();
+    rec.start(250);
     state.isRecording = true;
     state.recStartMs = Date.now();
     document.getElementById('btnRecordVocal').classList.add('recording');
@@ -1266,10 +1439,13 @@ const App = (() => {
   async function toggleMicRecording() {
     unlockMobileAudioSync();
 
+    const stageMedia = document.getElementById('stageUploadedMedia');
+
     if (state.isRecording || state.waitingForYtTap) {
       state.waitingForYtTap = false;
       state.isRecording = false;
       ytSendCommand('pauseVideo');
+      if (stageMedia) { try { stageMedia.pause(); } catch (_) {} }
       stopPlaybackInternal();
       if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
         state.mediaRecorder.stop();
@@ -1279,6 +1455,24 @@ const App = (() => {
       document.getElementById('btnRecordVocal').classList.remove('recording');
       document.getElementById('recBtnLabel').textContent = 'Start Recording';
       return;
+    }
+
+    // Gesture-unlock uploaded <video>/<audio> synchronously right on tap so mobile Firefox/Chrome allow play() after countdown!
+    if (stageMedia) {
+      try {
+        stageMedia.pause();
+        stageMedia.muted = true;
+        const p = stageMedia.play();
+        if (p && p.then) {
+          p.then(() => {
+            if (!state.isRecording) {
+              stageMedia.pause();
+              stageMedia.currentTime = 0;
+              stageMedia.muted = false;
+            }
+          }).catch(() => { stageMedia.muted = false; });
+        }
+      } catch (_) {}
     }
 
     if (window.AndroidNativeStudio && typeof window.AndroidNativeStudio.canCaptureInternalAudio === 'function') {
@@ -2225,19 +2419,9 @@ const App = (() => {
     const grid = document.getElementById('blogPostsGrid');
     const reader = document.getElementById('blogReaderWrap');
     const content = document.getElementById('blogReaderContent');
-    const ownerBar = document.getElementById('blogOwnerActions');
     if (!grid || !reader || !content) return;
     grid.style.display = 'none';
     reader.style.display = 'block';
-
-    const hasSavedAdmin = Boolean(localStorage.getItem('karomix_blog_admin'));
-    if (ownerBar) {
-      ownerBar.style.display = hasSavedAdmin ? 'flex' : 'none';
-      ownerBar.innerHTML = hasSavedAdmin
-        ? `<button class="btn btn-sm" onclick="App.openBlogEditor('${escHtml(post.id)}')">Edit</button>
-           <button class="btn btn-sm" style="color:#f87171;" onclick="App.deleteBlogPost('${escHtml(post.id)}')">Delete</button>`
-        : '';
-    }
 
     content.innerHTML = `
       ${post.cover_image ? `<img src="${escHtml(post.cover_image)}" alt="${escHtml(post.title)}" style="width:100%;max-height:280px;object-fit:cover;border-radius:14px;margin-bottom:16px;" />` : ''}
@@ -2258,80 +2442,82 @@ const App = (() => {
     renderBlogList();
   }
 
-  function openBlogEditor(editPostId = '') {
-    toggleDrawer(false);
-    const savedPass = localStorage.getItem('karomix_blog_admin') || '';
-    document.getElementById('blogAdminPass').value = savedPass;
-    const existing = editPostId ? liveBlogPosts.find((p) => String(p.id) === String(editPostId)) : null;
-    document.getElementById('blogEditorHeading').textContent = existing ? 'Edit Blog Article' : 'Publish Blog Article';
-    document.getElementById('blogPostId').value = existing ? existing.id : '';
-    document.getElementById('blogPostTitle').value = existing ? existing.title : '';
-    document.getElementById('blogPostCat').value = existing ? (existing.category || 'Vocal Tips') : 'Vocal Tips';
-    document.getElementById('blogPostAuthor').value = existing ? (existing.author_name || '') : '';
-    document.getElementById('blogPostImage').value = existing ? (existing.cover_image || '/assets/studio-girl-card.jpg') : '/assets/studio-girl-card.jpg';
-    document.getElementById('blogPostExcerpt').value = existing ? (existing.excerpt || '') : '';
-    document.getElementById('blogPostBody').value = existing ? (existing.content || '') : '';
-    document.getElementById('blogAdminModal').classList.add('open');
-  }
-
-  function closeBlogEditor() {
-    document.getElementById('blogAdminModal').classList.remove('open');
-  }
-
-  async function submitBlogPost(e) {
-    e.preventDefault();
-    const adminCode = document.getElementById('blogAdminPass').value.trim();
-    const btn = document.getElementById('btnSaveBlogPost');
-    btn.disabled = true;
-    btn.textContent = 'Publishing...';
-    try {
-      const res = await fetch('/api/blog', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Code': adminCode,
-        },
-        body: JSON.stringify({
-          id: document.getElementById('blogPostId').value.trim(),
-          title: document.getElementById('blogPostTitle').value.trim(),
-          category: document.getElementById('blogPostCat').value.trim(),
-          author_name: document.getElementById('blogPostAuthor').value.trim(),
-          cover_image: document.getElementById('blogPostImage').value.trim(),
-          excerpt: document.getElementById('blogPostExcerpt').value.trim(),
-          content: document.getElementById('blogPostBody').value.trim(),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) {
-        showToast(data.error || 'Failed to publish article');
-        return;
-      }
-      localStorage.setItem('karomix_blog_admin', adminCode);
-      closeBlogEditor();
-      await loadBlogPostsFromServer(true);
-      switchView('blog');
-      showToast(`Published live at ${data.url}!`);
-    } catch (err) {
-      showToast('Network error: ' + err.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Publish Article Live';
+  // ==================== MIX STUDIO DELETE CONFIRMATION MODAL ====================
+  function openDeleteAudioModal() {
+    if (!state.rawVocalBuffer && !state.backingBuffer && !state.uploadedMediaUrl) {
+      showToast('No recorded or uploaded audio to delete.');
+      return;
     }
+    const modal = document.getElementById('deleteAudioModal');
+    if (modal) modal.classList.add('open');
   }
 
-  async function deleteBlogPost(postId) {
-    if (!window.confirm('Delete this blog post permanently?')) return;
-    const adminCode = localStorage.getItem('karomix_blog_admin') || '';
-    try {
-      const res = await fetch(`/api/blog/${encodeURIComponent(postId)}`, {
-        method: 'DELETE',
-        headers: { 'X-Admin-Code': adminCode },
-      });
-      const data = await res.json();
-      if (data.error) { showToast(data.error); return; }
-      await loadBlogPostsFromServer(true);
-      showToast('Article deleted.');
-    } catch (_) {}
+  function closeDeleteAudioModal() {
+    const modal = document.getElementById('deleteAudioModal');
+    if (modal) modal.classList.remove('open');
+  }
+
+  function confirmDeleteAudio(mode) {
+    closeDeleteAudioModal();
+    stopPlaybackInternal();
+    resetCropMarkers();
+    state.uncroppedBackup = null;
+    const undoBtn = document.getElementById('btnUndoCrop');
+    if (undoBtn) undoBtn.style.display = 'none';
+
+    if (mode === 'vocal') {
+      state.rawVocalBuffer = null;
+      state.tunedVocalBuffer = null;
+      state.vocalPeaks = null;
+      state.isDemoSession = false;
+      markMixDirty();
+      const previewWrap = document.getElementById('exportPreviewWrap');
+      if (previewWrap) previewWrap.style.display = 'none';
+      const total = getTotalDuration();
+      const mixT = document.getElementById('transportTime');
+      if (mixT) mixT.textContent = `00:00 / ${fmtTime(total)}`;
+      drawTimeline(0);
+      showToast('Recorded voice deleted. Ready to record again!');
+      return;
+    }
+
+    // mode === 'all'
+    state.rawVocalBuffer = null;
+    state.tunedVocalBuffer = null;
+    state.vocalPeaks = null;
+    state.originalBackingBuffer = null;
+    state.backingBuffer = null;
+    state.backingPeaks = null;
+    state.userLoadedBacking = false;
+    state.isDemoSession = false;
+
+    const mediaEl = document.getElementById('stageUploadedMedia');
+    if (mediaEl) { try { mediaEl.pause(); } catch (_) {} }
+    if (state.uploadedMediaUrl) {
+      try { URL.revokeObjectURL(state.uploadedMediaUrl); } catch (_) {}
+      state.uploadedMediaUrl = '';
+      state.uploadedIsVideo = false;
+      state.uploadedFileName = '';
+      const clearBtn = document.getElementById('btnClearStageTrack');
+      if (clearBtn) clearBtn.style.display = 'none';
+      const wrap = document.getElementById('stageVideoWrap');
+      if (wrap) {
+        wrap.innerHTML = `
+          <div>
+            <div style="font-weight:700;color:var(--text);font-size:15px;margin-bottom:4px;">Karaoke Video / Audio Stage</div>
+            <div style="font-size:13px;">Search any song above or tap <strong>Upload Audio / Video</strong> to play your own MP3 or MP4 right here.</div>
+          </div>
+        `;
+      }
+    }
+
+    markMixDirty();
+    const previewWrap = document.getElementById('exportPreviewWrap');
+    if (previewWrap) previewWrap.style.display = 'none';
+    const mixT = document.getElementById('transportTime');
+    if (mixT) mixT.textContent = '00:00 / 00:00';
+    drawTimeline(0);
+    showToast('All recorded & uploaded audio deleted.');
   }
 
   // ==================== ULTRA-FAST ZERO-RAM BOOT ====================
@@ -2358,13 +2544,16 @@ const App = (() => {
 
   function pauseYoutubeStage() {
     ytSendCommand('pauseVideo');
+    const stageMedia = document.getElementById('stageUploadedMedia');
+    if (stageMedia) { try { stageMedia.pause(); } catch (_) {} }
   }
 
   return {
     switchView: (v) => { if (v !== 'sing') pauseYoutubeStage(); if (v === 'blog') loadBlogPostsFromServer(); switchView(v); },
     toggleDrawer, drawerGo,
     openPrivacySettings, closePrivacySettings, savePrivacySettings, clearLocalStudioData,
-    openBlogPost, closeBlogPost, openBlogEditor, closeBlogEditor, submitBlogPost, deleteBlogPost,
+    openBlogPost, closeBlogPost,
+    openDeleteAudioModal, closeDeleteAudioModal, confirmDeleteAudio,
     setStageMode, getMasterSignalRms,
     hwStateDebug: () => ({
       src: hwAudio.src,
@@ -2385,6 +2574,7 @@ const App = (() => {
     applyPreset, setClarityMacro, updateParam, setMasterProfile, setVocalOffset, autoAlignTracks, runSmartVoiceMatch,
     applyWorkerAutoTune, shiftBackingKey, applyKaraokeVocalCut,
     heroSearchSubmit, quickSingSong, searchOrLoadKaraoke, selectKaraokeVideo, nextKaraokeResult, seekToLyric,
+    searchLyricsOnly, clearUploadedStageTrack,
     toggleCustomLyricsEditor, saveCustomLyrics,
     onMicModeChange, handleBackingUpload, handleVocalUpload, toggleMicMonitor, toggleMicRecording, receiveNativeDualTracks,
     openAuthModal, closeAuthModal, setAuthMode, startGmailQuickSignup, submitAuth, logout, deleteAccount, toggleProDemo,

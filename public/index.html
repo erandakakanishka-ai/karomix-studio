@@ -190,6 +190,7 @@ svg.icon {
 }
 .menu-icon-btn:hover { background: var(--surface-2); border-color: var(--amber); }
 
+/* Left Slide-Out Navigation & Privacy Drawer */
 .drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -245,6 +246,7 @@ svg.icon {
 }
 .drawer-link:hover { background: var(--surface-2); color: var(--amber-bright); }
 
+/* Blog Grid & Reader */
 .blog-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(275px, 1fr));
@@ -781,6 +783,7 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
 }
 .countdown-mask.show { display: flex; }
 .countdown-digit { font-size: 84px; font-weight: 800; color: var(--amber-bright); }
+
   </style>
 </head>
 <body>
@@ -888,48 +891,29 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     <a class="drawer-link" href="/privacy"><span>Privacy Policy</span></a>
     <a class="drawer-link" href="/terms"><span>Terms of Service</span></a>
     <a class="drawer-link" href="/refunds"><span>Trial & Access Policy</span></a>
-    <button class="drawer-link" style="color:var(--text-muted);font-size:12.5px;margin-top:6px;" onclick="App.openBlogEditor()">
-      <span>✎ Admin Blog Publisher</span>
-    </button>
   </aside>
 
-  <!-- Owner Blog Publisher Modal (Protected by Secret Server Passcode) -->
-  <div id="blogAdminModal" class="modal-backdrop" onclick="if(event.target===this)App.closeBlogEditor()">
-    <div class="modal-card" style="max-width:560px;max-height:90vh;overflow-y:auto;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <h3 style="font-size:17px;" id="blogEditorHeading">Publish Blog Article</h3>
-        <button class="btn btn-sm" onclick="App.closeBlogEditor()">✕</button>
+  <!-- Confirm Delete Audio Modal (Clear Confirmation Before Deleting Recording!) -->
+  <div id="deleteAudioModal" class="modal-backdrop" onclick="if(event.target===this)App.closeDeleteAudioModal()">
+    <div class="modal-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <h3 style="font-size:17px;color:#fca5a5;">Delete Recorded Audio?</h3>
+        <button class="btn btn-sm" onclick="App.closeDeleteAudioModal()">✕</button>
       </div>
-      <form onsubmit="App.submitBlogPost(event)">
-        <input type="hidden" id="blogPostId" value="" />
-        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;">Admin Passcode</label>
-        <input type="password" id="blogAdminPass" class="input" style="width:100%;margin-bottom:10px;" placeholder="Enter owner passcode" required />
-
-        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;">Article Title</label>
-        <input type="text" id="blogPostTitle" class="input" style="width:100%;margin-bottom:10px;" placeholder="Write your own original article title..." required />
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
-          <div>
-            <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;">Category</label>
-            <input type="text" id="blogPostCat" class="input" style="width:100%;" value="Vocal Tips" />
-          </div>
-          <div>
-            <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;">Author Name</label>
-            <input type="text" id="blogPostAuthor" class="input" style="width:100%;" placeholder="Your Name" />
-          </div>
-        </div>
-
-        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;">Cover Photo URL (optional)</label>
-        <input type="text" id="blogPostImage" class="input" style="width:100%;margin-bottom:10px;" value="/assets/studio-girl-card.jpg" />
-
-        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;">Short Summary (1–2 sentences for Google Search)</label>
-        <input type="text" id="blogPostExcerpt" class="input" style="width:100%;margin-bottom:10px;" placeholder="Short human summary of your post..." />
-
-        <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;">Your Article (Leave blank line between paragraphs; start headings with ## )</label>
-        <textarea id="blogPostBody" class="input" rows="8" style="width:100%;margin-bottom:12px;line-height:1.6;" placeholder="Write your own genuine experience, tips, and story here..." required></textarea>
-
-        <button type="submit" class="btn btn-amber" style="width:100%;" id="btnSaveBlogPost">Publish Article Live</button>
-      </form>
+      <p style="font-size:13.5px;color:var(--text-secondary);line-height:1.55;margin-bottom:16px;">
+        Are you sure you want to delete this audio? Choose whether to delete only your recorded voice (keeping the music track) or clear everything.
+      </p>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button type="button" class="btn btn-ruby" style="width:100%;" onclick="App.confirmDeleteAudio('vocal')">
+          Yes, Delete Recorded Voice
+        </button>
+        <button type="button" class="btn" style="width:100%;color:#f87171;border-color:rgba(248,113,113,0.32);" onclick="App.confirmDeleteAudio('all')">
+          Delete Everything (Voice + Music)
+        </button>
+        <button type="button" class="btn" style="width:100%;" onclick="App.closeDeleteAudioModal()">
+          Cancel
+        </button>
+      </div>
     </div>
   </div>
 
@@ -1086,9 +1070,9 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
             <h2 style="font-size:18px;">Choose a Song to Sing</h2>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <label class="btn btn-sm" for="backingFileInput">
-              Upload MP3/MP4
-              <input type="file" id="backingFileInput" accept="audio/*,video/mp4,video/webm" hidden onchange="App.handleBackingUpload(event)" />
+            <label class="btn btn-sm btn-cyan" for="backingFileInput" style="cursor:pointer;">
+              Upload Audio / Video
+              <input type="file" id="backingFileInput" accept="audio/*,video/*,.mp3,.m4a,.wav,.ogg,.mp4,.webm,.mkv,.mov" hidden onchange="App.handleBackingUpload(event)" />
             </label>
             <button class="btn btn-sm" onclick="App.loadInstrumentalDemoForSing()">Use Demo Band</button>
           </div>
@@ -1103,38 +1087,46 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
         <div id="karaokeResultsStrip" class="yt-strip" style="display:none;"></div>
       </div>
 
-      <!-- Block 2: Karaoke Video + Clean Readable Lyrics Sheet Directly Below -->
+      <!-- Block 2: Karaoke Video / Uploaded Track Player + Clean Readable Lyrics Sheet Directly Below -->
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap;">
-          <span class="step-badge">KARAOKE STAGE & LYRICS</span>
-          <div style="display:flex;gap:6px;">
+          <span class="step-badge" id="stageHeaderBadge">KARAOKE STAGE & LYRICS</span>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn btn-sm btn-ruby" id="btnClearStageTrack" style="display:none;" onclick="App.clearUploadedStageTrack()">✕ Remove Track</button>
             <button class="btn btn-sm" id="btnNextKaraoke" style="display:none;" onclick="App.nextKaraokeResult()">Next Video ↻</button>
-            <button class="btn btn-sm" onclick="App.toggleCustomLyricsEditor()">Edit Lyrics</button>
+            <button class="btn btn-sm" onclick="App.toggleCustomLyricsEditor()">Paste / Edit Lyrics</button>
           </div>
         </div>
 
         <div id="stageVideoWrap" class="stage-screen">
           <div>
-            <div style="font-weight:700;color:var(--text);font-size:15px;margin-bottom:4px;">Karaoke Lyric Screen</div>
-            <div style="font-size:13px;">Search any song above and the HD karaoke video plays right here.</div>
+            <div style="font-weight:700;color:var(--text);font-size:15px;margin-bottom:4px;">Karaoke Video / Audio Stage</div>
+            <div style="font-size:13px;">Search any song above or tap <strong>Upload Audio / Video</strong> to play your own MP3 or MP4 right here.</div>
           </div>
         </div>
 
-        <!-- Always-Visible Clean Song Lyrics Box Right Underneath the Video (No distracting auto-highlight!) -->
+        <!-- Always-Visible Clean Song Lyrics Box Right Underneath the Video + Independent Lyrics Search! -->
         <div id="stageLyricsWrap" style="margin-top:12px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap;">
             <span style="font-size:12px;font-weight:700;color:var(--cyan);letter-spacing:0.04em;">SONG LYRICS (SCROLL FREELY)</span>
-            <span style="font-size:11.5px;color:var(--text-muted);" id="lyricsStatusLabel">Auto-loads on search</span>
+            <span style="font-size:11.5px;color:var(--text-muted);" id="lyricsStatusLabel">Auto-loads or search below</span>
           </div>
+
+          <!-- Dedicated Lyrics Finder (Works seamlessly when user uploads any MP3/MP4 without replacing their track!) -->
+          <form style="display:flex;gap:6px;margin-bottom:8px;" onsubmit="event.preventDefault();App.searchLyricsOnly();">
+            <input type="text" id="lyricsOnlyQueryInput" class="input" style="flex:1;min-width:0;padding:8px 11px;font-size:13px;" placeholder="Find lyrics by song name (keeps your uploaded MP3/MP4)..." />
+            <button type="submit" class="btn btn-sm btn-cyan">Get Lyrics</button>
+          </form>
+
           <div id="customLyricsEditorWrap" style="display:none;margin-bottom:8px;">
-            <textarea id="customLyricsTextarea" class="input" rows="4" style="width:100%;font-size:13.5px;line-height:1.5;" placeholder="Paste or edit song lyrics here..."></textarea>
+            <textarea id="customLyricsTextarea" class="input" rows="4" style="width:100%;font-size:13.5px;line-height:1.5;" placeholder="Paste or type your own song lyrics here..."></textarea>
             <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:6px;">
               <button class="btn btn-sm" onclick="App.toggleCustomLyricsEditor()">Cancel</button>
               <button class="btn btn-sm btn-amber" onclick="App.saveCustomLyrics()">Apply Lyrics</button>
             </div>
           </div>
           <div id="lyricsStageBox" class="lyrics-box">
-            <div class="lyric-row" style="color:var(--text-secondary);">Search any song above — full lyrics appear right here below the video so you can read ahead easily.</div>
+            <div class="lyric-row" style="color:var(--text-secondary);">Search a song above, upload an MP3/MP4, or type any song title in "Find lyrics" above — full lyrics appear right here below the screen.</div>
           </div>
         </div>
       </div>
@@ -1204,12 +1196,13 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
               <span class="btn btn-sm" style="pointer-events:none;color:#34d399;border-color:rgba(16,185,129,0.35);" id="pitchScoreBadge">Pitch 95%</span>
               <span class="mono" style="font-size:12px;color:var(--cyan);font-weight:700;white-space:nowrap;" id="transportTime">00:00 / 00:00</span>
             </div>
-            <div style="display:flex;gap:5px;">
-              <label class="btn btn-sm" for="mixBackingInput">
+            <div style="display:flex;gap:5px;flex-wrap:wrap;">
+              <label class="btn btn-sm" for="mixBackingInput" style="cursor:pointer;">
                 + Music
-                <input type="file" id="mixBackingInput" accept="audio/*,video/mp4,video/webm" hidden onchange="App.handleBackingUpload(event)" />
+                <input type="file" id="mixBackingInput" accept="audio/*,video/*,.mp3,.m4a,.wav,.ogg,.mp4,.webm" hidden onchange="App.handleBackingUpload(event)" />
               </label>
               <button class="btn btn-sm" onclick="App.loadRealSingerDemo(true)">Demo</button>
+              <button class="btn btn-sm btn-ruby" id="btnDeleteMixAudio" onclick="App.openDeleteAudioModal()" title="Delete Recorded Audio">🗑 Delete</button>
             </div>
           </div>
         </div>
@@ -1500,8 +1493,8 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     </button>
   </nav>
 
-  <script src="/vendor/confetti.min.js?v=11.0"></script>
-  <script src="/dsp-engine.js?v=11.0"></script>
-  <script src="/app.js?v=11.0"></script>
+  <script src="/vendor/confetti.min.js?v=12.0"></script>
+  <script src="/dsp-engine.js?v=12.0"></script>
+  <script src="/app.js?v=12.0"></script>
 </body>
 </html>
