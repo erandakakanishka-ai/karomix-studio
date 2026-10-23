@@ -33,6 +33,11 @@ async function ensureSchema(db?: D1Database) {
       message TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
+    `CREATE TABLE IF NOT EXISTS cached_lyrics (
+      q_norm TEXT PRIMARY KEY,
+      plain_lyrics TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
     `CREATE TABLE IF NOT EXISTS blog_posts (
       id TEXT PRIMARY KEY,
       slug TEXT UNIQUE NOT NULL,
@@ -600,7 +605,7 @@ export default {
           .replace(/\s+/g, ' ')
           .trim() || q;
 
-        const cacheKey = new Request(`https://singvaza-cache.local/v17.1/lyrics?q=${encodeURIComponent(cleanQ.toLowerCase())}`);
+        const cacheKey = new Request(`https://singvaza-cache.local/v17.2/lyrics?q=${encodeURIComponent(cleanQ.toLowerCase())}`);
         const edgeCache = (globalThis as any).caches?.default;
         if (edgeCache) {
           const cachedHit = await edgeCache.match(cacheKey);
@@ -669,7 +674,19 @@ export default {
           return verseCount >= 8 ? out.join('\n').replace(/\n{3,}/g, '\n\n').trim() : '';
         };
 
-        // Load 15,601 Sri Lankan Song Index once into isolate RAM (~0.2ms on all subsequent requests!)
+        const qNormKey = normPhonetic(cleanQ);
+        if (env.DB && qNormKey) {
+          await ensureSchema(env.DB);
+          try {
+            const d1Hit: any = await env.DB.prepare('SELECT plain_lyrics FROM cached_lyrics WHERE q_norm = ?').bind(qNormKey).first();
+            if (d1Hit?.plain_lyrics) {
+              return new Response(JSON.stringify({ track: { plainLyrics: d1Hit.plain_lyrics } }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=604800, s-maxage=604800', ...CORS_HEADERS },
+              });
+            }
+          } catch (_) {}
+        }
         if (!memSlIndex) {
           try {
             const assetUrl = new URL('/sl-songs.txt', request.url);
@@ -828,7 +845,7 @@ export default {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 context: { client: { clientName: 'WEB', clientVersion: '2.20241001.01.00', hl: 'en', gl: 'LK' } },
-                query: `${cleanQ} sinhala lyrics`,
+                query: cleanQ,
               }),
               signal: AbortSignal.timeout(3000),
             });
@@ -854,19 +871,17 @@ export default {
                   const infos = await Promise.all(
                     vids.slice(0, 5).map(async (v) => {
                       try {
-                        const wr = await fetch(`https://www.youtube.com/watch?v=${encodeURIComponent(v.id)}&hl=en`, {
-                          headers: { 'User-Agent': browserUa, 'Accept-Language': 'en-US,en;q=0.9' },
-                          signal: AbortSignal.timeout(3500),
+                        const ir = await fetch(`https://inv.nadeko.net/api/v1/videos/${encodeURIComponent(v.id)}?fields=description`, {
+                          headers: { Accept: 'application/json', 'User-Agent': browserUa },
+                          signal: AbortSignal.timeout(3000),
                         });
-                        if (!wr.ok) return '';
-                        const wHtml = await wr.text();
-                        const sdMatch = wHtml.match(/"shortDescription":"((?:\\.|[^"\\])*)"/);
-                        if (!sdMatch) return '';
-                        const decodedDesc = JSON.parse(`"${sdMatch[1]}"`);
-                        return extractPureSinhalaStanzas(decodedDesc);
-                      } catch (_) {
-                        return '';
-                      }
+                        if (ir.ok) {
+                          const ij: any = await ir.json();
+                          const pure = extractPureSinhalaStanzas(String(ij?.description || ''));
+                          if (pure) return pure;
+                        }
+                      } catch (_) {}
+                      return '';
                     })
                   );
                   const cleanSin = infos.find((t) => t.length > 50);
@@ -875,6 +890,15 @@ export default {
               }
             }
           } catch (_) {}
+        }
+
+        if (foundTrack && env.DB && qNormKey) {
+          const textToSave = String(foundTrack.plainLyrics || foundTrack.syncedLyrics || '').trim();
+          if (textToSave.length > 40) {
+            try {
+              await env.DB.prepare('INSERT OR REPLACE INTO cached_lyrics (q_norm, plain_lyrics) VALUES (?, ?)').bind(qNormKey, textToSave).run();
+            } catch (_) {}
+          }
         }
 
         const outResp = new Response(JSON.stringify({ track: foundTrack }), {
