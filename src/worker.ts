@@ -611,19 +611,32 @@ export default {
 
         const cleanLatin = /[\u0D80-\u0DFF]/.test(cleanRaw) ? sinhalaToSinglish(cleanRaw) : cleanRaw;
 
-        const cacheKey = new Request(`https://singvaza-cache.local/v13/lyrics?q=${encodeURIComponent(cleanRaw.toLowerCase())}`);
+        const cacheKey = new Request(`https://singvaza-cache.local/v14/lyrics?q=${encodeURIComponent(cleanRaw.toLowerCase())}`);
         const edgeCache = (globalThis as any).caches?.default;
         if (edgeCache) {
           const cachedHit = await edgeCache.match(cacheKey);
           if (cachedHit) return cachedHit;
         }
 
-        // Helper: Cleanly extract pure song stanzas from a YouTube video description while stripping credits/ads/links!
+        const decodeHtmlEntities = (s: string) =>
+          s
+            .replace(/&#8211;|&ndash;/g, '–')
+            .replace(/&#8217;|&#39;|&rsquo;/g, "'")
+            .replace(/&#8220;|&#8221;|&ldquo;|&rdquo;|&quot;/g, '"')
+            .replace(/&#8230;|&hellip;/g, '...')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&#(\d+);/g, (_m, n) => {
+              const code = Number(n);
+              return code > 31 ? String.fromCodePoint(code) : '';
+            })
+            .replace(/&amp;/g, '&');
+
+        const promoRe = /https?:\/\/|www\.|@[a-z0-9_]|#[a-z0-9_\u0D80-\u0DFF]|\b(subscribe|whatsapp|facebook|instagram|tiktok|spotify|apple\s*music|itunes|deezer|contact|call|booking|all\s*rights|copyright|official\s*(music|lyric|audio|video)|channel|publish|powered\s*by|distributed\s*by|stream\s*now|download\s*now|follow\s*us|music\s*produced|mixing|mastering|mixed\s*(&|and)?\s*mastered|mastered\s*by|recorded\s*at|video\s*by|directed\s*by|produced\s*by|dop|cinematography|editor|colorist|artwork|thumbnail|special\s*thanks|starring|cast|privacy\s*policy|terms\s*of\s*use|cookie|skip\s*to\s*main|reality\s*show|cover\s*versions|related\s*songs)\b|(?:^|\s)(title|song|artist|singer|vocals?|music|melody|lyrics|lyricist|composed|composer|arranged|studio|guitars?|flute|keys|drums|bass|audio|video|category|views|updated)\s*[-:|]/i;
+        const phoneRe = /\b0\d{2}[-\s]?\d{3}[-\s]?\d{4}\b|\+\d{8,15}/;
+
+        // Helper: Cleanly extract pure song stanzas from plain text / YouTube descriptions / scraped web bodies!
         const extractLyricsFromYtDescription = (desc: string): string => {
           if (!desc || desc.length < 90) return '';
-          const promoRe = /https?:\/\/|www\.|@[a-z0-9_]|#[a-z0-9_\u0D80-\u0DFF]|\b(subscribe|whatsapp|facebook|instagram|tiktok|spotify|apple\s*music|itunes|deezer|contact|call|booking|all\s*rights|copyright|official\s*(music|lyric|audio|video)|channel|publish|powered\s*by|distributed\s*by|stream\s*now|download\s*now|follow\s*us|music\s*produced|mixing|mastering|mixed\s*(&|and)?\s*mastered|mastered\s*by|recorded\s*at|video\s*by|directed\s*by|produced\s*by|dop|cinematography|editor|colorist|artwork|thumbnail|special\s*thanks|starring|cast)\b|(?:^|\s)(title|song|artist|singer|vocals?|music|melody|lyrics|lyricist|composed|composer|arranged|studio|guitars?|flute|keys|drums|bass|audio|video)\s*[-:|]/i;
-          const phoneRe = /\b0\d{2}[-\s]?\d{3}[-\s]?\d{4}\b|\+\d{8,15}/;
-
           const blocks = desc.replace(/\r\n/g, '\n').split(/\n\s*\n+/);
           const goodStanzas: string[] = [];
           let totalCleanLines = 0;
@@ -632,14 +645,14 @@ export default {
             const rawLines = block.split('\n').map((l) => l.trim()).filter(Boolean);
             const kept: string[] = [];
             for (const ln of rawLines) {
-              if (ln.length < 4 || ln.length > 105) continue;
+              if (ln.length < 4 || ln.length > 96) continue;
               if (promoRe.test(ln) || phoneRe.test(ln)) continue;
-              if (/^[=\-*_~•|<>✦★☆♪♫\s]+$/.test(ln)) continue;
-              // Strip stray trailing video title copy on line 1 if it has pipe symbols
+              if (/^[=\-*_~•|<>✦★☆♪♫▶\s]+$/.test(ln)) continue;
               if (ln.includes('|') || /\b(lyrics\s*video|official\s*video)\b/i.test(ln)) continue;
+              // Skip long English prose sentences describing the song rather than verse lines
+              if (ln.length > 72 && /\b(sung by|presented here|written by|composed by|melodic|romantic)\b/i.test(ln)) continue;
               kept.push(ln);
             }
-            // A real song stanza has >= 2 poetic lines (or >= 4 lines total block)
             if (kept.length >= 2) {
               goodStanzas.push(kept.join('\n'));
               totalCleanLines += kept.length;
@@ -650,6 +663,25 @@ export default {
             return goodStanzas.join('\n\n').trim();
           }
           return '';
+        };
+
+        // Helper: Extract lyrics from ANY webpage HTML across the open internet!
+        const extractLyricsFromWebHtml = (rawHtml: string): string => {
+          const bodyIdx = rawHtml.search(/<body[\s>]/i);
+          let chunk = bodyIdx >= 0 ? rawHtml.slice(bodyIdx) : rawHtml;
+          chunk = chunk
+            .replace(/<script[\s\S]*?<\/script>/gi, '')
+            .replace(/<style[\s\S]*?<\/style>/gi, '')
+            .replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
+            .replace(/<(nav|header|footer|aside|form|button|svg|iframe|select|ul|ol)[\s\S]*?<\/\1>/gi, '')
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<\/(p|div|h[1-6]|pre|blockquote|section|article|tr)>/gi, '\n\n')
+            .replace(/<[^>]+>/g, ' ');
+          chunk = decodeHtmlEntities(chunk)
+            .replace(/[ \t]+/g, ' ')
+            .replace(/\n[ \t]+/g, '\n')
+            .replace(/\n{3,}/g, '\n\n');
+          return extractLyricsFromYtDescription(chunk);
         };
 
         const normPhonetic = (s: string) =>
@@ -674,15 +706,31 @@ export default {
           return false;
         };
 
+        const titleMatchesCandidates = (pageTitle: string, cands: string[]) => {
+          const tWords = normPhonetic(pageTitle).split(' ').filter((w) => w.length >= 2);
+          if (!tWords.length) return false;
+          for (const c of cands) {
+            const qWords = normPhonetic(c).split(' ').filter((w) => w.length >= 2);
+            if (!qWords.length) continue;
+            const minReq = qWords.length <= 2 ? qWords.length : Math.ceil(qWords.length * 0.66);
+            let hits = 0;
+            for (const qw of qWords) {
+              if (tWords.some((tw) => wordsMatchToken(tw, qw))) hits++;
+            }
+            if (hits >= minReq) return true;
+          }
+          return false;
+        };
+
         let foundTrack: any = null;
 
-        // 1. Primary Global LRCLIB Search (Exact Title + Artist Word Check!)
+        // 1. Primary Global LRCLIB Search (3,000,000+ Synced LRC + Plain Songs)
         if (!/[\u0D80-\u0DFF]/.test(cleanRaw)) {
           try {
             const qWordsRaw = cleanLatin.toLowerCase().split(/\s+/).filter((w) => w.length >= 2);
             const lrcRes = await fetch(
               `https://lrclib.net/api/search?q=${encodeURIComponent(cleanLatin)}`,
-              { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; SingVaza/13.0)' } }
+              { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; SingVaza/14.0)' } }
             );
             if (lrcRes.ok) {
               const list = (await lrcRes.json()) as any[];
@@ -695,8 +743,9 @@ export default {
           } catch (_) {}
         }
 
-        // 2. REAL-TIME ONLINE YOUTUBE AI SEARCH + PARALLEL LYRICS EXTRACTOR (~0.6s for ANY song on Earth, auto-fixes spelling!)
+        // 2. REAL-TIME YOUTUBE AI SEARCH + PARALLEL 6-VIDEO DESCRIPTION + SUBTITLES (CC) EXTRACTOR
         let ytCanonicalTitle = '';
+        let ytRawFirstTitle = '';
         if (!foundTrack) {
           try {
             const ytSearchRes = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
@@ -722,10 +771,15 @@ export default {
               });
 
               if (vids.length > 0) {
-                ytCanonicalTitle = vids[0].title.split(/[|•]/)[0].replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').replace(/\b(lyrics?|official|video|audio|sinhala|hd)\b/gi, ' ').replace(/\s+/g, ' ').trim();
+                ytRawFirstTitle = vids[0].title;
+                ytCanonicalTitle = vids[0].title
+                  .split(/[|•]/)[0]
+                  .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+                  .replace(/\b(lyrics?|official|video|audio|sinhala|hd|4k|full\s*song)\b/gi, ' ')
+                  .replace(/\s+/g, ' ')
+                  .trim();
 
-                // Fetch top 5 lyric videos IN PARALLEL (~350ms single round-trip!)
-                const topVids = vids.slice(0, 5);
+                const topVids = vids.slice(0, 6);
                 const playerInfos = await Promise.all(
                   topVids.map(async (v) => {
                     try {
@@ -740,9 +794,13 @@ export default {
                       });
                       if (!pRes.ok) return null;
                       const pJson: any = await pRes.json();
+                      const tracks = pJson?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+                      // Prefer human-uploaded lyrics subtitles over auto-generated ASR
+                      const manualTrack = tracks.find((t: any) => t?.baseUrl && t.kind !== 'asr');
                       return {
                         title: String(pJson?.videoDetails?.title || v.title),
                         desc: String(pJson?.videoDetails?.shortDescription || ''),
+                        captionUrl: manualTrack?.baseUrl ? String(manualTrack.baseUrl) : '',
                       };
                     } catch (_) {
                       return null;
@@ -750,6 +808,7 @@ export default {
                   })
                 );
 
+                // 2A. Check all 6 videos' Descriptions first
                 for (const info of playerInfos) {
                   if (!info || !info.desc) continue;
                   const extracted = extractLyricsFromYtDescription(info.desc);
@@ -758,175 +817,303 @@ export default {
                     break;
                   }
                 }
+
+                // 2B. If NO video had lyrics in its Description, extract directly from YouTube Closed Captions / Subtitles (CC)!
+                if (!foundTrack) {
+                  for (const info of playerInfos) {
+                    if (!info?.captionUrl) continue;
+                    try {
+                      const capRes = await fetch(info.captionUrl, { signal: AbortSignal.timeout(3000) });
+                      if (!capRes.ok) continue;
+                      const capXml = await capRes.text();
+                      const syncedLines: string[] = [];
+                      const plainLines: string[] = [];
+                      const cueRe = /<text[^>]*start="([\d.]+)"[^>]*>([\s\S]*?)<\/text>/gi;
+                      let cm: RegExpExecArray | null;
+                      while ((cm = cueRe.exec(capXml)) !== null) {
+                        const sec = parseFloat(cm[1] || '0');
+                        const txt = decodeHtmlEntities(cm[2].replace(/<[^>]+>/g, ' '))
+                          .replace(/[♪♫♬]+/g, '')
+                          .replace(/\s+/g, ' ')
+                          .trim();
+                        if (!txt || txt.length < 3 || /^\[(music|applause|intro|instrumental)\]$/i.test(txt)) continue;
+                        if (plainLines[plainLines.length - 1] === txt) continue;
+                        const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+                        const ss = (sec % 60).toFixed(2).padStart(5, '0');
+                        syncedLines.push(`[${mm}:${ss}] ${txt}`);
+                        plainLines.push(txt);
+                      }
+                      if (plainLines.length >= 6) {
+                        foundTrack = {
+                          syncedLyrics: syncedLines.join('\n'),
+                          plainLyrics: plainLines.join('\n'),
+                        };
+                        break;
+                      }
+                    } catch (_) {}
+                  }
+                }
               }
             }
           } catch (_) {}
         }
 
-        // Also retry LRCLIB using YouTube's spell-corrected title if user had a spelling typo (e.g. "pefect ed sheeran")!
+        const searchCandidates = Array.from(
+          new Set(
+            [cleanRaw, cleanLatin, ytCanonicalTitle, ytRawFirstTitle.split(/[-|•(]/)[0]?.trim() || '']
+              .map((s) => s.trim())
+              .filter((s) => s.length >= 2)
+          )
+        );
+
+        // 3. Retry LRCLIB with YouTube's spell-corrected title if user made a typo
         if (!foundTrack && ytCanonicalTitle && ytCanonicalTitle.toLowerCase() !== cleanLatin.toLowerCase()) {
           try {
             const lrcRes2 = await fetch(
               `https://lrclib.net/api/search?q=${encodeURIComponent(ytCanonicalTitle)}`,
-              { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; SingVaza/13.0)' } }
+              { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; SingVaza/14.0)' } }
             );
             if (lrcRes2.ok) {
               const list2 = (await lrcRes2.json()) as any[];
-              const hit2 = list2.find((item) => item.plainLyrics || item.syncedLyrics);
+              const hit2 = list2.find((item) => (item.plainLyrics || item.syncedLyrics) && titleMatchesCandidates(`${item.trackName || ''} ${item.artistName || ''}`, searchCandidates));
               if (hit2) foundTrack = hit2;
             }
           } catch (_) {}
         }
 
-        // 3. Strict Whole-Word Title Match on LyriHub 2,372 Sinhala Songs (using BOTH user query & YouTube spell-corrected title!)
-        const searchCandidates = [cleanLatin];
-        if (ytCanonicalTitle) searchCandidates.push(ytCanonicalTitle);
-
+        // 4. Parallel Sinhala Structured Libraries: SinhalaSongLyrics.com (Modern 2018-2026 Hits) + LyriHub (2,372) + SinhalaSongBook (10,000+ Classics)
         if (!foundTrack) {
-          try {
-            const idxCacheKey = new Request('https://singvaza-cache.local/v13/lyrihub-compact-index');
-            let indexText = '';
-            if (edgeCache) {
-              const idxHit = await edgeCache.match(idxCacheKey);
-              if (idxHit) indexText = await idxHit.text();
-            }
-            if (!indexText) {
-              const smRes = await fetch('https://www.lyrihub.lk/sitemap-0.xml');
-              if (smRes.ok) {
-                const xml = await smRes.text();
-                const slugs: string[] = [];
-                const re = /\/song\/([^/<]+)\//g;
-                let m: RegExpExecArray | null;
-                while ((m = re.exec(xml)) !== null) {
-                  slugs.push(m[1].toLowerCase());
-                }
-                indexText = slugs.join('\n');
-                if (edgeCache && slugs.length > 100) {
-                  await edgeCache.put(idxCacheKey, new Response(indexText, { headers: { 'Cache-Control': 'public, max-age=604800' } }));
-                }
-              }
-            }
-            if (indexText) {
-              const lines = indexText.split('\n');
-              for (const candStr of searchCandidates) {
-                if (foundTrack) break;
-                const qTokens = normPhonetic(candStr).split(' ').filter((t) => t.length >= 2);
-                if (!qTokens.length) continue;
-                let bestSlug = '';
-                let bestScore = 0;
-                const minRequired = qTokens.length <= 2 ? qTokens.length : Math.ceil(qTokens.length * 0.67);
-                for (let i = 0; i < lines.length; i++) {
-                  const rawSlug = lines[i];
-                  if (!rawSlug) continue;
-                  const slugWords = normPhonetic(rawSlug).split(' ').filter(Boolean);
-                  let matched = 0;
-                  for (let j = 0; j < qTokens.length; j++) {
-                    if (slugWords.some((sw) => wordsMatchToken(sw, qTokens[j]))) matched++;
+          const [sslHit, lyriHit, ssbHit] = await Promise.all([
+            // 4A. SinhalaSongLyrics.com WordPress REST API (Modern 2020-2026 Releases)
+            (async () => {
+              for (const sq of searchCandidates.slice(0, 2)) {
+                try {
+                  const r = await fetch(
+                    `https://sinhalasonglyrics.com/wp-json/wp/v2/posts?per_page=8&_fields=title,content&search=${encodeURIComponent(sq)}`,
+                    { signal: AbortSignal.timeout(4000) }
+                  );
+                  if (!r.ok) continue;
+                  const posts = (await r.json()) as any[];
+                  const matched = posts.find((p) => titleMatchesCandidates(decodeHtmlEntities(String(p?.title?.rendered || '').replace(/<[^>]+>/g, '')), searchCandidates));
+                  if (matched?.content?.rendered) {
+                    const html = String(matched.content.rendered);
+                    const afterHeading = html.split(/Song\s*Lyrics\s*<\/h[1-4]>/i)[1] || html;
+                    const cleaned = extractLyricsFromWebHtml(afterHeading);
+                    if (cleaned.length > 50) return { plainLyrics: cleaned };
                   }
-                  if (matched >= minRequired) {
-                    const score = matched / Math.max(qTokens.length, slugWords.length * 0.7);
-                    if (score > bestScore) {
-                      bestScore = score;
-                      bestSlug = rawSlug;
+                } catch (_) {}
+              }
+              return null;
+            })(),
+
+            // 4B. LyriHub.lk 2,372 Sinhala Songs Index
+            (async () => {
+              try {
+                const idxCacheKey = new Request('https://singvaza-cache.local/v14/lyrihub-compact-index');
+                let indexText = '';
+                if (edgeCache) {
+                  const idxHit = await edgeCache.match(idxCacheKey);
+                  if (idxHit) indexText = await idxHit.text();
+                }
+                if (!indexText) {
+                  const smRes = await fetch('https://www.lyrihub.lk/sitemap-0.xml', { signal: AbortSignal.timeout(4000) });
+                  if (smRes.ok) {
+                    const xml = await smRes.text();
+                    const slugs: string[] = [];
+                    const re = /\/song\/([^/<]+)\//g;
+                    let m: RegExpExecArray | null;
+                    while ((m = re.exec(xml)) !== null) slugs.push(m[1].toLowerCase());
+                    indexText = slugs.join('\n');
+                    if (edgeCache && slugs.length > 100) {
+                      await edgeCache.put(idxCacheKey, new Response(indexText, { headers: { 'Cache-Control': 'public, max-age=604800' } }));
                     }
                   }
                 }
-                if (bestSlug && bestScore >= 0.5) {
-                  const pageRes = await fetch(`https://www.lyrihub.lk/song/${bestSlug}/`);
-                  if (pageRes.ok) {
-                    const pageHtml = await pageRes.text();
-                    const blockMatch = pageHtml.match(/class="lyri-content[\s\S]*?>([\s\S]*?)<\/div>/i);
-                    if (blockMatch) {
-                      const plain = blockMatch[1]
-                        .replace(/<br\s*\/?>/gi, '\n')
-                        .replace(/<\/p>/gi, '\n\n')
-                        .replace(/<[^>]+>/g, '')
-                        .replace(/&nbsp;/g, ' ')
-                        .replace(/&#39;|&rsquo;/g, "'")
-                        .replace(/&quot;/g, '"')
-                        .replace(/&amp;/g, '&')
-                        .trim();
-                      if (plain.length > 20) {
-                        foundTrack = { plainLyrics: plain };
+                if (indexText) {
+                  const lines = indexText.split('\n');
+                  for (const candStr of searchCandidates) {
+                    const qTokens = normPhonetic(candStr).split(' ').filter((t) => t.length >= 2);
+                    if (!qTokens.length) continue;
+                    let bestSlug = '';
+                    let bestScore = 0;
+                    const minRequired = qTokens.length <= 2 ? qTokens.length : Math.ceil(qTokens.length * 0.67);
+                    for (let i = 0; i < lines.length; i++) {
+                      const rawSlug = lines[i];
+                      if (!rawSlug) continue;
+                      const slugWords = normPhonetic(rawSlug).split(' ').filter(Boolean);
+                      let matched = 0;
+                      for (let j = 0; j < qTokens.length; j++) {
+                        if (slugWords.some((sw) => wordsMatchToken(sw, qTokens[j]))) matched++;
+                      }
+                      if (matched >= minRequired) {
+                        const score = matched / Math.max(qTokens.length, slugWords.length * 0.7);
+                        if (score > bestScore) {
+                          bestScore = score;
+                          bestSlug = rawSlug;
+                        }
+                      }
+                    }
+                    if (bestSlug && bestScore >= 0.45) {
+                      const pageRes = await fetch(`https://www.lyrihub.lk/song/${bestSlug}/`, { signal: AbortSignal.timeout(4000) });
+                      if (pageRes.ok) {
+                        const pageHtml = await pageRes.text();
+                        const blockMatch = pageHtml.match(/class="lyri-content[\s\S]*?>([\s\S]*?)<\/div>/i);
+                        if (blockMatch) {
+                          const plain = decodeHtmlEntities(
+                            blockMatch[1]
+                              .replace(/<br\s*\/?>/gi, '\n')
+                              .replace(/<\/p>/gi, '\n\n')
+                              .replace(/<[^>]+>/g, '')
+                          ).trim();
+                          if (plain.length > 25) return { plainLyrics: plain };
+                        }
                       }
                     }
                   }
                 }
+              } catch (_) {}
+              return null;
+            })(),
+
+            // 4C. SinhalaSongBook.com 10,000+ Classics API
+            (async () => {
+              for (const sq of searchCandidates.slice(0, 2)) {
+                try {
+                  const ssbRes = await fetch(
+                    `https://www.sinhalasongbook.com/wp-json/wp/v2/posts?per_page=12&_fields=title,content&search=${encodeURIComponent(sq)}`,
+                    { signal: AbortSignal.timeout(4500) }
+                  );
+                  if (!ssbRes.ok) continue;
+                  const posts = (await ssbRes.json()) as any[];
+                  const matchedPost = posts.find((post) =>
+                    titleMatchesCandidates(decodeHtmlEntities(String(post?.title?.rendered || '').replace(/<[^>]+>/g, '')), searchCandidates)
+                  );
+                  if (matchedPost) {
+                    const html = String(matchedPost?.content?.rendered || '');
+                    const preMatch = html.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+                    if (preMatch) {
+                      const rawPre = decodeHtmlEntities(
+                        preMatch[1].replace(/<a[^>]*>[\s\S]*?<\/a>/gi, '').replace(/<[^>]+>/g, '')
+                      );
+                      const cleanLines: string[] = [];
+                      for (const rawLine of rawPre.split(/\r?\n/)) {
+                        const ln = rawLine.trim();
+                        if (!ln) {
+                          if (cleanLines.length && cleanLines[cleanLines.length - 1] !== '') cleanLines.push('');
+                          continue;
+                        }
+                        if (/^(INTRO|INTER|CHORUS|VERSE|BRIDGE|OUTRO|END)/i.test(ln)) continue;
+                        if (ln.includes('|') || (/^[\-\sxA-G#bmajinsudg0-9/()+]+$/.test(ln) && !/[h-w\u0D80-\u0DFF]/i.test(ln))) continue;
+                        cleanLines.push(ln);
+                      }
+                      const joined = cleanLines.join('\n').trim();
+                      if (joined.length > 30) {
+                        const cleanTitle = decodeHtmlEntities(String(matchedPost?.title?.rendered || '').replace(/<[^>]+>/g, '')).trim();
+                        return { plainLyrics: cleanTitle ? `${cleanTitle}\n\n${joined}` : joined };
+                      }
+                    }
+                  }
+                } catch (_) {}
+              }
+              return null;
+            })(),
+          ]);
+
+          foundTrack = sslHit || lyriHit || ssbHit || null;
+        }
+
+        // 5. LIVE OPEN-INTERNET WEB SEARCH FALLBACK (DuckDuckGo HTML + Bing Web Search in Parallel!)
+        // Catches ANY song anywhere on Google/Bing/DDG (lyrics-lk.com, lankawebsites.com, bharatlyrics, tamil2lyrics, azlyrics, blogs, etc.) even when NO YouTube video has Description OR Captions!
+        if (!foundTrack) {
+          try {
+            const webQuery = `${ytCanonicalTitle || cleanRaw} lyrics`;
+            const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+            const skipHosts = /\b(youtube\.com|youtu\.be|spotify\.com|music\.apple\.com|soundcloud\.com|shazam\.com|smule\.com|musixmatch\.com|genius\.com|facebook\.com|instagram\.com|tiktok\.com|wikipedia\.org|merriam-webster\.com|thesaurus\.com|dictionary\.cambridge\.org|wordhippo\.com|amazon\.com)\b/i;
+
+            const [ddgLinks, bingLinks] = await Promise.all([
+              (async () => {
+                try {
+                  const r = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(webQuery)}`, {
+                    headers: { 'User-Agent': ua, 'Accept-Language': 'en-US,en;q=0.9' },
+                    signal: AbortSignal.timeout(4000),
+                  });
+                  if (!r.ok) return [] as { title: string; href: string }[];
+                  const html = await r.text();
+                  const out: { title: string; href: string }[] = [];
+                  const re = /class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+                  let m: RegExpExecArray | null;
+                  while ((m = re.exec(html)) && out.length < 6) {
+                    let href = m[1];
+                    const uddg = href.match(/[?&]uddg=([^&]+)/);
+                    if (uddg) href = decodeURIComponent(uddg[1]);
+                    const title = decodeHtmlEntities(m[2].replace(/<[^>]+>/g, '')).trim();
+                    if (/^https?:\/\//i.test(href) && !skipHosts.test(href)) out.push({ title, href });
+                  }
+                  return out;
+                } catch (_) {
+                  return [] as { title: string; href: string }[];
+                }
+              })(),
+              (async () => {
+                try {
+                  const r = await fetch(`https://www.bing.com/search?q=${encodeURIComponent(webQuery)}`, {
+                    headers: { 'User-Agent': ua, 'Accept-Language': 'en-US,en;q=0.9' },
+                    signal: AbortSignal.timeout(4000),
+                  });
+                  if (!r.ok) return [] as { title: string; href: string }[];
+                  const html = await r.text();
+                  const out: { title: string; href: string }[] = [];
+                  const re = /<li class="b_algo"[\s\S]*?<h2[^>]*><a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+                  let m: RegExpExecArray | null;
+                  while ((m = re.exec(html)) && out.length < 6) {
+                    let href = m[1];
+                    const uMatch = href.match(/(?:[?&]|&amp;)u=a1([A-Za-z0-9_-]+)/);
+                    if (uMatch) {
+                      try {
+                        const b64 = uMatch[1].replace(/-/g, '+').replace(/_/g, '/');
+                        const bin = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+                        href = new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+                      } catch (_) {}
+                    }
+                    const title = decodeHtmlEntities(m[2].replace(/<[^>]+>/g, '')).trim();
+                    if (/^https?:\/\//i.test(href) && !skipHosts.test(href)) out.push({ title, href });
+                  }
+                  return out;
+                } catch (_) {
+                  return [] as { title: string; href: string }[];
+                }
+              })(),
+            ]);
+
+            const seenUrls = new Set<string>();
+            const candidatePages = [...ddgLinks, ...bingLinks].filter((item) => {
+              if (seenUrls.has(item.href)) return false;
+              seenUrls.add(item.href);
+              return titleMatchesCandidates(item.title, searchCandidates);
+            }).slice(0, 4);
+
+            if (candidatePages.length > 0) {
+              const scraped = await Promise.all(
+                candidatePages.map(async (pg) => {
+                  try {
+                    const pr = await fetch(pg.href, {
+                      headers: { 'User-Agent': ua, 'Accept-Language': 'en-US,en;q=0.9' },
+                      signal: AbortSignal.timeout(4000),
+                    });
+                    if (!pr.ok) return '';
+                    const pHtml = await pr.text();
+                    return extractLyricsFromWebHtml(pHtml);
+                  } catch (_) {
+                    return '';
+                  }
+                })
+              );
+              const bestWeb = scraped.find((txt) => txt.length > 60);
+              if (bestWeb) {
+                foundTrack = { plainLyrics: bestWeb };
               }
             }
           } catch (_) {}
-        }
-
-        // 4. Strict Title-Verified SinhalaSongBook 10,000+ Classic Sinhala Songs Fallback
-        if (!foundTrack) {
-          const ssbQueries = [cleanRaw];
-          if (ytCanonicalTitle && !ssbQueries.includes(ytCanonicalTitle)) ssbQueries.push(ytCanonicalTitle);
-
-          for (const sq of ssbQueries.slice(0, 2)) {
-            const qTokens = normPhonetic(sq).split(' ').filter((t) => t.length >= 2);
-            if (foundTrack || !qTokens.length) break;
-            try {
-              const ssbRes = await fetch(
-                `https://www.sinhalasongbook.com/wp-json/wp/v2/posts?per_page=12&_fields=title,content&search=${encodeURIComponent(sq)}`,
-                { signal: AbortSignal.timeout(4500) }
-              );
-              if (ssbRes.ok) {
-                const posts = (await ssbRes.json()) as any[];
-                const minReq = qTokens.length <= 2 ? qTokens.length : Math.ceil(qTokens.length * 0.67);
-                let matchedPost: any = null;
-                let bestTitleScore = 0;
-
-                for (const post of posts) {
-                  const rawTitle = String(post?.title?.rendered || '').replace(/<[^>]+>/g, '').replace(/&#8211;/g, ' ');
-                  const titleWords = normPhonetic(rawTitle).split(' ').filter(Boolean);
-                  let hits = 0;
-                  for (const qt of qTokens) {
-                    if (titleWords.some((tw) => wordsMatchToken(tw, qt))) hits++;
-                  }
-                  if (hits >= minReq) {
-                    const sc = hits / Math.max(qTokens.length, titleWords.length * 0.5);
-                    if (sc > bestTitleScore) {
-                      bestTitleScore = sc;
-                      matchedPost = post;
-                    }
-                  }
-                }
-
-                if (matchedPost) {
-                  const html = String(matchedPost?.content?.rendered || '');
-                  const preMatch = html.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
-                  if (preMatch) {
-                    const rawPre = preMatch[1]
-                      .replace(/<a[^>]*>[\s\S]*?<\/a>/gi, '')
-                      .replace(/<[^>]+>/g, '')
-                      .replace(/&#8211;|&ndash;/g, '–')
-                      .replace(/&#8217;|&rsquo;/g, "'")
-                      .replace(/&nbsp;/g, ' ')
-                      .replace(/&amp;/g, '&');
-                    const cleanLines: string[] = [];
-                    for (const rawLine of rawPre.split(/\r?\n/)) {
-                      const ln = rawLine.trim();
-                      if (!ln) {
-                        if (cleanLines.length && cleanLines[cleanLines.length - 1] !== '') cleanLines.push('');
-                        continue;
-                      }
-                      if (/^(INTRO|INTER|CHORUS|VERSE|BRIDGE|OUTRO|END)/i.test(ln)) continue;
-                      if (ln.includes('|') || (/^[\-\sxA-G#bmajinsudg0-9/()+]+$/.test(ln) && !/[h-w\u0D80-\u0DFF]/i.test(ln))) continue;
-                      cleanLines.push(ln);
-                    }
-                    const joined = cleanLines.join('\n').trim();
-                    if (joined.length > 30) {
-                      const cleanTitle = String(matchedPost?.title?.rendered || '')
-                        .replace(/<[^>]+>/g, '')
-                        .replace(/&#8211;/g, '–')
-                        .trim();
-                      foundTrack = { plainLyrics: cleanTitle ? `${cleanTitle}\n\n${joined}` : joined };
-                    }
-                  }
-                }
-              }
-            } catch (_) {}
-          }
         }
 
         const outResp = new Response(JSON.stringify({ track: foundTrack }), {
