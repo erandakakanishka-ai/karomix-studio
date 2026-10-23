@@ -920,7 +920,7 @@ const App = (() => {
     btn.textContent = 'Finding...';
     document.getElementById('projectTitleInput').value = `${raw} — Vocal Cover`;
 
-    fetchLyrics(raw);
+    const lyricsPromise = fetchLyrics(raw);
 
     try {
       const res = await fetch(`/api/search-karaoke?q=${encodeURIComponent(raw)}`);
@@ -933,9 +933,15 @@ const App = (() => {
       state.karaokeResults = videos;
       state.karaokeIndex = 0;
       renderKaraokeStrip();
-      selectKaraokeVideo(0);
+      selectKaraokeVideo(0, true);
       document.getElementById('btnNextKaraoke').style.display = videos.length > 1 ? 'inline-flex' : 'none';
       showToast('Karaoke video ready! Tap Start Recording to sing.');
+      // Only try video title AFTER initial user-query lyrics lookup finishes AND ONLY if nothing was found!
+      lyricsPromise.then(() => {
+        if (!state.lrcLines.length && videos[0]?.title) {
+          fetchLyrics(videos[0].title, true);
+        }
+      });
     } catch (_) {
       showToast('Network issue finding karaoke video');
     } finally {
@@ -955,20 +961,20 @@ const App = (() => {
     `).join('');
   }
 
-  function selectKaraokeVideo(idx) {
+  function selectKaraokeVideo(idx, skipAutoLyrics = false) {
     const v = state.karaokeResults[idx];
     if (!v) return;
     state.karaokeIndex = idx;
     renderKaraokeStrip();
     renderYoutubeEmbed(v.id || v.videoId, v.title);
-    if (!state.lrcLines.length && v.title) {
-      fetchLyrics(v.title);
+    if (!skipAutoLyrics && !state.lrcLines.length && v.title) {
+      fetchLyrics(v.title, true);
     }
   }
 
   function nextKaraokeResult() {
     if (!state.karaokeResults.length) return;
-    selectKaraokeVideo((state.karaokeIndex + 1) % state.karaokeResults.length);
+    selectKaraokeVideo((state.karaokeIndex + 1) % state.karaokeResults.length, true);
   }
 
   function renderPlainLyricsText(rawText, sourceLabel = 'Lyrics ready') {
@@ -1012,18 +1018,21 @@ const App = (() => {
     showToast('Lyrics updated!');
   }
 
-  async function fetchLyrics(query) {
+  async function fetchLyrics(query, isFallback = false) {
+    if (isFallback && state.lrcLines.length) return;
+    const seq = (state.lyricsReqSeq = (state.lyricsReqSeq || 0) + 1);
     const lbl = document.getElementById('lyricsStatusLabel');
     const box = document.getElementById('lyricsStageBox');
-    state.lrcLines = [];
-    if (lbl) lbl.textContent = 'Finding lyrics...';
-    if (box) box.innerHTML = '<div class="lyric-row" style="color:var(--text-secondary);">Loading song lyrics...</div>';
+    if (!isFallback) {
+      state.lrcLines = [];
+      if (lbl) lbl.textContent = 'Finding lyrics...';
+      if (box) box.innerHTML = '<div class="lyric-row" style="color:var(--text-secondary);">Loading song lyrics...</div>';
+    }
 
     try {
-      const cleanQ = String(query || '').replace(/\b(karaoke|instrumental|lyrics|version|official|acoustic)\b/gi, '').trim() || query;
+      const cleanQ = String(query || '').split(/[|•]/)[0].replace(/\b(karaoke|instrumental|lyrics|version|official|acoustic)\b/gi, '').trim() || query;
       let hit = null;
 
-      // Primary: Edge Multi-Source API (works on Android 8.1 TLS + covers 3M+ Global LRCLIB + 2,370+ Regional songs!)
       try {
         const res = await fetch(`/api/lyrics?q=${encodeURIComponent(cleanQ)}`);
         if (res.ok) {
@@ -1032,7 +1041,8 @@ const App = (() => {
         }
       } catch (_) {}
 
-      // Fallback: Direct LRCLIB query
+      if (seq !== state.lyricsReqSeq) return;
+
       if (!hit) {
         try {
           const directRes = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(cleanQ)}`);
@@ -1045,10 +1055,13 @@ const App = (() => {
         } catch (_) {}
       }
 
+      if (seq !== state.lyricsReqSeq) return;
+
       if (hit && renderPlainLyricsText(hit.plainLyrics || hit.syncedLyrics || '', 'Full song lyrics')) {
         return;
       }
 
+      if (state.lrcLines.length) return;
       if (lbl) lbl.textContent = 'Tap Edit Lyrics to paste';
       if (box) {
         box.innerHTML = '<div class="lyric-row" style="color:var(--text-secondary);">Lyrics not found in database for this version — read directly from the video above or tap "Edit Lyrics" to paste yours.</div>';
