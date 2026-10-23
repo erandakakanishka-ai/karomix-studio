@@ -1,12 +1,12 @@
 /**
- * SingCraft Studio Acoustic Engine v10.0 — Android 8.1 Zero-Crackle Hardware Audio + Lexicon Hall DSP
+ * SingVaza Acoustic Engine v10.0 — Android 8.1 Zero-Crackle Hardware Audio + Lexicon Hall DSP
  * - Pure C++ Bell Labs / Lexicon True-Stereo Allpass + Prime Comb Concert Hall (0 FFTs, 100x faster, lush velvet bloom)
  * - Abbey Road 38ms Pre-Delay + 580Hz–6.8kHz Vocal-Clear Hall Filtering
  * - Zero-Oversample Featherweight Studio Strip + Ultra-Fast Offline-to-Hardware <audio> Stream Renderer
  * - Guaranteed -0.85 dBTP Brickwall Ceiling & Off-Main-Thread Web Worker Pitch / Key Engine
  */
 
-window.SingCraftDSP = (() => {
+window.SingVazaDSP = (() => {
   const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
   let dspWorker = null;
   let workerSeq = 0;

@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://singcraft-studio.pages.dev/sitemap.xml
+Sitemap: https://singvaza.pages.dev/sitemap.xml

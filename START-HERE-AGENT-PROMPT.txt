@@ -1,8 +1,8 @@
-# SINGCRAFT STUDIO (v11.1) — UNIVERSAL AI CONTINUATION GUIDE
-Repository: https://github.com/erandakakanishka-ai/singcraft-studio
+# SINGVAZA (v11.1) — UNIVERSAL AI CONTINUATION GUIDE
+Repository: https://github.com/erandakakanishka-ai/singvaza
 Live Production URLs:
-- Cloudflare Pages + D1: https://singcraft-studio.pages.dev
-- Cloudflare Worker Mirror: https://singcraft-studio.erandakakanishka.workers.dev
+- Cloudflare Pages + D1: https://singvaza.pages.dev
+- Cloudflare Worker Mirror: https://singvaza.erandakakanishka.workers.dev
 
 ## How Any AI Agent Can Continue Developing This Project (Zero Lock-In)
 This project uses 100% pure open standards (Vanilla HTML5, CSS3, JavaScript ES2020, Web Worker DSP, lamejs MP3 encoder, Cloudflare Pages Functions + Worker TypeScript, and Cloudflare D1 SQLite). There is ZERO vendor lock-in.
@@ -10,7 +10,7 @@ This project uses 100% pure open standards (Vanilla HTML5, CSS3, JavaScript ES20
 ### Exact Architecture & Key Files
 1. `public/index.html` & `public/styles.css`:
    - Single-page mobile-first PWA (`360px+` Android friendly).
-   - IMPORTANT: Whenever editing `public/styles.css`, copy its full contents into `<style id="singcraft-inline-css">...</style>` inside `public/index.html` as well.
+   - IMPORTANT: Whenever editing `public/styles.css`, copy its full contents into `<style id="singvaza-inline-css">...</style>` inside `public/index.html` as well.
    - Views: `#view-home`, `#view-sing`, `#view-mix`, `#view-blog`, plus standalone policy pages (`about.html`, `privacy.html`, `terms.html`, `refunds.html`, `contact.html`, `ads.txt`).
 2. `public/app.js`:
    - Core frontend controller (`window.App`).
@@ -26,5 +26,5 @@ This project uses 100% pure open standards (Vanilla HTML5, CSS3, JavaScript ES20
 ```bash
 cp src/worker.ts functions/api/_worker_core.ts
 npx wrangler deploy
-npx wrangler pages deploy public --project-name=singcraft-studio --branch=main --commit-dirty=true
+npx wrangler pages deploy public --project-name=singvaza --branch=main --commit-dirty=true
 ```

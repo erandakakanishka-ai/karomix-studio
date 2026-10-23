@@ -1,5 +1,5 @@
 /**
- * SingCraft Studio v10.0 — Android 8.1 Zero-Crackle Native Hardware Audio Controller
+ * SingVaza v10.0 — Android 8.1 Zero-Crackle Native Hardware Audio Controller
  * - 100% Pure OS Hardware <audio> Output (Bypasses buggy OpenSL ES 128-frame real-time WebAudio mixer on Android 8.1!)
  * - Instant 10ms Hardware MP3 Demo Stream + Ultra-Fast Offline-to-Hardware Stream Mix Engine (~120ms swap)
  * - Throttled Low-CPU 10 FPS Canvas HUD + Fixed Single-Pass Lyric Sync (Zero DOM Reflow Stutter)
@@ -13,7 +13,7 @@ const App = (() => {
 
   // Dedicated OS-Level Hardware Audio Player (Direct Android AudioFlinger / iOS CoreAudio hardware pipeline — 0% JS DSP crackle!)
   const hwAudio = document.createElement('audio');
-  hwAudio.id = 'singcraftHwAudio';
+  hwAudio.id = 'singvazaHwAudio';
   hwAudio.preload = 'auto';
   hwAudio.playsInline = true;
   hwAudio.setAttribute('playsinline', '');
@@ -36,12 +36,12 @@ const App = (() => {
 
   function loadGuestDailyExports() {
     const today = getLocalDayKey();
-    if (localStorage.getItem('singcraft_daily_date') !== today) {
-      localStorage.setItem('singcraft_daily_date', today);
-      localStorage.setItem('singcraft_daily_used', '0');
+    if (localStorage.getItem('singvaza_daily_date') !== today) {
+      localStorage.setItem('singvaza_daily_date', today);
+      localStorage.setItem('singvaza_daily_used', '0');
       return 0;
     }
-    return Number(localStorage.getItem('singcraft_daily_used') || '0');
+    return Number(localStorage.getItem('singvaza_daily_used') || '0');
   }
 
   const state = {
@@ -49,9 +49,9 @@ const App = (() => {
     stageMode: 'video',
     user: null,
     projects: [],
-    authToken: localStorage.getItem('singcraft_token') || '',
+    authToken: localStorage.getItem('singvaza_token') || '',
     authMode: 'register',
-    isProDemo: localStorage.getItem('singcraft_pro_demo') === '1',
+    isProDemo: localStorage.getItem('singvaza_pro_demo') === '1',
     exportsUsed: loadGuestDailyExports(),
     dailyLimit: 2,
     quota: {
@@ -86,7 +86,7 @@ const App = (() => {
     uploadedFileName: '',
     lastMasterBlob: null,
     lastMasterMime: 'audio/mpeg',
-    lastMasterFilename: 'singcraft-master.mp3',
+    lastMasterFilename: 'singvaza-master.mp3',
     ytPlayer: null,
     ytSyncInterval: null,
     waitingForYtTap: false,
@@ -116,7 +116,7 @@ const App = (() => {
 
     activePreset: 'crystal_hd',
     params: {
-      ...SingCraftDSP.PRESETS.crystal_hd,
+      ...SingVazaDSP.PRESETS.crystal_hd,
       vocalOffsetMs: 0,
       scaleKey: 9,
       bypassFx: false,
@@ -249,13 +249,13 @@ const App = (() => {
       state.backingBuffer = backBuf;
       state.rawVocalBuffer = vocBuf;
       state.tunedVocalBuffer = vocBuf;
-      state.backingPeaks = SingCraftDSP.computeWaveformPeaks(backBuf, 220);
-      state.vocalPeaks = SingCraftDSP.computeWaveformPeaks(vocBuf, 220);
+      state.backingPeaks = SingVazaDSP.computeWaveformPeaks(backBuf, 220);
+      state.vocalPeaks = SingVazaDSP.computeWaveformPeaks(vocBuf, 220);
       state.isDemoSession = true;
       suspendIdleWebAudio();
       if (state.view === 'mix') drawTimeline();
 
-      SingCraftDSP.processVocalAsync(ctx, vocBuf, {
+      SingVazaDSP.processVocalAsync(ctx, vocBuf, {
         autotuneAmount: 0,
         retuneSpeed: 0.3,
         noiseGate: 0.45,
@@ -455,7 +455,7 @@ const App = (() => {
     if (mixBtn) mixBtn.textContent = 'Smoothing...';
 
     // Non-realtime OfflineAudioContext render -> 100% crackle-free native hardware WAV stream!
-    const wavBlob = await SingCraftDSP.renderMasterWav(
+    const wavBlob = await SingVazaDSP.renderMasterWav(
       { backing: state.backingBuffer, rawVocal: state.rawVocalBuffer, tunedVocal: state.tunedVocalBuffer },
       state.params,
       true // 32kHz Stereo = super-fast render + zero Android 8.1 RAM pressure + silky smooth highs!
@@ -617,7 +617,7 @@ const App = (() => {
   function renderPresets() {
     const grid = document.getElementById('presetGrid');
     if (!grid) return;
-    grid.innerHTML = Object.entries(SingCraftDSP.PRESETS).map(([key, p]) => `
+    grid.innerHTML = Object.entries(SingVazaDSP.PRESETS).map(([key, p]) => `
       <div class="preset-card ${state.activePreset === key ? 'active' : ''}" onclick="App.applyPreset('${key}', true)">
         <div class="preset-card-tag">${p.tag}</div>
         <div class="preset-card-name">${p.nameEn}</div>
@@ -627,7 +627,7 @@ const App = (() => {
   }
 
   function applyPreset(key, notify = true) {
-    const p = SingCraftDSP.PRESETS[key];
+    const p = SingVazaDSP.PRESETS[key];
     if (!p) return;
     state.activePreset = key;
     state.params = { ...state.params, ...p, bypassFx: false };
@@ -720,7 +720,7 @@ const App = (() => {
       showToast('Record or load a vocal track first');
       return;
     }
-    const ms = SingCraftDSP.estimateSyncOffsetMs(state.backingBuffer, state.rawVocalBuffer);
+    const ms = SingVazaDSP.estimateSyncOffsetMs(state.backingBuffer, state.rawVocalBuffer);
     setVocalOffset(ms, true);
     showToast(`Auto-aligned vocal sync (${ms > 0 ? '+' : ''}${ms} ms)`);
   }
@@ -733,7 +733,7 @@ const App = (() => {
       showToast('Load or record a voice track first');
       return;
     }
-    const res = SingCraftDSP.analyzeVoiceQuick(state.rawVocalBuffer);
+    const res = SingVazaDSP.analyzeVoiceQuick(state.rawVocalBuffer);
     state.activePreset = res.presetKey;
     state.params = { ...state.params, ...res.settings, bypassFx: false };
     markMixDirty();
@@ -758,7 +758,7 @@ const App = (() => {
     state.params.noiseGate = Number(document.getElementById('gateSlider').value) / 100;
     state.params.scaleKey = Number(document.getElementById('keySelect').value);
 
-    const res = await SingCraftDSP.processVocalAsync(ctx, state.rawVocalBuffer, {
+    const res = await SingVazaDSP.processVocalAsync(ctx, state.rawVocalBuffer, {
       autotuneAmount: state.params.autotuneAmount,
       retuneSpeed: 0.45,
       noiseGate: state.params.noiseGate,
@@ -783,12 +783,12 @@ const App = (() => {
 
     const ctx = ensureAudioCtx();
     const base = state.karaokeCutActive
-      ? SingCraftDSP.centerCutKaraokeBuffer(ctx, state.originalBackingBuffer)
+      ? SingVazaDSP.centerCutKaraokeBuffer(ctx, state.originalBackingBuffer)
       : state.originalBackingBuffer;
 
-    state.backingBuffer = next === 0 ? base : await SingCraftDSP.transposeBufferAsync(ctx, base, next);
+    state.backingBuffer = next === 0 ? base : await SingVazaDSP.transposeBufferAsync(ctx, base, next);
     suspendIdleWebAudio();
-    state.backingPeaks = SingCraftDSP.computeWaveformPeaks(state.backingBuffer, 220);
+    state.backingPeaks = SingVazaDSP.computeWaveformPeaks(state.backingBuffer, 220);
     markMixDirty();
     drawTimeline();
     if (state.isPlaying) startPlayback(getCurrentPlayhead());
@@ -806,10 +806,10 @@ const App = (() => {
     state.karaokeCutActive = !state.karaokeCutActive;
     document.getElementById('btnKaraokeCut').className = state.karaokeCutActive ? 'btn btn-sm btn-amber' : 'btn btn-sm';
     state.backingBuffer = state.karaokeCutActive
-      ? SingCraftDSP.centerCutKaraokeBuffer(ctx, state.originalBackingBuffer)
+      ? SingVazaDSP.centerCutKaraokeBuffer(ctx, state.originalBackingBuffer)
       : state.originalBackingBuffer;
     suspendIdleWebAudio();
-    state.backingPeaks = SingCraftDSP.computeWaveformPeaks(state.backingBuffer, 220);
+    state.backingPeaks = SingVazaDSP.computeWaveformPeaks(state.backingBuffer, 220);
     markMixDirty();
     drawTimeline();
     if (state.isPlaying) startPlayback(getCurrentPlayhead());
@@ -1187,7 +1187,7 @@ const App = (() => {
       suspendIdleWebAudio();
       state.originalBackingBuffer = buf;
       state.backingBuffer = buf;
-      state.backingPeaks = SingCraftDSP.computeWaveformPeaks(buf, 220);
+      state.backingPeaks = SingVazaDSP.computeWaveformPeaks(buf, 220);
       markMixDirty();
       if (state.view === 'mix') {
         drawTimeline(0);
@@ -1220,7 +1220,7 @@ const App = (() => {
       }
       state.rawVocalBuffer = buf;
       state.tunedVocalBuffer = buf;
-      state.vocalPeaks = SingCraftDSP.computeWaveformPeaks(buf, 220);
+      state.vocalPeaks = SingVazaDSP.computeWaveformPeaks(buf, 220);
       state.isDemoSession = false;
       markMixDirty();
       switchView('mix');
@@ -1292,7 +1292,7 @@ const App = (() => {
         document.getElementById('micMeterFill').style.width = `${Math.min(100, rms * 340)}%`;
 
         if (++tickCount % 3 === 0 && state.audioCtx) {
-          const note = SingCraftDSP.detectPitchLive(buf, state.audioCtx.sampleRate);
+          const note = SingVazaDSP.detectPitchLive(buf, state.audioCtx.sampleRate);
           document.getElementById('livePitchText').textContent = note ? `Note: ${note}` : 'Note: --';
         }
       }
@@ -1388,7 +1388,7 @@ const App = (() => {
         }
         state.rawVocalBuffer = vocalBuf;
         state.tunedVocalBuffer = vocalBuf;
-        state.vocalPeaks = SingCraftDSP.computeWaveformPeaks(vocalBuf, 220);
+        state.vocalPeaks = SingVazaDSP.computeWaveformPeaks(vocalBuf, 220);
         state.isDemoSession = false;
         markMixDirty();
 
@@ -1418,7 +1418,7 @@ const App = (() => {
         stageMedia.play().catch(() => {});
       } catch (_) {}
     } else if (state.backingBuffer && state.userLoadedBacking) {
-      SingCraftDSP.renderMasterWav({ backing: state.backingBuffer, rawVocal: null, tunedVocal: null }, { ...state.params, vocalPocket: false }, true)
+      SingVazaDSP.renderMasterWav({ backing: state.backingBuffer, rawVocal: null, tunedVocal: null }, { ...state.params, vocalPocket: false }, true)
         .then((bBlob) => {
           if (state.isRecording) {
             hwAudio.src = URL.createObjectURL(bBlob);
@@ -1543,14 +1543,14 @@ const App = (() => {
       const bBuf = await toBuf(backingBase64);
       state.originalBackingBuffer = bBuf;
       state.backingBuffer = bBuf;
-      state.backingPeaks = SingCraftDSP.computeWaveformPeaks(bBuf, 220);
+      state.backingPeaks = SingVazaDSP.computeWaveformPeaks(bBuf, 220);
       state.userLoadedBacking = true;
     }
     if (vocalBase64) {
       const vBuf = await toBuf(vocalBase64);
       state.rawVocalBuffer = vBuf;
       state.tunedVocalBuffer = vBuf;
-      state.vocalPeaks = SingCraftDSP.computeWaveformPeaks(vBuf, 220);
+      state.vocalPeaks = SingVazaDSP.computeWaveformPeaks(vBuf, 220);
     }
     suspendIdleWebAudio();
     state.isDemoSession = false;
@@ -1648,18 +1648,18 @@ const App = (() => {
 
     const ctx = ensureAudioCtx();
     if (state.originalBackingBuffer) {
-      state.originalBackingBuffer = SingCraftDSP.sliceAudioBuffer(ctx, state.originalBackingBuffer, startSec, endSec);
+      state.originalBackingBuffer = SingVazaDSP.sliceAudioBuffer(ctx, state.originalBackingBuffer, startSec, endSec);
     }
     if (state.backingBuffer) {
-      state.backingBuffer = SingCraftDSP.sliceAudioBuffer(ctx, state.backingBuffer, startSec, endSec);
-      state.backingPeaks = SingCraftDSP.computeWaveformPeaks(state.backingBuffer, 220);
+      state.backingBuffer = SingVazaDSP.sliceAudioBuffer(ctx, state.backingBuffer, startSec, endSec);
+      state.backingPeaks = SingVazaDSP.computeWaveformPeaks(state.backingBuffer, 220);
     }
     if (state.rawVocalBuffer) {
-      state.rawVocalBuffer = SingCraftDSP.sliceAudioBuffer(ctx, state.rawVocalBuffer, startSec, endSec);
-      state.vocalPeaks = SingCraftDSP.computeWaveformPeaks(state.rawVocalBuffer, 220);
+      state.rawVocalBuffer = SingVazaDSP.sliceAudioBuffer(ctx, state.rawVocalBuffer, startSec, endSec);
+      state.vocalPeaks = SingVazaDSP.computeWaveformPeaks(state.rawVocalBuffer, 220);
     }
     if (state.tunedVocalBuffer) {
-      state.tunedVocalBuffer = SingCraftDSP.sliceAudioBuffer(ctx, state.tunedVocalBuffer, startSec, endSec);
+      state.tunedVocalBuffer = SingVazaDSP.sliceAudioBuffer(ctx, state.tunedVocalBuffer, startSec, endSec);
     }
     suspendIdleWebAudio();
 
@@ -1687,8 +1687,8 @@ const App = (() => {
     state.rawVocalBuffer = b.rawVocalBuffer;
     state.tunedVocalBuffer = b.tunedVocalBuffer;
     state.isDemoSession = b.isDemoSession;
-    state.backingPeaks = state.backingBuffer ? SingCraftDSP.computeWaveformPeaks(state.backingBuffer, 220) : null;
-    state.vocalPeaks = state.rawVocalBuffer ? SingCraftDSP.computeWaveformPeaks(state.rawVocalBuffer, 220) : null;
+    state.backingPeaks = state.backingBuffer ? SingVazaDSP.computeWaveformPeaks(state.backingBuffer, 220) : null;
+    state.vocalPeaks = state.rawVocalBuffer ? SingVazaDSP.computeWaveformPeaks(state.rawVocalBuffer, 220) : null;
     state.uncroppedBackup = null;
     markMixDirty();
     state.pausePositionSec = 0;
@@ -1986,7 +1986,7 @@ const App = (() => {
             state.authToken = data.token;
             state.user = data.user;
             if (data.quota) state.quota = data.quota;
-            localStorage.setItem('singcraft_token', data.token);
+            localStorage.setItem('singvaza_token', data.token);
             updateAccountUI();
             closeAuthModal();
             showToast(`Welcome ${data.user.display_name}! 30-Day Free Pro Pass activated!`);
@@ -2009,9 +2009,9 @@ const App = (() => {
       renderBtn();
       return;
     }
-    if (!document.getElementById('singcraftGsiScript')) {
+    if (!document.getElementById('singvazaGsiScript')) {
       const s = document.createElement('script');
-      s.id = 'singcraftGsiScript';
+      s.id = 'singvazaGsiScript';
       s.src = 'https://accounts.google.com/gsi/client';
       s.async = true;
       s.defer = true;
@@ -2069,7 +2069,7 @@ const App = (() => {
     state.authToken = data.token;
     state.user = data.user;
     if (data.quota) state.quota = data.quota;
-    localStorage.setItem('singcraft_token', data.token);
+    localStorage.setItem('singvaza_token', data.token);
     updateAccountUI();
     closeAuthModal();
     showToast(`Welcome ${data.user.display_name}! Your 30-Day Free Pro Pass is active!`);
@@ -2081,7 +2081,7 @@ const App = (() => {
     state.quota.proActive = false;
     state.quota.proDaysLeft = 0;
     state.quota.dailyUsed = loadGuestDailyExports();
-    localStorage.removeItem('singcraft_token');
+    localStorage.removeItem('singvaza_token');
     updateAccountUI();
     closeAuthModal();
     showToast('Signed out');
@@ -2089,7 +2089,7 @@ const App = (() => {
 
   async function deleteAccount() {
     if (!state.user) return;
-    if (!window.confirm('Permanently delete your SingCraft Studio account and saved mixes? This cannot be undone.')) {
+    if (!window.confirm('Permanently delete your SingVaza account and saved mixes? This cannot be undone.')) {
       return;
     }
     try {
@@ -2100,7 +2100,7 @@ const App = (() => {
     state.projects = [];
     state.quota.proActive = false;
     state.quota.proDaysLeft = 0;
-    localStorage.removeItem('singcraft_token');
+    localStorage.removeItem('singvaza_token');
     updateAccountUI();
     renderSavedProjects();
     closeAuthModal();
@@ -2117,7 +2117,7 @@ const App = (() => {
       return;
     }
     state.isProDemo = !state.isProDemo;
-    localStorage.setItem('singcraft_pro_demo', state.isProDemo ? '1' : '0');
+    localStorage.setItem('singvaza_pro_demo', state.isProDemo ? '1' : '0');
     apiFetch('/api/upgrade-demo', {
       method: 'POST',
       body: JSON.stringify({ plan: state.isProDemo ? 'pro_global' : 'free' }),
@@ -2208,7 +2208,7 @@ const App = (() => {
     btn.textContent = fmt.startsWith('mp3') ? 'Encoding MP3...' : 'Mastering WAV...';
 
     try {
-      const result = await SingCraftDSP.renderMasterAudio(
+      const result = await SingVazaDSP.renderMasterAudio(
         { backing: state.backingBuffer, rawVocal: state.rawVocalBuffer, tunedVocal: state.tunedVocalBuffer },
         state.params,
         fmt,
@@ -2218,8 +2218,8 @@ const App = (() => {
 
       if (!state.user) {
         const nextGuest = loadGuestDailyExports() + 1;
-        localStorage.setItem('singcraft_daily_date', getLocalDayKey());
-        localStorage.setItem('singcraft_daily_used', String(nextGuest));
+        localStorage.setItem('singvaza_daily_date', getLocalDayKey());
+        localStorage.setItem('singvaza_daily_used', String(nextGuest));
         state.exportsUsed = nextGuest;
         state.quota.dailyUsed = nextGuest;
       } else {
@@ -2230,7 +2230,7 @@ const App = (() => {
       }
       updateAccountUI();
 
-      const fname = `${(document.getElementById('projectTitleInput').value || 'singcraft').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.${result.ext}`;
+      const fname = `${(document.getElementById('projectTitleInput').value || 'singvaza').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.${result.ext}`;
       const sizeMb = (result.blob.size / (1024 * 1024)).toFixed(2);
       state.lastMasterBlob = result.blob;
       state.lastMasterMime = result.mime;
@@ -2275,8 +2275,8 @@ const App = (() => {
       });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
-          title: document.getElementById('projectTitleInput').value || 'My SingCraft Studio Cover',
-          text: 'Recorded & mastered on SingCraft Studio',
+          title: document.getElementById('projectTitleInput').value || 'My SingVaza Cover',
+          text: 'Recorded & mastered on SingVaza',
           files: [file],
         });
         return;
@@ -2337,7 +2337,7 @@ const App = (() => {
 
   function openPrivacySettings() {
     toggleDrawer(false);
-    const saved = localStorage.getItem('singcraft_ad_consent') || 'personalized';
+    const saved = localStorage.getItem('singvaza_ad_consent') || 'personalized';
     const sel = document.getElementById('adConsentSelect');
     if (sel) sel.value = saved;
     const modal = document.getElementById('privacyModal');
@@ -2351,16 +2351,16 @@ const App = (() => {
 
   function savePrivacySettings() {
     const val = document.getElementById('adConsentSelect')?.value || 'personalized';
-    localStorage.setItem('singcraft_ad_consent', val);
-    localStorage.setItem('singcraft_privacy_updated_at', new Date().toISOString());
+    localStorage.setItem('singvaza_ad_consent', val);
+    localStorage.setItem('singvaza_privacy_updated_at', new Date().toISOString());
     closePrivacySettings();
     showToast('Privacy & cookie preferences saved!');
   }
 
   function clearLocalStudioData() {
-    localStorage.removeItem('singcraft_daily_date');
-    localStorage.removeItem('singcraft_daily_used');
-    localStorage.removeItem('singcraft_pro_demo');
+    localStorage.removeItem('singvaza_daily_date');
+    localStorage.removeItem('singvaza_daily_used');
+    localStorage.removeItem('singvaza_pro_demo');
     showToast('Cleared local browser preferences.');
   }
 

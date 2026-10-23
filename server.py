@@ -137,7 +137,7 @@ class StudioHandler(SimpleHTTPRequestHandler):
 
         conn.execute(
             """INSERT OR IGNORE INTO users (id, email, password_hash, display_name, plan, currency, exports_this_month)
-               VALUES ('demo-singer-global', 'artist@singcraftstudio.com', '', 'Guest Artist', 'free', 'USD', 0)"""
+               VALUES ('demo-singer-global', 'artist@singvaza.com', '', 'Guest Artist', 'free', 'USD', 0)"""
         )
         conn.commit()
         row = conn.execute(
@@ -161,7 +161,7 @@ class StudioHandler(SimpleHTTPRequestHandler):
             try:
                 req = urllib.request.Request(
                     "https://lrclib.net/api/search?q=" + urllib.parse.quote(clean_q),
-                    headers={"User-Agent": "SingCraftAIStudio/3.0"},
+                    headers={"User-Agent": "SingVazaAIStudio/3.0"},
                 )
                 items = json.loads(urllib.request.urlopen(req, timeout=8).read().decode("utf-8"))
                 best = next((i for i in items if i.get("syncedLyrics")), None) or next((i for i in items if i.get("plainLyrics")), None)
@@ -329,5 +329,5 @@ class StudioHandler(SimpleHTTPRequestHandler):
 if __name__ == "__main__":
     init_db()
     port = int(os.environ.get("PORT", "3000"))
-    print(f"SingCraft AI Studio v3 running on http://0.0.0.0:{port}")
+    print(f"SingVaza AI Studio v3 running on http://0.0.0.0:{port}")
     ThreadingHTTPServer(("0.0.0.0", port), StudioHandler).serve_forever()

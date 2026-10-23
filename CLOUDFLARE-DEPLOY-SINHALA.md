@@ -5,7 +5,7 @@
 ## පෙර සූදානම
 1. [dash.cloudflare.com](https://dash.cloudflare.com) වෙත ගොස් නොමිලේ ගිණුමක් සාදාගන්න ($0 Free).
 2. ඔබේ පරිගණකයේ [Node.js](https://nodejs.org) install කර තිබිය යුතුය.
-3. `singcraft-studio` ෆෝල්ඩරය Download කර VS Code හෝ Terminal එකෙන් විවෘත කරගන්න.
+3. `singvaza` ෆෝල්ඩරය Download කර VS Code හෝ Terminal එකෙන් විවෘත කරගන්න.
 
 ---
 
@@ -38,4 +38,4 @@ npx wrangler d1 execute karomix-db --remote --file=./schema.sql
 npx wrangler deploy
 ```
 
-🎉 **අවසන්!** තත්පර 15කින් ඔබට `https://singcraft-studio.<your-name>.workers.dev` ලෙස ලෝකයේ ඕනෑම තැනකින් Phone / PC වලින් වැඩ කරන Live HTTPS Link එක ලැබේ!
+🎉 **අවසන්!** තත්පර 15කින් ඔබට `https://singvaza.<your-name>.workers.dev` ලෙස ලෝකයේ ඕනෑම තැනකින් Phone / PC වලින් වැඩ කරන Live HTTPS Link එක ලැබේ!
