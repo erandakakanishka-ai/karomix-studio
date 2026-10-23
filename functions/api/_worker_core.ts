@@ -611,7 +611,7 @@ export default {
 
         const cleanLatin = /[\u0D80-\u0DFF]/.test(cleanRaw) ? sinhalaToSinglish(cleanRaw) : cleanRaw;
 
-        const cacheKey = new Request(`https://singvaza-cache.local/v15.1/lyrics?q=${encodeURIComponent(cleanRaw.toLowerCase())}`);
+        const cacheKey = new Request(`https://singvaza-cache.local/v15.2/lyrics?q=${encodeURIComponent(cleanRaw.toLowerCase())}`);
         const edgeCache = (globalThis as any).caches?.default;
         if (edgeCache) {
           const cachedHit = await edgeCache.match(cacheKey);
@@ -733,21 +733,52 @@ export default {
         await Promise.all([
           (async () => {
             if (/[\u0D80-\u0DFF]/.test(cleanRaw)) return;
-            try {
-              const qWordsRaw = cleanLatin.toLowerCase().split(/\s+/).filter((w) => w.length >= 2);
-              const lrcRes = await fetch(
-                `https://lrclib.net/api/search?q=${encodeURIComponent(cleanLatin)}`,
-                { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; SingVaza/15.1)' }, signal: AbortSignal.timeout(4500) }
-              );
-              if (lrcRes.ok) {
-                const list = (await lrcRes.json()) as any[];
-                foundTrack = list.find((item) => {
-                  if (!item.plainLyrics && !item.syncedLyrics) return false;
-                  const meta = `${item.trackName || ''} ${item.name || ''} ${item.artistName || ''}`.toLowerCase();
-                  return qWordsRaw.every((w) => meta.includes(w)) || (qWordsRaw.length >= 2 && qWordsRaw.filter((w) => meta.includes(w)).length >= Math.ceil(qWordsRaw.length * 0.7));
-                }) || null;
-              }
-            } catch (_) {}
+            const browserUa = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+            const qWordsRaw = cleanLatin.toLowerCase().split(/\s+/).filter((w) => w.length >= 2);
+            const [lrcHit, ovhHit] = await Promise.all([
+              (async () => {
+                try {
+                  const lrcRes = await fetch(
+                    `https://lrclib.net/api/search?q=${encodeURIComponent(cleanLatin)}`,
+                    { headers: { Accept: 'application/json', 'User-Agent': browserUa }, signal: AbortSignal.timeout(3500) }
+                  );
+                  if (lrcRes.ok) {
+                    const list = (await lrcRes.json()) as any[];
+                    return list.find((item) => {
+                      if (!item.plainLyrics && !item.syncedLyrics) return false;
+                      const meta = `${item.trackName || ''} ${item.name || ''} ${item.artistName || ''}`.toLowerCase();
+                      return qWordsRaw.every((w) => meta.includes(w)) || (qWordsRaw.length >= 2 && qWordsRaw.filter((w) => meta.includes(w)).length >= Math.ceil(qWordsRaw.length * 0.7));
+                    }) || null;
+                  }
+                } catch (_) {}
+                return null;
+              })(),
+              (async () => {
+                try {
+                  const sugRes = await fetch(
+                    `https://api.lyrics.ovh/suggest/${encodeURIComponent(cleanLatin)}`,
+                    { headers: { Accept: 'application/json', 'User-Agent': browserUa }, signal: AbortSignal.timeout(3000) }
+                  );
+                  if (!sugRes.ok) return null;
+                  const sugJson: any = await sugRes.json();
+                  const cand = (sugJson?.data || []).find((d: any) => {
+                    const meta = `${d?.title || ''} ${d?.artist?.name || ''}`.toLowerCase();
+                    return qWordsRaw.every((w) => meta.includes(w)) || (qWordsRaw.length >= 2 && qWordsRaw.filter((w) => meta.includes(w)).length >= Math.ceil(qWordsRaw.length * 0.7));
+                  });
+                  if (!cand?.artist?.name || !cand?.title) return null;
+                  const lyrRes = await fetch(
+                    `https://api.lyrics.ovh/v1/${encodeURIComponent(cand.artist.name)}/${encodeURIComponent(cand.title)}`,
+                    { headers: { Accept: 'application/json', 'User-Agent': browserUa }, signal: AbortSignal.timeout(3500) }
+                  );
+                  if (!lyrRes.ok) return null;
+                  const lyrJson: any = await lyrRes.json();
+                  const plain = String(lyrJson?.lyrics || '').replace(/^Paroles de la chanson[^\n]*\n+/i, '').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+                  return plain.length > 40 ? { plainLyrics: plain } : null;
+                } catch (_) {}
+                return null;
+              })(),
+            ]);
+            foundTrack = lrcHit || ovhHit || null;
           })(),
           (async () => {
             try {
