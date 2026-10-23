@@ -457,7 +457,8 @@ window.SingVazaDSP = (() => {
 
       const hp = ctx.createBiquadFilter();
       hp.type = 'highpass';
-      hp.frequency.value = params.hpFreq ?? 95;
+      hp.Q.value = 0.707;
+      hp.frequency.value = Math.max(20, Math.min(450, params.hpFreq ?? 95));
 
       const bodyEq = ctx.createBiquadFilter();
       bodyEq.type = 'peaking'; bodyEq.frequency.value = 145; bodyEq.Q.value = 0.9;
@@ -493,8 +494,19 @@ window.SingVazaDSP = (() => {
       const makeup = ctx.createGain();
       makeup.gain.value = 1.38;
 
+      const vPreOut = ctx.createGain();
+      vPreOut.gain.value = 1.0;
+
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.Q.value = 0.707;
+      const maxSafeLp = Math.max(2500, ctx.sampleRate * 0.47);
+      lp.frequency.value = Math.min(maxSafeLp, Math.max(2500, params.lpFreq ?? 16000));
+
       const vOut = ctx.createGain();
       vOut.gain.value = params.vocalGain ?? 1.35;
+      vPreOut.connect(lp);
+      lp.connect(vOut);
 
       // Parallel High-Frequency Harmonic Air Exciter (> 4.2 kHz, oversample='none' for featherweight CPU)
       const excHp = ctx.createBiquadFilter();
@@ -504,7 +516,7 @@ window.SingVazaDSP = (() => {
       excShaper.curve = createExciterCurve();
       const excGain = ctx.createGain();
       excGain.gain.value = (params.exciterMix ?? 0.30) * 0.16;
-      makeup.connect(excHp); excHp.connect(excShaper); excShaper.connect(excGain); excGain.connect(vOut);
+      makeup.connect(excHp); excHp.connect(excShaper); excShaper.connect(excGain); excGain.connect(vPreOut);
 
       // Phase-Clean Band-Passed Stereo Vocal Doubler (420 Hz – 7.5 kHz)
       const dblBandHp = ctx.createBiquadFilter(); dblBandHp.type = 'highpass'; dblBandHp.frequency.value = 420;
@@ -525,7 +537,7 @@ window.SingVazaDSP = (() => {
       makeup.connect(dblBandHp); dblBandHp.connect(dblBandLp);
       dblBandLp.connect(dblL); dblBandLp.connect(dblR);
       dblL.connect(dblMerger, 0, 0); dblR.connect(dblMerger, 0, 1);
-      dblMerger.connect(dblWet); dblWet.connect(vOut);
+      dblMerger.connect(dblWet); dblWet.connect(vPreOut);
 
       // Warm Filtered Stereo Ping-Pong Echo (280 Hz – 3.0 kHz)
       const dHp = ctx.createBiquadFilter(); dHp.type = 'highpass'; dHp.frequency.value = 280;
@@ -547,14 +559,14 @@ window.SingVazaDSP = (() => {
       presence.connect(deEss);
       deEss.connect(air);
       air.connect(makeup);
-      makeup.connect(vOut);
+      makeup.connect(vPreOut);
 
       // Stereo Echo Send
       makeup.connect(dHp); dHp.connect(dFilter); dFilter.connect(delayL);
       delayL.connect(dFeedback); dFeedback.connect(delayL);
       delayL.connect(delayR);
       delayL.connect(merger, 0, 0); delayR.connect(merger, 0, 1);
-      merger.connect(dWet); dWet.connect(vOut);
+      merger.connect(dWet); dWet.connect(vPreOut);
 
       // Lexicon True-Stereo Hall Send (0 FFTs, 100x faster on Android 8.1!)
       const { revPreDelay, rWet } = createLexiconHallSend(ctx, makeup, vOut, params);

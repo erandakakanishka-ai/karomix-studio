@@ -1177,6 +1177,9 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
   <!-- ==================== VIEW 3: CLEAN MIX STUDIO ==================== -->
   <section id="view-mix" class="app-view">
     <div class="container" style="max-width:920px;">
+      <div id="mixProcessingBanner" style="display:none;background:rgba(245,158,11,0.14);border:1px solid rgba(251,191,36,0.45);border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:13.5px;font-weight:700;color:var(--amber-bright);">
+        ⏳ Mastering your recorded vocal take into Mix Studio — one moment...
+      </div>
       <!-- Card 1: Clean Master Player + Smooth Timeline -->
       <div class="card">
         <div class="player-bar-top">
@@ -1289,6 +1292,16 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
           <div class="fader-item">
             <label><span>Concert Hall Space</span><span class="mono" id="reverbMixText">38%</span></label>
             <input type="range" id="reverbMixSlider" min="0" max="100" value="38" oninput="App.updateParam('reverbMix', this.value / 100)" />
+          </div>
+
+          <div class="fader-item">
+            <label><span>Low Cut (Bass Cut)</span><span class="mono" style="color:var(--cyan);" id="lowCutValText">95 Hz</span></label>
+            <input type="range" id="lowCutSlider" min="20" max="400" step="5" value="95" oninput="App.setFilterCut('hpFreq', this.value, false)" onchange="App.setFilterCut('hpFreq', this.value, true)" />
+          </div>
+
+          <div class="fader-item">
+            <label><span>High Cut (Treble Cut)</span><span class="mono" style="color:var(--cyan);" id="highCutValText">16.0 kHz</span></label>
+            <input type="range" id="highCutSlider" min="3000" max="20000" step="250" value="16000" oninput="App.setFilterCut('lpFreq', this.value, false)" onchange="App.setFilterCut('lpFreq', this.value, true)" />
           </div>
 
           <div class="fader-item">
@@ -1493,8 +1506,8 @@ details.pro-drawer > summary::-webkit-details-marker { display: none; }
     </button>
   </nav>
 
-  <script src="/vendor/confetti.min.js?v=17.5"></script>
-  <script src="/dsp-engine.js?v=17.5"></script>
-  <script src="/app.js?v=17.5"></script>
+  <script src="/vendor/confetti.min.js?v=18.0"></script>
+  <script src="/dsp-engine.js?v=18.0"></script>
+  <script src="/app.js?v=18.0"></script>
 </body>
 </html>

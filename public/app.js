@@ -341,12 +341,13 @@ const App = (() => {
   }
 
   function getTotalDuration() {
-    if (hwAudio.duration && Number.isFinite(hwAudio.duration) && hwAudio.duration > 0.5) {
+    if ((state.backingBuffer || state.rawVocalBuffer || state.isDemoSession) && hwAudio.duration && Number.isFinite(hwAudio.duration) && hwAudio.duration > 0.5) {
       return hwAudio.duration;
     }
     const off = (state.params.vocalOffsetMs || 0) / 1000;
     const bDur = state.backingBuffer ? state.backingBuffer.duration : (state.isDemoSession ? 11.0 : 0);
     const vDur = state.rawVocalBuffer ? state.rawVocalBuffer.duration + Math.max(0, off) : 0;
+    if (bDur <= 0 && vDur <= 0) return 0;
     return Math.max(bDur, vDur, 1);
   }
 
@@ -447,7 +448,10 @@ const App = (() => {
     }
 
     if (!state.backingBuffer && !state.rawVocalBuffer) {
-      return '/assets/demo-studio-fx.mp3';
+      if (state.isDemoSession) {
+        return '/assets/demo-studio-fx.mp3';
+      }
+      return '';
     }
 
     const seq = ++state.renderSeq;
@@ -488,7 +492,11 @@ const App = (() => {
       updatePlayButtonsUI(false);
       return;
     }
-    if (!targetUrl) return;
+    if (!targetUrl) {
+      updatePlayButtonsUI(false);
+      showToast(state.isProcessingTake ? 'Still preparing your vocal recording...' : 'No audio in mixer — record your voice or tap Demo first.');
+      return;
+    }
 
     const fullTarget = targetUrl.startsWith('blob:') ? targetUrl : new URL(targetUrl, window.location.origin).href;
     if (hwAudio.src !== fullTarget) {
@@ -668,7 +676,29 @@ const App = (() => {
     txt('atStrengthText', `${Math.round((p.autotuneAmount || 0) * 100)}%`);
     set('gateSlider', Math.round((p.noiseGate || 0.55) * 100));
     txt('gateValText', `${Math.round((p.noiseGate || 0.55) * 100)}%`);
+    const hpHz = Math.round(p.hpFreq ?? 95);
+    const lpHz = Math.round(p.lpFreq ?? 16000);
+    set('lowCutSlider', hpHz);
+    txt('lowCutValText', `${hpHz} Hz`);
+    set('highCutSlider', lpHz);
+    txt('highCutValText', `${(lpHz / 1000).toFixed(1)} kHz`);
     setMasterProfile(p.masterProfile || 'warm', false);
+  }
+
+  function setFilterCut(paramName, rawVal, commitAudio = false) {
+    const hz = Math.round(Number(rawVal) || (paramName === 'hpFreq' ? 95 : 16000));
+    state.params[paramName] = hz;
+    markMixDirty();
+    if (paramName === 'hpFreq') {
+      const el = document.getElementById('lowCutValText');
+      if (el) el.textContent = `${hz} Hz`;
+    } else {
+      const el = document.getElementById('highCutValText');
+      if (el) el.textContent = `${(hz / 1000).toFixed(1)} kHz`;
+    }
+    if (commitAudio || state.isPlaying) {
+      scheduleHardwareRefresh(commitAudio ? 60 : 220);
+    }
   }
 
   function setClarityMacro(pct) {
@@ -1328,7 +1358,10 @@ const App = (() => {
     if (state.micStream) state.micStream.getTracks().forEach((t) => t.stop());
     state.micStream = null;
     state.micAnalyser = null;
-    document.getElementById('micMeterFill').style.width = '0%';
+    const meterEl = document.getElementById('micMeterFill');
+    if (meterEl) meterEl.style.width = '0%';
+    const pitchEl = document.getElementById('livePitchText');
+    if (pitchEl) pitchEl.textContent = 'Note: --';
     suspendIdleWebAudio();
   }
 
@@ -1371,10 +1404,54 @@ const App = (() => {
     });
   }
 
+  function setProcessingBanner(visible) {
+    state.isProcessingTake = visible;
+    const b = document.getElementById('mixProcessingBanner');
+    if (b) b.style.display = visible ? 'block' : 'none';
+  }
+
+  function stopActiveRecordingNow() {
+    const stageMedia = document.getElementById('stageUploadedMedia');
+    state.waitingForYtTap = false;
+    state.isRecording = false;
+    ytSendCommand('pauseVideo');
+    if (stageMedia) { try { stageMedia.pause(); } catch (_) {} }
+    stopPlaybackInternal();
+    if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
+      setProcessingBanner(true);
+      state.mediaRecorder.stop();
+    } else {
+      releaseMic();
+    }
+    const recBtn = document.getElementById('btnRecordVocal');
+    if (recBtn) recBtn.classList.remove('recording');
+    const recLbl = document.getElementById('recBtnLabel');
+    if (recLbl) recLbl.textContent = 'Start Recording';
+  }
+
   function beginActiveMediaRecorder() {
     if (!state.micStream || state.isRecording) return;
     const headphonesOnly = document.getElementById('useCleanMic').checked;
     state.recChunks = [];
+
+    // Immediately replace any old Demo session right when recording starts so Demo NEVER blocks or confuses a real recording!
+    state.isDemoSession = false;
+    state.rawVocalBuffer = null;
+    state.tunedVocalBuffer = null;
+    state.vocalPeaks = null;
+    if (!state.userLoadedBacking) {
+      state.backingBuffer = null;
+      state.originalBackingBuffer = null;
+      state.backingPeaks = null;
+    }
+    if (state.cachedMixUrl && state.cachedMixUrl.startsWith('blob:')) {
+      try { URL.revokeObjectURL(state.cachedMixUrl); } catch (_) {}
+    }
+    state.cachedMixUrl = '';
+    try { hwAudio.pause(); hwAudio.removeAttribute('src'); hwAudio.load(); } catch (_) {}
+    const rtEl = document.getElementById('recTimerText');
+    if (rtEl) rtEl.textContent = '00:00';
+
     const mimeCandidates = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg'];
     const bestMime = mimeCandidates.find((m) => window.MediaRecorder?.isTypeSupported?.(m)) || '';
     let rec;
@@ -1390,9 +1467,11 @@ const App = (() => {
       const stageMedia = document.getElementById('stageUploadedMedia');
       if (stageMedia) { try { stageMedia.pause(); } catch (_) {} }
       if (!state.recChunks.length) {
+        setProcessingBanner(false);
         showToast('Recording was empty — please check microphone permission');
         return;
       }
+      setProcessingBanner(true);
       showToast('Smoothing & mastering your recording...');
       try {
         const blob = new Blob(state.recChunks, { type: rec.mimeType || bestMime || 'audio/webm' });
@@ -1411,6 +1490,9 @@ const App = (() => {
         state.isDemoSession = false;
         markMixDirty();
 
+        const rtDone = document.getElementById('recTimerText');
+        if (rtDone) rtDone.textContent = '00:00';
+
         switchView('mix');
         await runSmartVoiceMatch();
         if (!headphonesOnly) {
@@ -1418,10 +1500,14 @@ const App = (() => {
           state.params.noiseGate = 0.04;
           document.getElementById('gateSlider').value = 4;
           document.getElementById('gateValText').textContent = '4%';
+          syncSlidersFromParams();
         }
         await applyWorkerAutoTune();
+        setProcessingBanner(false);
+        drawTimeline(0);
         await startPlayback(0);
       } catch (err) {
+        setProcessingBanner(false);
         suspendIdleWebAudio();
         showToast('Could not process recording: ' + (err?.message || 'try again'));
       }
@@ -1461,18 +1547,7 @@ const App = (() => {
     const stageMedia = document.getElementById('stageUploadedMedia');
 
     if (state.isRecording || state.waitingForYtTap) {
-      state.waitingForYtTap = false;
-      state.isRecording = false;
-      ytSendCommand('pauseVideo');
-      if (stageMedia) { try { stageMedia.pause(); } catch (_) {} }
-      stopPlaybackInternal();
-      if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
-        state.mediaRecorder.stop();
-      } else {
-        releaseMic();
-      }
-      document.getElementById('btnRecordVocal').classList.remove('recording');
-      document.getElementById('recBtnLabel').textContent = 'Start Recording';
+      stopActiveRecordingNow();
       return;
     }
 
@@ -2463,8 +2538,16 @@ const App = (() => {
 
   // ==================== MIX STUDIO DELETE CONFIRMATION MODAL ====================
   function openDeleteAudioModal() {
-    if (!state.rawVocalBuffer && !state.backingBuffer && !state.uploadedMediaUrl) {
-      showToast('No recorded or uploaded audio to delete.');
+    const hasAnyAudio = Boolean(
+      state.rawVocalBuffer ||
+      state.backingBuffer ||
+      state.uploadedMediaUrl ||
+      state.isDemoSession ||
+      state.cachedMixUrl ||
+      (hwAudio.src && hwAudio.src !== window.location.href)
+    );
+    if (!hasAnyAudio) {
+      showToast('Mixer is already empty — nothing to delete.');
       return;
     }
     const modal = document.getElementById('deleteAudioModal');
@@ -2476,9 +2559,31 @@ const App = (() => {
     if (modal) modal.classList.remove('open');
   }
 
+  function purgeHardwareAudioCompletely() {
+    stopPlaybackInternal();
+    state.pausePositionSec = 0;
+    if (state.cachedMixUrl && state.cachedMixUrl.startsWith('blob:')) {
+      try { URL.revokeObjectURL(state.cachedMixUrl); } catch (_) {}
+    }
+    state.cachedMixUrl = '';
+    state.lastMasterBlob = null;
+    try {
+      hwAudio.pause();
+      hwAudio.removeAttribute('src');
+      hwAudio.load();
+    } catch (_) {}
+    const rtEl = document.getElementById('recTimerText');
+    if (rtEl) rtEl.textContent = '00:00';
+    const pitchEl = document.getElementById('livePitchText');
+    if (pitchEl) pitchEl.textContent = 'Note: --';
+    const meterEl = document.getElementById('micMeterFill');
+    if (meterEl) meterEl.style.width = '0%';
+  }
+
   function confirmDeleteAudio(mode) {
     closeDeleteAudioModal();
-    stopPlaybackInternal();
+    setProcessingBanner(false);
+    purgeHardwareAudioCompletely();
     resetCropMarkers();
     state.uncroppedBackup = null;
     const undoBtn = document.getElementById('btnUndoCrop');
@@ -2495,8 +2600,9 @@ const App = (() => {
       const total = getTotalDuration();
       const mixT = document.getElementById('transportTime');
       if (mixT) mixT.textContent = `00:00 / ${fmtTime(total)}`;
+      drawSpectrum();
       drawTimeline(0);
-      showToast('Recorded voice deleted. Ready to record again!');
+      showToast('Voice audio deleted cleanly.');
       return;
     }
 
@@ -2519,6 +2625,8 @@ const App = (() => {
       state.uploadedFileName = '';
       const clearBtn = document.getElementById('btnClearStageTrack');
       if (clearBtn) clearBtn.style.display = 'none';
+      const upLyrForm = document.getElementById('uploadLyricsSearchForm');
+      if (upLyrForm) upLyrForm.style.display = 'none';
       const wrap = document.getElementById('stageVideoWrap');
       if (wrap) {
         wrap.innerHTML = `
@@ -2535,8 +2643,9 @@ const App = (() => {
     if (previewWrap) previewWrap.style.display = 'none';
     const mixT = document.getElementById('transportTime');
     if (mixT) mixT.textContent = '00:00 / 00:00';
+    drawSpectrum();
     drawTimeline(0);
-    showToast('All recorded & uploaded audio deleted.');
+    showToast('All audio deleted cleanly.');
   }
 
   // ==================== ULTRA-FAST ZERO-RAM BOOT ====================
@@ -2568,7 +2677,17 @@ const App = (() => {
   }
 
   return {
-    switchView: (v) => { if (v !== 'sing') pauseYoutubeStage(); if (v === 'blog') loadBlogPostsFromServer(); switchView(v); },
+    switchView: (v) => {
+      if (v !== 'sing') {
+        if (state.isRecording || state.waitingForYtTap) {
+          stopActiveRecordingNow();
+        } else {
+          pauseYoutubeStage();
+        }
+      }
+      if (v === 'blog') loadBlogPostsFromServer();
+      switchView(v);
+    },
     toggleDrawer, drawerGo,
     openPrivacySettings, closePrivacySettings, savePrivacySettings, clearLocalStudioData,
     openBlogPost, closeBlogPost,
@@ -2590,7 +2709,7 @@ const App = (() => {
     toggleHeroDemo, openMixWithRealDemo, loadRealSingerDemo, loadInstrumentalDemoForSing,
     togglePlayback, stopAndRewind, toggleBypassFx, toggleSoloVocal,
     scrubPlayhead, updateCropSlider, markCropAtPlayhead, applyAudioCrop, undoAudioCrop,
-    applyPreset, setClarityMacro, updateParam, setMasterProfile, setVocalOffset, autoAlignTracks, runSmartVoiceMatch,
+    applyPreset, setClarityMacro, setFilterCut, updateParam, setMasterProfile, setVocalOffset, autoAlignTracks, runSmartVoiceMatch,
     applyWorkerAutoTune, shiftBackingKey, applyKaraokeVocalCut,
     heroSearchSubmit, quickSingSong, searchOrLoadKaraoke, selectKaraokeVideo, nextKaraokeResult, seekToLyric,
     searchLyricsOnly, clearUploadedStageTrack,
