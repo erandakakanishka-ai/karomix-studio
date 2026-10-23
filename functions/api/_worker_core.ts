@@ -92,6 +92,8 @@ async function ensureSchema(db?: D1Database) {
       path TEXT PRIMARY KEY,
       views INTEGER DEFAULT 0
     )`,
+    `CREATE INDEX IF NOT EXISTS idx_blog_created ON blog_posts(created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_tools_created ON html_tools(created_at DESC)`,
   ];
   for (const sql of statements) {
     try { await db.prepare(sql).run(); } catch (_) {}
@@ -512,8 +514,8 @@ export default {
       // Dynamic HTML Web Tools Hub & Individual Standalone HTML Tools (/tools & /tools/:slug)
       if ((cleanPath === '/tools' || cleanPath === '/tools/' || cleanPath.startsWith('/tools/')) && (request.method === 'GET' || request.method === 'HEAD')) {
         await ensureSchema(env.DB);
-        await recordEdgeVisit(request, env.DB, cleanPath);
         const toolSlug = cleanPath.replace(/^\/tools\/?/, '').replace(/\/$/, '').trim();
+        const beaconTag = `<script>try{if(!sessionStorage.getItem('sv_v_'+location.pathname)){sessionStorage.setItem('sv_v_'+location.pathname,'1');fetch('/api/ping-visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:location.pathname})}).catch(()=>{});}}catch(_){}</script>`;
         if (!toolSlug) {
           const rows = env.DB
             ? await env.DB.prepare('SELECT id, slug, title, category, icon, description, views, created_at FROM html_tools ORDER BY created_at DESC LIMIT 200').all()
@@ -531,7 +533,7 @@ export default {
                   <h2 style="font-size:17.5px;color:var(--text);margin:6px 0 8px;">${escapeHtml(t.title)}</h2>
                   <p style="font-size:13.5px;color:var(--muted);margin:0;">${escapeHtml(t.description || '')}</p>
                 </a>`).join('')}</div>`
-            }`;
+            }${beaconTag}`;
           return new Response(
             request.method === 'HEAD' ? null : renderBlogShellHtml({
               origin: url.origin,
@@ -540,7 +542,7 @@ export default {
               canonicalPath: '/tools',
               bodyHtml,
             }),
-            { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+            { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=30, s-maxage=180' } }
           );
         }
 
@@ -560,16 +562,18 @@ export default {
           );
         }
         try { await env.DB?.prepare('UPDATE html_tools SET views = views + 1 WHERE id = ?').bind(tool.id).run(); } catch (_) {}
-        return new Response(request.method === 'HEAD' ? null : String(tool.html_code || ''), {
+        const rawToolHtml = String(tool.html_code || '');
+        const withBeacon = rawToolHtml.includes('</body>') ? rawToolHtml.replace('</body>', `${beaconTag}</body>`) : (rawToolHtml + beaconTag);
+        return new Response(request.method === 'HEAD' ? null : withBeacon, {
           status: 200,
-          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+          headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60, s-maxage=300' },
         });
       }
 
       // Dynamic SEO Server-Side Rendered Blog Index & Single Post Pages (/blog & /blog/:slug — supports Plain, Rich HTML, & Full Standalone HTML!)
       if ((url.pathname === '/blog' || url.pathname === '/blog/' || url.pathname.startsWith('/blog/')) && (request.method === 'GET' || request.method === 'HEAD')) {
         await ensureSchema(env.DB);
-        await recordEdgeVisit(request, env.DB, cleanPath);
+        const beaconTag = `<script>try{if(!sessionStorage.getItem('sv_v_'+location.pathname)){sessionStorage.setItem('sv_v_'+location.pathname,'1');fetch('/api/ping-visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:location.pathname})}).catch(()=>{});}}catch(_){}</script>`;
         const slugPart = url.pathname.replace(/^\/blog\/?/, '').replace(/\/$/, '').trim();
         if (!slugPart) {
           const rows = env.DB
@@ -590,7 +594,7 @@ export default {
                     <p style="font-size:13.5px;color:var(--muted);margin:0;">${escapeHtml(p.excerpt || '')}</p>
                   </div>
                 </a>`).join('')}</div>`
-            }`;
+            }${beaconTag}`;
           return new Response(
             request.method === 'HEAD' ? null : renderBlogShellHtml({
               origin: url.origin,
@@ -599,7 +603,7 @@ export default {
               canonicalPath: '/blog',
               bodyHtml,
             }),
-            { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+            { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=30, s-maxage=180' } }
           );
         }
 
@@ -624,9 +628,10 @@ export default {
         const isStandaloneDoc = fmt === 'full_html' || /^\s*<!doctype html/i.test(rawContent) || /^\s*<html[\s>]/i.test(rawContent);
 
         if (isStandaloneDoc) {
-          return new Response(request.method === 'HEAD' ? null : rawContent, {
+          const fullWithBeacon = rawContent.includes('</body>') ? rawContent.replace('</body>', `${beaconTag}</body>`) : (rawContent + beaconTag);
+          return new Response(request.method === 'HEAD' ? null : fullWithBeacon, {
             status: 200,
-            headers: { 'Content-Type': 'text/html; charset=utf-8' },
+            headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60, s-maxage=300' },
           });
         }
 
@@ -643,7 +648,7 @@ export default {
             <div style="margin-top:26px;padding-top:16px;border-top:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;">
               <a class="btn" href="/">← Back to SingVaza</a>
             </div>
-          </article>
+          </article>${beaconTag}
         `;
         return new Response(
           request.method === 'HEAD' ? null : renderBlogShellHtml({
@@ -653,7 +658,7 @@ export default {
             canonicalPath: `/blog/${post.slug}`,
             bodyHtml,
           }),
-          { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60, s-maxage=300' } }
         );
       }
 

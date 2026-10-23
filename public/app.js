@@ -2919,13 +2919,17 @@ const App = (() => {
     }
     refreshServerState();
 
-    // Deferred non-blocking analytics beacon + conditional public links (zero startup delay)
+    // Deferred non-blocking analytics beacon (once per browser session tab) + conditional public links
     setTimeout(() => {
-      fetch('/api/ping-visit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: window.location.pathname || '/' }),
-      }).catch(() => {});
+      const pKey = 'sv_v_' + (window.location.pathname || '/');
+      if (!sessionStorage.getItem(pKey)) {
+        sessionStorage.setItem(pKey, '1');
+        fetch('/api/ping-visit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: window.location.pathname || '/' }),
+        }).catch(() => {});
+      }
 
       fetch('/api/public-config')
         .then((r) => r.json())
